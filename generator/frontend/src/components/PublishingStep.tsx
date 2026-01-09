@@ -1,13 +1,25 @@
 import { useState } from 'react'
 import { CheckCircle, Loader2, AlertCircle, ExternalLink, Upload } from 'lucide-react'
+import type { AdaptationData, PlatformAdaptation } from '@/types'
+
+interface PublishData {
+  video_url: string
+  title: string
+  description: string
+  hashtags: string
+}
 
 interface PublishingStepProps {
   projectId: number
   adaptedPlatforms: string[]
-  adaptationData: any
+  adaptationData: AdaptationData | null
   videoUrl: string
-  onPublish: (platform: string, data: any) => void
+  onPublish: (platform: string, data: PublishData) => void
   publishingStatus: Record<string, { status: string; postUrl?: string; error?: string }>
+}
+
+const getPlatformData = (adaptationData: AdaptationData | null, platform: string): PlatformAdaptation | undefined => {
+  return adaptationData?.[platform]
 }
 
 export default function PublishingStep({
@@ -60,7 +72,7 @@ export default function PublishingStep({
   }
 
   const handlePublish = (platform: string) => {
-    const platformData = adaptationData[platform]
+    const platformData = getPlatformData(adaptationData, platform)
     if (!platformData) return
 
     onPublish(platform, {
@@ -92,7 +104,7 @@ export default function PublishingStep({
       {/* Platform cards */}
       <div className="space-y-4">
         {adaptedPlatforms.map(platform => {
-          const platformData = adaptationData[platform]
+          const platformData = getPlatformData(adaptationData, platform)
           const status = getPublishStatus(platform)
           const isSelected = selectedPlatforms.includes(platform)
           const isPublishing = status === 'pending' || status === 'processing'

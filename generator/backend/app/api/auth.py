@@ -19,7 +19,7 @@ from app.schemas.auth import (
     WorkspaceMemberResponse
 )
 from app.models.user import User, Invite, InviteType, Workspace, WorkspaceMember, WorkspaceRole, UserRole
-from app.core.security import hash_password, verify_password, create_access_token
+from app.core.security import hash_password, verify_password, create_access_token, needs_rehash
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -130,6 +130,10 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
+
+    # Auto-migrate legacy SHA256 passwords to bcrypt
+    if needs_rehash(user.hashed_password):
+        user.hashed_password = hash_password(request.password)
 
     # Check if user is active
     if not user.is_active:

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ContentVariant } from '@/types'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface VideoVariantSelectorProps {
   variants: ContentVariant[]
@@ -16,15 +16,33 @@ export default function VideoVariantSelector({
   isRegenerating
 }: VideoVariantSelectorProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
-  const formatVariableValue = (value: any): string => {
+  const toggleExpanded = (id: number, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const formatVariableValue = (value: unknown): string => {
     if (typeof value === 'object' && value !== null) {
-      return Object.entries(value)
+      return Object.entries(value as Record<string, unknown>)
         .map(([k, v]) => `${k}: ${v}`)
         .join(', ')
     }
     return String(value)
   }
+
+  const hasVariables = (v: ContentVariant) =>
+    v.content_variables && Object.keys(v.content_variables).length > 0
 
   return (
     <div className="space-y-4">
@@ -41,61 +59,66 @@ export default function VideoVariantSelector({
       </div>
 
       <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto">
-        {variants.map((variant) => (
-          <label
-            key={variant.id}
-            className={`
-              flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition
-              ${selectedId === variant.id
-                ? 'border-primary-600 bg-primary-50'
-                : 'border-gray-200 hover:border-primary-300'
-              }
-            `}
-          >
-            <input
-              type="radio"
-              name="variant"
-              checked={selectedId === variant.id}
-              onChange={() => setSelectedId(variant.id)}
-              className="mt-1"
-            />
-            <div className="flex-1">
-              <p className="text-gray-900 font-medium mb-2">{variant.description}</p>
-
-              {/* Детали */}
-              <div className="space-y-1 text-sm text-gray-600">
-                {variant.content_variables.character && (
-                  <div className="flex">
-                    <span className="font-semibold min-w-[80px]">Персонаж:</span>
-                    <span className="flex-1">{formatVariableValue(variant.content_variables.character)}</span>
-                  </div>
-                )}
-                {variant.content_variables.vehicle && (
-                  <div className="flex">
-                    <span className="font-semibold min-w-[80px]">Авто:</span>
-                    <span className="flex-1">{formatVariableValue(variant.content_variables.vehicle)}</span>
-                  </div>
-                )}
-                {variant.content_variables.location && (
-                  <div className="flex">
-                    <span className="font-semibold min-w-[80px]">Локация:</span>
-                    <span className="flex-1">{formatVariableValue(variant.content_variables.location)}</span>
-                  </div>
-                )}
-                {/* Любые другие переменные */}
-                {Object.entries(variant.content_variables)
-                  .filter(([key]) => !['character', 'vehicle', 'location'].includes(key))
-                  .map(([key, value]) => (
-                    <div key={key} className="flex">
-                      <span className="font-semibold min-w-[80px] capitalize">{key}:</span>
-                      <span className="flex-1">{formatVariableValue(value)}</span>
-                    </div>
-                  ))
+        {variants.map((variant) => {
+          const isExpanded = expandedIds.has(variant.id)
+          return (
+            <label
+              key={variant.id}
+              className={`
+                block p-4 border-2 rounded-lg cursor-pointer transition
+                ${selectedId === variant.id
+                  ? 'border-primary-600 bg-primary-50'
+                  : 'border-gray-200 hover:border-primary-300'
                 }
+              `}
+            >
+              <div className="flex items-start space-x-3">
+                <input
+                  type="radio"
+                  name="variant"
+                  checked={selectedId === variant.id}
+                  onChange={() => setSelectedId(variant.id)}
+                  className="mt-1"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-900 font-medium">{variant.description}</p>
+
+                  {/* Toggle для деталей */}
+                  {hasVariables(variant) && (
+                    <button
+                      onClick={(e) => toggleExpanded(variant.id, e)}
+                      className="mt-2 flex items-center text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      {isExpanded ? (
+                        <>
+                          <ChevronUp className="h-3 w-3 mr-1" />
+                          Скрыть детали
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3 mr-1" />
+                          Показать детали
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          </label>
-        ))}
+
+              {/* Детали - свернуты по умолчанию */}
+              {isExpanded && hasVariables(variant) && (
+                <div className="mt-3 ml-7 pt-3 border-t border-gray-200 space-y-1 text-sm text-gray-600">
+                  {Object.entries(variant.content_variables).map(([key, value]) => (
+                    <div key={key} className="flex">
+                      <span className="font-medium min-w-[100px] capitalize text-gray-500">{key}:</span>
+                      <span className="flex-1 text-gray-700">{formatVariableValue(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </label>
+          )
+        })}
       </div>
 
       {variants.length === 0 && (

@@ -4,6 +4,7 @@ import { Film, Loader2, AlertCircle, Users, User } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { invitesApi } from '@/services/api'
 import type { InviteValidation } from '@/types'
+import { getErrorMessage } from '@/types'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -36,10 +37,10 @@ export default function Register() {
         if (response.data.email) {
           setEmail(response.data.email)
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         setInviteValidation({
           valid: false,
-          error: err.response?.data?.detail || 'Invalid invite'
+          error: getErrorMessage(err)
         })
       } finally {
         setIsValidatingInvite(false)
@@ -73,8 +74,8 @@ export default function Register() {
     try {
       await register(email, password, fullName || undefined, inviteToken)
       navigate('/')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }

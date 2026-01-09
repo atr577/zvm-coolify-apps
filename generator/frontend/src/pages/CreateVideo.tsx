@@ -88,51 +88,71 @@ export default function CreateVideo() {
           Назад
         </button>
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          Создание ролика в проекте: {project.name}
-        </h1>
-
-        {/* Workflow Mode Selector */}
-        <div className="bg-gray-50 p-4 rounded-lg mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Режим генерации:
-          </label>
-          <div className="flex space-x-4">
-            <label className={`flex-1 cursor-pointer p-3 rounded-lg border-2 transition ${
-              workflowMode === 'AUTO'
-                ? 'border-purple-500 bg-purple-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}>
-              <input
-                type="radio"
-                name="workflowMode"
-                value="auto"
-                checked={workflowMode === 'AUTO'}
-                onChange={() => setWorkflowMode('AUTO')}
-                className="sr-only"
-              />
-              <div className="font-medium text-gray-900">Auto</div>
-              <div className="text-sm text-gray-500">Все шаги автоматически, без остановок</div>
-            </label>
-
-            <label className={`flex-1 cursor-pointer p-3 rounded-lg border-2 transition ${
-              workflowMode === 'MANUAL'
-                ? 'border-purple-500 bg-purple-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}>
-              <input
-                type="radio"
-                name="workflowMode"
-                value="manual"
-                checked={workflowMode === 'MANUAL'}
-                onChange={() => setWorkflowMode('MANUAL')}
-                className="sr-only"
-              />
-              <div className="font-medium text-gray-900">Manual</div>
-              <div className="text-sm text-gray-500">Approve каждого шага, полный контроль</div>
-            </label>
-          </div>
+        <div className="flex items-center gap-3 mb-4">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Создание ролика в проекте: {project.name}
+          </h1>
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+            project.project_type === 'remix'
+              ? 'bg-purple-100 text-purple-700'
+              : 'bg-blue-100 text-blue-700'
+          }`}>
+            {project.project_type === 'remix' ? 'Remix' : 'Discover'}
+          </span>
         </div>
+
+        {/* Workflow Mode Selector - only for Discover */}
+        {project.project_type !== 'remix' && (
+          <div className="bg-gray-50 p-4 rounded-lg mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Режим генерации:
+            </label>
+            <div className="flex space-x-4">
+              <label className={`flex-1 cursor-pointer p-3 rounded-lg border-2 transition ${
+                workflowMode === 'AUTO'
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="workflowMode"
+                  value="auto"
+                  checked={workflowMode === 'AUTO'}
+                  onChange={() => setWorkflowMode('AUTO')}
+                  className="sr-only"
+                />
+                <div className="font-medium text-gray-900">Auto</div>
+                <div className="text-sm text-gray-500">Все шаги автоматически, без остановок</div>
+              </label>
+
+              <label className={`flex-1 cursor-pointer p-3 rounded-lg border-2 transition ${
+                workflowMode === 'MANUAL'
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="workflowMode"
+                  value="manual"
+                  checked={workflowMode === 'MANUAL'}
+                  onChange={() => setWorkflowMode('MANUAL')}
+                  className="sr-only"
+                />
+                <div className="font-medium text-gray-900">Manual</div>
+                <div className="text-sm text-gray-500">Approve каждого шага, полный контроль</div>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Remix mode info */}
+        {project.project_type === 'remix' && (
+          <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg mb-4">
+            <p className="text-sm text-purple-700">
+              <strong>Remix режим:</strong> Шаблон → Вариант → Сразу Image → Video (без промежуточных шагов)
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Генерация вариантов */}
@@ -140,7 +160,11 @@ export default function CreateVideo() {
         <div className="flex justify-center items-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">AI анализирует шаблон и генерирует вариации...</p>
+            <p className="text-gray-600">
+              {project.project_type === 'remix'
+                ? 'Генерируем варианты для ремикса...'
+                : 'AI анализирует шаблон и генерирует вариации...'}
+            </p>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, FolderOpen, Settings, Film, AlertCircle, CheckCircle, Clock, Image, Eye, Heart, MessageCircle, Share2 } from 'lucide-react'
 import { projectsApi, videosApi, workspacesApi } from '@/services/api'
 import ProjectForm from '@/components/ProjectForm'
@@ -30,11 +30,37 @@ function getStepLabel(step: StepType): string {
 }
 
 export default function Dashboard() {
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+
+  // Get state from URL params
+  const selectedProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : null
+  const activeFilter = (searchParams.get('filter') as FilterTab) || 'all'
+
+  // Update URL params
+  const setSelectedProjectId = useCallback((id: number | null) => {
+    setSearchParams(params => {
+      if (id === null) {
+        params.delete('project')
+      } else {
+        params.set('project', String(id))
+      }
+      return params
+    })
+  }, [setSearchParams])
+
+  const setActiveFilter = useCallback((filter: FilterTab) => {
+    setSearchParams(params => {
+      if (filter === 'all') {
+        params.delete('filter')
+      } else {
+        params.set('filter', filter)
+      }
+      return params
+    })
+  }, [setSearchParams])
 
   // Получить все проекты
   const { data: projects, isLoading: projectsLoading } = useQuery(

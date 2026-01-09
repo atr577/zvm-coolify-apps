@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import {
-  ArrowLeft, Settings, Trash2, CheckCircle, XCircle, Clock,
+  CheckCircle, XCircle, Clock,
   ChevronDown, ChevronRight, ThumbsUp, RotateCcw,
   Play, ExternalLink, Loader2, Volume2, Eye, Heart, MessageCircle, Share2,
   Star, RefreshCw, TrendingUp, Youtube, Instagram, Music2, Edit2
@@ -10,6 +10,8 @@ import {
 import { videosApi, workflowApi, metricsApi, CustomPrompt } from '@/services/api'
 import PublishingSettings from '@/components/PublishingSettings'
 import PromptEditor from '@/components/PromptEditor'
+import { VideoHeader } from '@/components/video'
+import type { KeyMoment, PlatformAdaptation } from '@/types'
 
 function formatMetricNumber(num: number): string {
   if (num >= 1000000) {
@@ -80,17 +82,14 @@ export default function VideoDetail() {
 
   // Auto-start generation (only for AUTO mode)
   // In MANUAL mode, we show PromptEditor and let user trigger generation
+  const hasNoWorkflow = !video?.workflow_steps || video?.workflow_steps.length === 0
+  const shouldAutoStart = video?.status === 'pending' && hasNoWorkflow && video?.workflow_mode !== 'MANUAL'
+
   useEffect(() => {
-    if (!video) return
-    const hasNoWorkflow = !video.workflow_steps || video.workflow_steps.length === 0
-    if (video.status === 'pending' && hasNoWorkflow) {
-      if (video.workflow_mode !== 'MANUAL') {
-        // Only auto-generate for AUTO mode
-        autoGenerateMutation.mutate()
-      }
-      // For MANUAL mode, we show the "Start Story" card with PromptEditor
+    if (shouldAutoStart && !autoGenerateMutation.isLoading) {
+      autoGenerateMutation.mutate()
     }
-  }, [video?.id])
+  }, [shouldAutoStart])
 
   // Delete mutation
   const deleteMutation = useMutation(
@@ -111,9 +110,13 @@ export default function VideoDetail() {
     ({ stepId, approved, feedback }: { stepId: number; approved: boolean; feedback?: string }) =>
       workflowApi.approveStep(stepId, approved, feedback),
     {
-      onSuccess: () => {
+      onSuccess: (data) => {
         setFeedback('')
         queryClient.invalidateQueries(['video', videoId])
+        // If backend signals to continue workflow (after image approval), trigger auto-generate
+        if (data.data?.continue_workflow) {
+          autoGenerateMutation.mutate()
+        }
       }
     }
   )
@@ -225,9 +228,15 @@ export default function VideoDetail() {
   // Helper functions
   const getStepLabel = (stepType: string) => {
     const map: Record<string, string> = {
-      story: 'Story', description: 'Scene', prompt: 'First shot',
-      image: 'First shot review', scenario: 'Scenario', video: 'Video',
-      audio: 'Audio', adaptation: 'Meta for platforms', publishing: 'Publishing'
+      story: 'Story',
+      description: 'Description',
+      prompt: 'Image Prompt',
+      image: 'Image',
+      scenario: 'Scenario',
+      video: 'Video',
+      audio: 'Audio',
+      adaptation: 'Adaptation',
+      publishing: 'Publishing'
     }
     return map[stepType] || stepType
   }
@@ -316,7 +325,7 @@ export default function VideoDetail() {
                 <div>
                   <span className="font-medium">Key Moments:</span>
                   <ul className="list-disc list-inside ml-2 text-sm">
-                    {content.key_moments.map((m: any, i: number) => (
+                    {content.key_moments.map((m: KeyMoment, i: number) => (
                       <li key={i}>{m.timestamp}: {m.action}</li>
                     ))}
                   </ul>
@@ -343,7 +352,7 @@ export default function VideoDetail() {
         case 'adaptation':
           return (
             <div className="space-y-2">
-              {Object.entries(content).map(([platform, data]: [string, any]) => (
+              {Object.entries(content).map(([platform, data]: [string, PlatformAdaptation | undefined]) => (
                 <div key={platform} className="border-l-2 border-purple-300 pl-3">
                   <div className="font-medium capitalize">{platform}</div>
                   {data?.title && <div className="text-sm"><span className="text-gray-500">Title:</span> {data.title}</div>}
@@ -400,56 +409,26 @@ export default function VideoDetail() {
     return st === 'approved' || st === 'completed'
   })
   const pendingSteps = steps.filter(s => s.status?.toLowerCase() === 'pending')
-  const totalSteps = 9
+  // Remix: Image → Video → Audio (3 steps)
+  // Discover: Story → Description → Prompt → Image → Scenario → Video → Audio → Adaptation → Publishing (9 steps)
+  const isRemix = video.project?.project_type === 'remix'
+  const totalSteps = isRemix ? 3 : 9
   const completedCount = completedSteps.length
   const isCompleted = video.status?.toLowerCase() === 'completed'
   const isPublishing = video.current_step?.toLowerCase() === 'publishing'
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigate('/')}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 line-clamp-1">{video.title}</h1>
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              {isCompleted ? (
-                <span className="flex items-center text-green-600">
-                  <CheckCircle className="h-4 w-4 mr-1" />
-                  Completed
-                </span>
-              ) : (
-                <span>Step {completedCount + 1} of {totalSteps}</span>
-              )}
-              {video.workflow_mode === 'MANUAL' && (
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Manual</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => toggleWorkflowModeMutation.mutate()}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
-            title={video.workflow_mode === 'MANUAL' ? 'Switch to Auto mode' : 'Switch to Manual mode'}
-          >
-            <Settings className="h-5 w-5 text-gray-500" />
-          </button>
-          <button
-            onClick={() => confirm('Delete video?') && deleteMutation.mutate()}
-            className="p-2 hover:bg-red-50 rounded-lg transition"
-          >
-            <Trash2 className="h-5 w-5 text-red-500" />
-          </button>
-        </div>
-      </div>
+      <VideoHeader
+        title={video.title}
+        completedCount={completedCount}
+        totalSteps={totalSteps}
+        isCompleted={isCompleted}
+        workflowMode={video.workflow_mode}
+        isRemix={isRemix}
+        onToggleMode={() => toggleWorkflowModeMutation.mutate()}
+        onDelete={() => confirm('Delete video?') && deleteMutation.mutate()}
+      />
 
       {/* COMPLETED STATE */}
       {isCompleted && (

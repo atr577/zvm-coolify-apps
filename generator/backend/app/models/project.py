@@ -40,6 +40,12 @@ class Project(Base):
     # Audio mode: none, scene, music, voiceover, auto
     audio_mode = Column(String(20), nullable=False, default="auto")
 
+    # Project type: discover (full workflow) or remix (skip to image generation)
+    project_type = Column(String(20), nullable=False, default="discover")
+
+    # Workflow control: pause after image generation for approval (saves tokens during dev)
+    require_image_approval = Column(Integer, nullable=False, default=0)  # 0=False, 1=True (SQLite boolean)
+
     # System prompts for each workflow step (optional overrides)
     # JSON: {"story": "...", "description": "...", "prompt": "...", "scenario": "...", "adaptation": "..."}
     system_prompts = Column(JSON, nullable=True)

@@ -215,3 +215,84 @@ def test_step_awaiting_approval(db: Session, test_video: Video) -> WorkflowStep:
     db.commit()
     db.refresh(step)
     return step
+
+
+@pytest.fixture
+def test_project_with_image_approval(db: Session, test_workspace: Workspace, test_user: User) -> Project:
+    """Create a test project with require_image_approval=True."""
+    from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
+
+    project = Project(
+        name="Test Project With Image Approval",
+        workspace_id=test_workspace.id,
+        user_id=test_user.id,
+        story_template="A story about {animal} in {location}",
+        platforms=["instagram", "tiktok"],
+        duration=5,
+        aspect_ratio="9:16",
+        audio_mode="auto",
+        require_image_approval=True,
+        system_prompts=DEFAULT_SYSTEM_PROMPTS
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@pytest.fixture
+def test_video_with_image_approval(db: Session, test_project_with_image_approval: Project) -> Video:
+    """Create a test video in project with require_image_approval=True."""
+    video = Video(
+        project_id=test_project_with_image_approval.id,
+        title="Test Video With Image Approval",
+        workflow_mode=WorkflowMode.MANUAL,
+        content_variables={"animal": "cat", "location": "beach"},
+        status=WorkflowStatus.PENDING,
+        current_step=StepType.STORY
+    )
+    db.add(video)
+    db.commit()
+    db.refresh(video)
+    return video
+
+
+@pytest.fixture
+def test_remix_project(db: Session, test_workspace: Workspace, test_user: User) -> Project:
+    """Create a test Remix project."""
+    from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
+
+    project = Project(
+        name="Test Remix Project",
+        workspace_id=test_workspace.id,
+        user_id=test_user.id,
+        story_template="Remix template",
+        platforms=["instagram", "tiktok"],
+        duration=5,
+        aspect_ratio="9:16",
+        audio_mode="auto",
+        project_type="remix",
+        system_prompts=DEFAULT_SYSTEM_PROMPTS
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@pytest.fixture
+def test_remix_video(db: Session, test_remix_project: Project) -> Video:
+    """Create a test video in Remix project with image_prompt set."""
+    video = Video(
+        project_id=test_remix_project.id,
+        title="Test Remix Video",
+        workflow_mode=WorkflowMode.MANUAL,
+        content_variables={},
+        image_prompt="A beautiful sunset over the ocean, cinematic, 8k",
+        status=WorkflowStatus.PENDING,
+        current_step=StepType.IMAGE
+    )
+    db.add(video)
+    db.commit()
+    db.refresh(video)
+    return video

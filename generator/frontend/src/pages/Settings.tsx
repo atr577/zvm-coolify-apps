@@ -3,6 +3,7 @@ import { Link2, Users, User, Trash2, Copy, Loader2, AlertCircle, Plus, Check } f
 import { invitesApi, workspacesApi } from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Invite, Workspace, InviteType } from '@/types'
+import { getErrorMessage } from '@/types'
 
 const TABS = [
   { id: 'standalone', label: 'Standalone Invites', icon: User },
@@ -39,8 +40,8 @@ export default function Settings() {
       ])
       setInvites(invitesRes.data)
       setWorkspaces(workspacesRes.data)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load data')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }
@@ -63,8 +64,8 @@ export default function Settings() {
       setCreateEmail('')
       setCreateWorkspaceId('')
       setCreateExpiresHours(72)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create invite')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsCreating(false)
     }
@@ -79,8 +80,8 @@ export default function Settings() {
     try {
       await invitesApi.delete(id)
       setInvites(invites.filter(inv => inv.id !== id))
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete invite')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setDeletingId(null)
     }

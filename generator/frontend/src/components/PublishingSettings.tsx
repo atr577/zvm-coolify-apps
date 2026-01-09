@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
 import { CheckCircle, Instagram, Youtube, AlertCircle, Loader2 } from 'lucide-react'
 import { workflowApi, publishingApi, socialAccountsApi, SocialAccount } from '@/services/api'
+import type { AdaptationData, PlatformAdaptation } from '@/types'
+import { getErrorMessage } from '@/types'
 
 interface PublishingSettingsProps {
   videoId: number
   publishingStepId: number
-  adaptationData: any
+  adaptationData: AdaptationData | null
   platforms: string[]
   videoUrl: string
 }
@@ -68,7 +70,7 @@ export default function PublishingSettings({
     return labels[platform] || platform
   }
 
-  const getPlatformMeta = (platform: string) => {
+  const getPlatformMeta = (platform: string): PlatformAdaptation => {
     return adaptationData?.[platform] || {}
   }
 
@@ -109,8 +111,8 @@ export default function PublishingSettings({
       } else {
         return { platform, success: false, error: data.error_message || 'Ошибка публикации' }
       }
-    } catch (err: any) {
-      return { platform, success: false, error: err.response?.data?.detail || err.message || 'Ошибка сети' }
+    } catch (err: unknown) {
+      return { platform, success: false, error: getErrorMessage(err) }
     }
   }
 

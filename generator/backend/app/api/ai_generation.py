@@ -34,7 +34,7 @@ async def generate_content_variants(
     db: Session = Depends(get_db)
 ):
     """
-    Генерирует 10 вариантов контента на основе Story Template проекта
+    Генерирует 4 варианта контента на основе Story Template проекта
 
     Возвращает:
     {
@@ -59,7 +59,7 @@ async def generate_content_variants(
                     }
                 }
             },
-            ... (еще 9 вариантов)
+            ... (еще 3 варианта)
         ]
     }
     """
@@ -70,7 +70,7 @@ async def generate_content_variants(
     # Вызываем AI для генерации вариантов
     variants = await openai_service.generate_content_variants(
         story_template=project.story_template,
-        count=10
+        count=4
     )
 
     return {"variants": variants}
@@ -82,7 +82,7 @@ async def regenerate_content_variants(
     db: Session = Depends(get_db)
 ):
     """
-    Регенерирует 10 новых вариантов, исключая уже показанные
+    Регенерирует 4 новых варианта, исключая уже показанные
     """
     project = db.query(Project).filter(Project.id == request.project_id).first()
     if not project:
@@ -90,7 +90,7 @@ async def regenerate_content_variants(
 
     variants = await openai_service.generate_content_variants(
         story_template=project.story_template,
-        count=10,
+        count=4,
         exclude=request.exclude_variants
     )
 

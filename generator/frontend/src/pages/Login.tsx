@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Film, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { getErrorMessage } from '@/types'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -19,8 +20,8 @@ export default function Login() {
     try {
       await login(email, password)
       navigate('/')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.db.base import get_db
 from app.models import Project
 from app.models.user import User, WorkspaceMember
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
+from app.schemas.pagination import PaginatedResponse
 from app.core.deps import get_current_user
 from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
 
@@ -67,22 +68,43 @@ async def create_project(
     return db_project
 
 
-@router.get("/", response_model=List[ProjectResponse])
+@router.get("/")
 async def list_projects(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    workspace_id: Optional[int] = Query(None, description="Filter by workspace"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):
-    """Получить список проектов из всех workspaces пользователя"""
+) -> PaginatedResponse[ProjectResponse]:
+    """Получить список проектов с пагинацией"""
     workspace_ids = get_user_workspace_ids(db, current_user.id)
     if not workspace_ids:
-        return []
+        return PaginatedResponse(items=[], total=0, page=page, limit=limit)
 
+    # Filter by specific workspace if provided
+    filter_workspaces = workspace_ids
+    if workspace_id:
+        if workspace_id not in workspace_ids:
+            raise HTTPException(status_code=403, detail="No access to this workspace")
+        filter_workspaces = [workspace_id]
+
+    # Count total
+    total = db.query(Project).filter(
+        Project.workspace_id.in_(filter_workspaces)
+    ).count()
+
+    # Get paginated projects
+    offset = (page - 1) * limit
     projects = db.query(Project).filter(
-        Project.workspace_id.in_(workspace_ids)
-    ).offset(skip).limit(limit).all()
-    return projects
+        Project.workspace_id.in_(filter_workspaces)
+    ).order_by(Project.created_at.desc()).offset(offset).limit(limit).all()
+
+    return PaginatedResponse(
+        items=projects,
+        total=total,
+        page=page,
+        limit=limit
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)

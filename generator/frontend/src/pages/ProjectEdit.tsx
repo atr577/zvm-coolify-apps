@@ -22,7 +22,7 @@ export default function ProjectEdit() {
       onSuccess: () => {
         queryClient.invalidateQueries(['project', projectId])
         queryClient.invalidateQueries('projects')
-        navigate('/')
+        navigate(`/?project=${projectId}`)
       },
     }
   )
@@ -40,11 +40,11 @@ export default function ProjectEdit() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate(`/?project=${projectId}`)}
           className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
-          Назад к проектам
+          Назад к проекту
         </button>
 
         <h1 className="text-3xl font-bold text-gray-900">
@@ -64,7 +64,7 @@ export default function ProjectEdit() {
             system_prompts: project.system_prompts ?? undefined
           }}
           onSubmit={(data) => updateMutation.mutate(data)}
-          onCancel={() => navigate('/')}
+          onCancel={() => navigate(`/?project=${projectId}`)}
           isLoading={updateMutation.isLoading}
         />
       </div>

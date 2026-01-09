@@ -152,6 +152,7 @@ class OpenAIService:
         tone = story_data.get('tone', 'comedic')
         pacing = story_data.get('pacing', 'medium')
         emotional_trigger = story_data.get('emotional_trigger', 'N/A')
+        filled_template = story_data.get('filled_template', '')
 
         # Инструкции по тону
         tone_instructions = {
@@ -197,9 +198,18 @@ class OpenAIService:
 - Максимальный визуальный импакт с первой секунды
 """
 
+        # Добавляем filled_template как референс если есть
+        template_context = ""
+        if filled_template:
+            template_context = f"""
+РЕФЕРЕНСНОЕ ОПИСАНИЕ СЦЕНЫ (обязательно учитывай!):
+{filled_template}
+
+"""
+
         prompt = f"""
 Проанализируй сюжет и создай детальное ВИЗУАЛЬНОЕ описание для первого кадра видео.
-
+{template_context}
 СЮЖЕТ:
 - Концепция: {concept}
 - Hook: {hook}
@@ -210,7 +220,7 @@ class OpenAIService:
 {pacing_instructions}
 {hook_instructions}
 
-Твоя задача — описать КОНКРЕТНУЮ СЦЕНУ, которую нужно сгенерировать.
+Твоя задача — описать КОНКРЕТНУЮ СЦЕНУ на основе референса и сюжета.
 
 Верни JSON с полями:
 
@@ -266,6 +276,9 @@ class OpenAIService:
                     system_prompt="Ты визуальный режиссёр. Твоя задача — превратить абстрактную идею в конкретное визуальное описание сцены для генерации изображения.",
                     temperature=0.7
                 )
+            # Прокидываем filled_template для использования в Prompt step
+            if filled_template:
+                result["filled_template"] = filled_template
             logger.info(f"Description generated successfully")
             return result
         except PiAPIError as e:
@@ -286,13 +299,25 @@ class OpenAIService:
             await asyncio.sleep(1)
             return MOCK_PROMPT
 
+        # Если есть filled_template - это уже готовое описание для image gen
+        filled_template = description_data.get("filled_template", "") if isinstance(description_data, dict) else ""
+
+        template_section = ""
+        if filled_template:
+            template_section = f"""
+БАЗОВОЕ ОПИСАНИЕ (использовать как основу!):
+{filled_template}
+
+"""
+
         prompt = f"""
 На основе визуального описания сцены создай промпт для генерации изображения.
-
+{template_section}
 ОПИСАНИЕ СЦЕНЫ:
 {description_data}
 
 Создай промпт на АНГЛИЙСКОМ языке, который точно передаст эту сцену.
+Если есть "БАЗОВОЕ ОПИСАНИЕ" - используй его как основу, это уже готовый промпт.
 
 Верни JSON:
 {{
@@ -714,7 +739,7 @@ class OpenAIService:
     async def generate_content_variants(
         self,
         story_template: str,
-        count: int = 10,
+        count: int = 4,
         exclude: List[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
@@ -838,7 +863,8 @@ class OpenAIService:
         story_template: str,
         content_variables: dict,
         duration: int,
-        platforms: list
+        platforms: list,
+        system_prompt: str = None
     ) -> dict:
         """
         Генерирует Story, комбинируя шаблон и конкретные переменные контента
@@ -857,29 +883,26 @@ class OpenAIService:
                 "duration": duration
             }
 
-        # Динамически форматируем content_variables
-        content_context = ""
+        # Подставляем content_variables в шаблон
+        filled_template = story_template
         if content_variables:
-            content_context = "КОНКРЕТНЫЙ КОНТЕНТ:\n"
             for key, value in content_variables.items():
                 if isinstance(value, dict):
-                    content_context += f"\n{key.upper()}:\n"
-                    for k, v in value.items():
-                        content_context += f"  - {k}: {v}\n"
+                    # Для вложенных объектов - форматируем как строку
+                    value_str = ", ".join(f"{k}: {v}" for k, v in value.items())
                 else:
-                    content_context += f"- {key}: {value}\n"
+                    value_str = str(value)
+                filled_template = filled_template.replace(f"{{{key}}}", value_str)
 
         prompt = f"""
-Создай идею для вирального короткого видео на основе шаблона и конкретных параметров:
+Создай идею для вирального короткого видео на основе этого описания:
 
-ШАБЛОН:
-{story_template}
-
-{content_context}
+ОПИСАНИЕ СЦЕНЫ:
+{filled_template}
 
 Длительность: {duration} секунд
 
-ВАЖНО: Используй ВСЕ параметры из "КОНКРЕТНЫЙ КОНТЕНТ" — они определяют что именно должно быть в видео.
+ВАЖНО: Это описание определяет что именно должно быть в видео - персонаж, локация, стиль, атмосфера.
 
 Верни результат в формате JSON с такими полями:
 
@@ -899,8 +922,11 @@ class OpenAIService:
         try:
             result = await self.client.generate_json(
                 prompt=prompt,
-                model=self.model
+                model=self.model,
+                system_prompt=system_prompt
             )
+            # Сохраняем заполненный шаблон для использования на следующих шагах
+            result["filled_template"] = filled_template
             logger.info(f"Generated story from template")
             return result
 

@@ -62,6 +62,7 @@ export interface WorkflowStep {
 
 export type AspectRatio = '9:16' | '16:9' | '1:1'
 export type AudioMode = 'none' | 'scene' | 'music' | 'voiceover' | 'auto'
+export type ProjectType = 'discover' | 'remix'
 
 export interface SystemPrompts {
   story?: string
@@ -81,6 +82,8 @@ export interface Project {
   duration: number
   aspect_ratio: AspectRatio
   audio_mode: AudioMode
+  project_type: ProjectType
+  require_image_approval: boolean
   system_prompts: SystemPrompts | null
   created_at: string
   updated_at: string
@@ -94,6 +97,8 @@ export interface CreateProjectDto {
   duration: number
   aspect_ratio?: AspectRatio
   audio_mode?: AudioMode
+  project_type?: ProjectType
+  require_image_approval?: boolean
   system_prompts?: SystemPrompts
   workspace_id?: number
 }
@@ -105,6 +110,10 @@ export interface UpdateProjectDto {
   platforms?: string[]
   duration?: number
   aspect_ratio?: AspectRatio
+  audio_mode?: AudioMode
+  project_type?: ProjectType
+  require_image_approval?: boolean
+  system_prompts?: SystemPrompts
 }
 
 export type WorkflowMode = 'MANUAL' | 'AUTO'
@@ -297,4 +306,90 @@ export interface WorkspaceDetail {
 
 export interface CreateWorkspaceDto {
   name: string
+}
+
+// --- Workflow Data Types ---
+
+export interface KeyMoment {
+  timestamp: string
+  action: string
+  emotion?: string
+}
+
+export interface StoryData {
+  concept: string
+  hook: string
+  emotional_arc: string
+  key_moments: KeyMoment[]
+  call_to_action?: string
+  target_audience?: string
+  platforms?: string[]
+}
+
+export interface DescriptionData {
+  scene_description: string
+  visual_style: string
+  mood: string
+  color_palette?: string[]
+  key_elements?: string[]
+  camera_suggestions?: string
+}
+
+export interface PromptResponseData {
+  main_prompt: string
+  negative_prompt?: string
+  style_reference?: string
+  composition_notes?: string
+}
+
+export interface CameraControl {
+  type: string
+  config?: Record<string, number>
+}
+
+export interface ScenarioData {
+  motion_description: string
+  camera_movement: string
+  key_frames?: string[]
+  duration_suggestion?: number
+  camera_control?: CameraControl
+}
+
+export interface PlatformAdaptation {
+  title?: string
+  description?: string
+  hashtags?: string[]
+  caption?: string
+  format?: string
+  optimal_length?: number
+  format_notes?: string
+}
+
+export interface AdaptationData {
+  instagram?: PlatformAdaptation
+  tiktok?: PlatformAdaptation
+  youtube?: PlatformAdaptation
+  [platform: string]: PlatformAdaptation | undefined
+}
+
+// --- API Error Type ---
+
+export interface ApiError {
+  message: string
+  detail?: string
+  status?: number
+}
+
+export function isApiError(error: unknown): error is { response?: { data?: { detail?: string } }; message?: string } {
+  return typeof error === 'object' && error !== null
+}
+
+export function getErrorMessage(error: unknown): string {
+  if (isApiError(error)) {
+    return error.response?.data?.detail || error.message || 'An error occurred'
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  return 'An unexpected error occurred'
 }

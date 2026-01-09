@@ -3,6 +3,7 @@ import { Users, Plus, Trash2, Edit2, Loader2, AlertCircle, Crown, UserMinus, Che
 import { workspacesApi } from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Workspace, WorkspaceDetail } from '@/types'
+import { getErrorMessage } from '@/types'
 
 export default function Workspaces() {
   const { user } = useAuth()
@@ -33,8 +34,8 @@ export default function Workspaces() {
     try {
       const response = await workspacesApi.list()
       setWorkspaces(response.data)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load workspaces')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }
@@ -45,8 +46,8 @@ export default function Workspaces() {
     try {
       const response = await workspacesApi.get(workspaceId)
       setSelectedWorkspace(response.data)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load workspace details')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsLoadingDetail(false)
     }
@@ -64,8 +65,8 @@ export default function Workspaces() {
       setWorkspaces([...workspaces, response.data])
       setShowCreateForm(false)
       setCreateName('')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create workspace')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsCreating(false)
     }
@@ -84,8 +85,8 @@ export default function Workspaces() {
         setSelectedWorkspace({ ...selectedWorkspace, name: response.data.name })
       }
       setEditingId(null)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update workspace')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsSaving(false)
     }
@@ -103,8 +104,8 @@ export default function Workspaces() {
       if (selectedWorkspace?.id === workspaceId) {
         setSelectedWorkspace(null)
       }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete workspace')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setDeletingId(null)
     }
@@ -127,8 +128,8 @@ export default function Workspaces() {
           ? { ...ws, member_count: (ws.member_count || 1) - 1 }
           : ws
       ))
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to remove member')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setRemovingMemberId(null)
     }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Instagram, Youtube, Trash2, RefreshCw, Plus, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import api from '@/services/api'
+import { getErrorMessage } from '@/types'
 
 interface SocialAccount {
   id: number
@@ -58,8 +59,8 @@ export default function SocialAccounts() {
     try {
       const response = await api.get<SocialAccount[]>('/api/social-accounts/')
       setAccounts(response.data)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load social accounts')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }
@@ -70,9 +71,8 @@ export default function SocialAccounts() {
     try {
       const response = await api.get<{ authorization_url: string }>(`/api/oauth/connect/${platformId}`)
       window.location.href = response.data.authorization_url
-    } catch (err: any) {
-      const detail = err.response?.data?.detail || 'Failed to initiate connection'
-      setError(detail)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
       setConnectingPlatform(null)
     }
   }
@@ -86,8 +86,8 @@ export default function SocialAccounts() {
     try {
       await api.delete(`/api/social-accounts/${accountId}`)
       setAccounts(accounts.filter(a => a.id !== accountId))
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to disconnect account')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setDeletingId(null)
     }
@@ -98,8 +98,8 @@ export default function SocialAccounts() {
     try {
       await api.post(`/api/oauth/refresh/${platform}/${accountId}`)
       await fetchAccounts()
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to refresh token')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setRefreshingId(null)
     }

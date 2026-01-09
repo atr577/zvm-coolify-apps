@@ -1,14 +1,37 @@
 # Task 10: Рефакторинг workflow.py
 
-**Приоритет:** P0 (критический)
-**Оценка:** 1 неделя
-**Зависимости:** Task 11 (тесты) — нужны тесты перед рефакторингом
+**Приоритет:** P1 (высокий)
+**Оценка:** 3-5 дней
+**Зависимости:** Нет блокеров
+
+## Текущее состояние (2026-01-09)
+
+| Метрика | Значение |
+|---------|----------|
+| Строк в workflow.py | **1308** |
+| Дублирование | 8x повторяющийся паттерн |
+| Тестовое покрытие | ~71% (общее) |
+
+### Что уже сделано
+
+1. **prompt_builders.py** (400 строк) — вынесены все билдеры промптов:
+   - `build_story_prompt()`
+   - `build_description_prompt()`
+   - `build_image_prompt_prompt()`
+   - `build_scenario_prompt()`
+   - `build_adaptation_prompt()`
+   - `DEFAULT_SYSTEM_PROMPTS` — дефолтные системные промпты
+
+2. **get_effective_prompt()** — хелпер для работы с project.system_prompts
+
+3. **Добавлены фичи**, увеличившие размер файла:
+   - Prompt preview/edit в MANUAL mode
+   - audio_mode проверка (skip audio if 'none')
+   - Интеграция с project.system_prompts
 
 ## Проблема
 
-Файл `backend/app/api/workflow.py` содержит 1145 строк с массивным дублированием кода.
-
-### Текущее состояние
+Файл `workflow.py` содержит **1308 строк** с массивным дублированием:
 
 ```python
 # Этот паттерн повторяется 8+ раз:
@@ -19,10 +42,21 @@ async def generate_{step}(request, db, current_user):
         raise HTTPException(status_code=404, detail="Video not found")
 
     verify_video_ownership(db, video, current_user)
+
+    # Get system_prompt from project
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
+
+    # Build original prompt for tracking
+    original_prompt_data = build_xxx_prompt(..., system_prompt=project_prompts.get("xxx"))
+
+    # Get effective prompt
+    effective_prompt = get_effective_prompt(video, "xxx", original_prompt_data, request.custom_prompt)
+
     step = get_or_create_step(db, video.id, StepType.XXX)
 
     try:
-        xxx_data = await openai_service.generate_xxx(...)
+        xxx_data = await openai_service.generate_xxx(..., custom_prompt=effective_prompt)
         step.content = xxx_data
         video.xxx_data = xxx_data
         video.current_step = StepType.XXX
@@ -34,26 +68,22 @@ async def generate_{step}(request, db, current_user):
         raise HTTPException(status_code=500, detail=str(e))
 ```
 
-### approve_step — 290 строк вложенных if/elif
+### approve_step — 290+ строк вложенных if/elif
 
 ```python
 if request.approved:
     if step.step_type == StepType.VIDEO:
-        # 30 строк
+        # Check audio_mode
+        if project.audio_mode == "none":
+            # 15 строк skip audio
+        else:
+            # 25 строк generate audio
     elif step.step_type == StepType.ADAPTATION:
         # 15 строк
     else:
         if video.workflow_mode == WorkflowMode.MANUAL:
-            if step.step_type == StepType.STORY:
-                # 20 строк
-            elif step.step_type == StepType.DESCRIPTION:
-                # 20 строк
-            # ... x8
+            # next_step_map + create next step
 ```
-
-## Цель
-
-Разбить на изолированные, тестируемые компоненты.
 
 ## Целевая архитектура
 
@@ -74,346 +104,154 @@ backend/app/
 │       │   ├── audio.py         # AudioStep
 │       │   └── adaptation.py    # AdaptationStep
 │       ├── orchestrator.py      # WorkflowOrchestrator
-│       └── state_machine.py     # FSM для переходов
+│       └── transitions.py       # Step transitions logic
 ├── api/
-│   └── workflow.py              # Тонкий слой — только HTTP handlers
+│   └── workflow.py              # Тонкий слой — только HTTP handlers (~150 строк)
 ```
 
-## Детальный план
+## План рефакторинга
 
 ### Phase 1: BaseWorkflowStep (2-3 часа)
 
-**Файл:** `backend/app/services/workflow/base.py`
+Создать базовый класс с общей логикой:
+- `execute()` — основной flow
+- `_get_or_create_step()`
+- `_save_content()`
+- `_validate()`
+- `_handle_failure()`
+- `_get_effective_prompt()` — работа с project.system_prompts
 
 ```python
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-from sqlalchemy.orm import Session
-from app.models.video import Video, StepType, WorkflowStatus
-from app.models.workflow_step import WorkflowStep
-
 class BaseWorkflowStep(ABC):
-    """Базовый класс для всех workflow steps"""
+    step_type: StepType
+    content_field: str
+    requires_validation: bool = True
 
-    step_type: StepType  # Переопределяется в наследниках
-
-    def __init__(self, db: Session, video: Video):
-        self.db = db
-        self.video = video
-        self.step: Optional[WorkflowStep] = None
-
-    async def execute(self, **kwargs) -> Dict[str, Any]:
-        """Основной метод выполнения шага"""
+    async def execute(self, request, custom_prompt=None) -> dict:
         self.step = self._get_or_create_step()
+        effective_prompt = self._get_effective_prompt(request, custom_prompt)
 
         try:
-            # 1. Генерация контента
-            content = await self.generate(**kwargs)
-
-            # 2. Сохранение
+            content = await self.generate(request, effective_prompt)
             self._save_content(content)
-
-            # 3. Валидация (если нужна)
-            validation = None
-            if self.requires_validation:
-                validation = await self._validate(content, kwargs.get('previous_data'))
-            else:
-                self.step.status = WorkflowStatus.AWAITING_APPROVAL
-
-            self.db.commit()
-
-            return {
-                "step_id": self.step.id,
-                "content": content,
-                "validation": validation
-            }
-
+            validation = await self._validate(content) if self.requires_validation else None
+            return self._build_response(content, validation)
         except Exception as e:
             self._handle_failure(e)
             raise
-
-    @abstractmethod
-    async def generate(self, **kwargs) -> Dict[str, Any]:
-        """Генерация контента — реализуется в наследниках"""
-        pass
-
-    @property
-    def requires_validation(self) -> bool:
-        """Нужна ли AI-валидация для этого шага"""
-        return True
-
-    @property
-    @abstractmethod
-    def content_field(self) -> str:
-        """Имя поля в Video для сохранения контента"""
-        pass
-
-    def _get_or_create_step(self) -> WorkflowStep:
-        # Существующая логика get_or_create_step
-        pass
-
-    def _save_content(self, content: Dict[str, Any]):
-        self.step.content = content
-        setattr(self.video, self.content_field, content)
-        self.video.current_step = self.step_type
-
-    async def _validate(self, content: Dict, previous_data: Dict = None):
-        # Существующая логика validate_and_save
-        pass
-
-    def _handle_failure(self, error: Exception):
-        self.step.status = WorkflowStatus.FAILED
-        self.step.completed_at = datetime.utcnow()
-        self.db.commit()
 ```
 
-### Phase 2: Конкретные Step классы (3-4 часа)
+### Phase 2: Step классы (3-4 часа)
 
-**Файл:** `backend/app/services/workflow/steps/story.py`
+8 классов, каждый ~30-50 строк:
 
-```python
-from app.services.workflow.base import BaseWorkflowStep
-from app.models.video import StepType
-from app.services.openai_service import openai_service
+| Step | Особенности |
+|------|-------------|
+| StoryStep | content_variables, story_template |
+| DescriptionStep | Зависит от story_data |
+| PromptStep | Зависит от description_data |
+| ImageStep | requires_validation=False, KLING API |
+| ScenarioStep | Vision API, image_url |
+| VideoStep | KLING video, camera_control |
+| AudioStep | audio_mode check, skip logic |
+| AdaptationStep | platforms, full_context |
 
-class StoryStep(BaseWorkflowStep):
-    step_type = StepType.STORY
-    content_field = "story_data"
+### Phase 3: Transitions (2 часа)
 
-    async def generate(
-        self,
-        theme: str = None,
-        target_audience: str = None,
-        mood: str = None,
-        key_elements: str = None,
-        duration: int = 5,
-        platforms: list = None,
-        additional_notes: str = None,
-        content_variables: dict = None,
-        **kwargs
-    ) -> dict:
-        return await openai_service.generate_story(
-            theme=theme,
-            target_audience=target_audience,
-            mood=mood,
-            key_elements=key_elements,
-            duration=duration,
-            platforms=platforms,
-            additional_notes=additional_notes,
-            content_variables=content_variables or self.video.content_variables
-        )
-```
-
-**Файл:** `backend/app/services/workflow/steps/image.py`
+Вынести логику переходов между шагами:
 
 ```python
-class ImageStep(BaseWorkflowStep):
-    step_type = StepType.IMAGE
-    content_field = "image_url"
-    requires_validation = False  # Изображения не валидируем AI
-
-    async def generate(self, prompt: str = None, prompt_data: dict = None, **kwargs) -> dict:
-        # Определяем промпт
-        prompt_str = prompt
-        if prompt_data and not prompt_str:
-            prompt_str = prompt_data.get("main_prompt", "")
-
-        image_url = await kling_service.generate_image(
-            prompt=prompt_str,
-            aspect_ratio=self.video.project.aspect_ratio,
-            negative_prompt=prompt_data.get("negative_prompt") if prompt_data else None
-        )
-
-        return {"image_url": image_url}
-
-    def _save_content(self, content: dict):
-        self.step.content = content
-        self.video.image_url = content["image_url"]
-        self.video.current_step = self.step_type
-```
-
-### Phase 3: State Machine (2-3 часа)
-
-**Файл:** `backend/app/services/workflow/state_machine.py`
-
-```python
-from enum import Enum
-from typing import Dict, Set
-from app.models.video import WorkflowStatus
-
-class InvalidTransitionError(Exception):
-    pass
-
-VALID_TRANSITIONS: Dict[WorkflowStatus, Set[WorkflowStatus]] = {
-    WorkflowStatus.PENDING: {WorkflowStatus.IN_PROGRESS},
-    WorkflowStatus.IN_PROGRESS: {WorkflowStatus.VALIDATING, WorkflowStatus.AWAITING_APPROVAL, WorkflowStatus.FAILED},
-    WorkflowStatus.VALIDATING: {WorkflowStatus.AWAITING_APPROVAL, WorkflowStatus.VALIDATION_FAILED, WorkflowStatus.IN_PROGRESS},
-    WorkflowStatus.VALIDATION_FAILED: {WorkflowStatus.PENDING, WorkflowStatus.IN_PROGRESS},
-    WorkflowStatus.AWAITING_APPROVAL: {WorkflowStatus.APPROVED, WorkflowStatus.REJECTED},
-    WorkflowStatus.APPROVED: {WorkflowStatus.COMPLETED},
-    WorkflowStatus.REJECTED: {WorkflowStatus.PENDING},
-    WorkflowStatus.COMPLETED: set(),  # Терминальное состояние
-    WorkflowStatus.FAILED: {WorkflowStatus.PENDING},
+NEXT_STEP_MAP = {
+    StepType.STORY: StepType.DESCRIPTION,
+    StepType.DESCRIPTION: StepType.PROMPT,
+    StepType.PROMPT: StepType.IMAGE,
+    StepType.IMAGE: StepType.SCENARIO,
+    StepType.SCENARIO: StepType.VIDEO,
+    StepType.VIDEO: StepType.AUDIO,
+    StepType.AUDIO: StepType.ADAPTATION,
+    StepType.ADAPTATION: StepType.PUBLISHING,
 }
 
-def validate_transition(current: WorkflowStatus, new: WorkflowStatus) -> bool:
-    """Проверяет валидность перехода"""
-    return new in VALID_TRANSITIONS.get(current, set())
-
-def transition_to(step: "WorkflowStep", new_status: WorkflowStatus):
-    """Безопасный переход в новое состояние"""
-    if not validate_transition(step.status, new_status):
-        raise InvalidTransitionError(
-            f"Cannot transition from {step.status.value} to {new_status.value}"
-        )
-    step.status = new_status
+def get_next_step(current: StepType) -> StepType | None
+def should_auto_proceed(step: WorkflowStep, video: Video) -> bool
+def handle_approval(step: WorkflowStep, video: Video) -> StepType | None
 ```
 
-### Phase 4: Orchestrator (3-4 часа)
+### Phase 4: Orchestrator (2-3 часа)
 
-**Файл:** `backend/app/services/workflow/orchestrator.py`
+Координация выполнения:
 
 ```python
-from typing import Dict, Type
-from app.services.workflow.base import BaseWorkflowStep
-from app.services.workflow.steps import *
-from app.models.video import StepType
-
-STEP_CLASSES: Dict[StepType, Type[BaseWorkflowStep]] = {
-    StepType.STORY: StoryStep,
-    StepType.DESCRIPTION: DescriptionStep,
-    StepType.PROMPT: PromptStep,
-    StepType.IMAGE: ImageStep,
-    StepType.SCENARIO: ScenarioStep,
-    StepType.VIDEO: VideoStep,
-    StepType.AUDIO: AudioStep,
-    StepType.ADAPTATION: AdaptationStep,
-}
-
-STEP_ORDER = [
-    StepType.STORY,
-    StepType.DESCRIPTION,
-    StepType.PROMPT,
-    StepType.IMAGE,
-    StepType.SCENARIO,
-    StepType.VIDEO,
-    StepType.AUDIO,
-    StepType.ADAPTATION,
-]
-
 class WorkflowOrchestrator:
-    """Управляет выполнением workflow"""
-
     def __init__(self, db: Session, video: Video):
         self.db = db
         self.video = video
 
-    async def execute_step(self, step_type: StepType, **kwargs) -> dict:
-        """Выполняет конкретный шаг"""
-        step_class = STEP_CLASSES[step_type]
-        step = step_class(self.db, self.video)
-        return await step.execute(**kwargs)
-
-    async def approve_step(self, step_id: int, approved: bool, feedback: str = None) -> dict:
-        """Одобряет/отклоняет шаг"""
-        step = self.db.query(WorkflowStep).get(step_id)
-
-        if approved:
-            transition_to(step, WorkflowStatus.APPROVED)
-            step.user_approved = True
-            step.completed_at = datetime.utcnow()
-
-            # Автоматически запускаем следующий шаг
-            next_step_type = self._get_next_step(step.step_type)
-            if next_step_type and self.video.workflow_mode == WorkflowMode.MANUAL:
-                await self.execute_step(next_step_type)
-        else:
-            transition_to(step, WorkflowStatus.REJECTED)
-            step.user_feedback = feedback
-
-        self.db.commit()
-        return {"step_id": step.id, "status": step.status.value}
-
-    async def auto_generate(self) -> dict:
-        """Автогенерация всех шагов до AUDIO"""
-        results = []
-        for step_type in STEP_ORDER:
-            if step_type == StepType.AUDIO:
-                break  # Останавливаемся перед audio для выбора варианта
-            result = await self.execute_step(step_type)
-            results.append(result)
-        return {"steps": results}
-
-    def _get_next_step(self, current: StepType) -> StepType | None:
-        idx = STEP_ORDER.index(current)
-        if idx + 1 < len(STEP_ORDER):
-            return STEP_ORDER[idx + 1]
-        return None
+    async def execute_step(self, step_type: StepType, request) -> dict
+    async def approve_step(self, step_id: int, approved: bool, feedback: str = None) -> dict
+    async def auto_generate(self) -> dict  # Full AUTO mode
 ```
 
 ### Phase 5: Тонкий API слой (2 часа)
 
-**Файл:** `backend/app/api/workflow.py` (новый, ~100 строк)
+Каждый endpoint — 10-15 строк:
 
 ```python
-from fastapi import APIRouter, Depends, HTTPException
-from app.services.workflow.orchestrator import WorkflowOrchestrator
-from app.core.deps import get_db, get_current_user
-
-router = APIRouter()
-
 @router.post("/generate-story")
-async def generate_story(
-    request: GenerateStoryRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+async def generate_story(request: GenerateStoryRequest, db: Session, current_user: User):
     video = get_video_or_404(db, request.video_id)
     verify_video_ownership(db, video, current_user)
 
     orchestrator = WorkflowOrchestrator(db, video)
-    return await orchestrator.execute_step(
-        StepType.STORY,
-        theme=request.theme,
-        target_audience=request.target_audience,
-        mood=request.mood,
-        key_elements=request.key_elements,
-        duration=request.duration,
-        platforms=request.platforms,
-        additional_notes=request.additional_notes,
-        content_variables=request.content_variables
-    )
-
-# Аналогично для остальных endpoints — каждый ~10 строк
+    return await orchestrator.execute_step(StepType.STORY, request)
 ```
 
 ## Чеклист
 
-- [ ] Написать тесты для текущего workflow (Task 11)
+- [x] Вынести prompt_builders.py
+- [x] Добавить DEFAULT_SYSTEM_PROMPTS
+- [x] Интегрировать project.system_prompts
 - [ ] Создать `BaseWorkflowStep`
-- [ ] Реализовать все Step классы
-- [ ] Реализовать State Machine
+- [ ] Реализовать StoryStep
+- [ ] Реализовать DescriptionStep
+- [ ] Реализовать PromptStep
+- [ ] Реализовать ImageStep
+- [ ] Реализовать ScenarioStep
+- [ ] Реализовать VideoStep (с audio_mode logic)
+- [ ] Реализовать AudioStep
+- [ ] Реализовать AdaptationStep
+- [ ] Реализовать transitions.py
 - [ ] Реализовать Orchestrator
 - [ ] Переписать API endpoints
 - [ ] Прогнать тесты
-- [ ] Удалить старый workflow.py
+- [ ] Code review
 
 ## Метрики успеха
 
-| Метрика | До | После |
-|---------|-----|-------|
-| Строк в workflow.py | 1145 | ~100 |
+| Метрика | Сейчас | Цель |
+|---------|--------|------|
+| Строк в workflow.py | 1308 | ~150 |
 | Дублирование | 8x | 0 |
-| Тестовое покрытие | 0% | 80%+ |
-| Cyclomatic complexity | Высокая | Низкая |
+| Строк в step классах | 0 | ~40 каждый |
+| Тестовое покрытие workflow | ~70% | 85%+ |
 
-## Риски
+## Риски и митигация
 
-1. **Регрессии** — митигация: сначала тесты (Task 11)
-2. **Время** — митигация: инкрементальный рефакторинг
-3. **Сложность** — митигация: code review на каждом этапе
+| Риск | Вероятность | Митигация |
+|------|-------------|-----------|
+| Регрессии | Средняя | Инкрементальный рефакторинг, тесты на каждом этапе |
+| Время | Средняя | Можно делать по 1-2 step класса за раз |
+| Сложность AudioStep | Высокая | Особое внимание к audio_mode logic |
+
+## Порядок работы
+
+1. **Сначала** — BaseWorkflowStep + StoryStep (самый простой)
+2. Протестировать что StoryStep работает через API
+3. Добавлять остальные steps по одному
+4. В конце — Orchestrator и тонкий API слой
+5. Удалить старый код
 
 ---
 
-**Статус:** Ожидает Task 11 (тесты)
-**Ответственный:** TBD
+**Статус:** Ready to start
+**Обновлено:** 2026-01-09

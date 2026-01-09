@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { CreateProjectDto, Workspace, AudioMode, SystemPrompts } from '@/types'
+import { CreateProjectDto, Workspace, AudioMode, ProjectType, SystemPrompts } from '@/types'
 
 interface ProjectFormProps {
   initialData?: Partial<CreateProjectDto>
@@ -9,6 +9,11 @@ interface ProjectFormProps {
   onCancel: () => void
   isLoading: boolean
 }
+
+const PROJECT_TYPES: { value: ProjectType; label: string; description: string }[] = [
+  { value: 'discover', label: 'Discover', description: 'Полный воркфлоу: Story → Description → Prompt → Image → Video' },
+  { value: 'remix', label: 'Remix', description: 'Быстрый режим: сразу генерация изображения по шаблону' },
+]
 
 const AUDIO_MODES: { value: AudioMode; label: string; description: string }[] = [
   { value: 'none', label: 'Без звука', description: 'Видео без аудио' },
@@ -41,6 +46,8 @@ export default function ProjectForm({
     duration: initialData?.duration || 5,
     aspect_ratio: initialData?.aspect_ratio || '9:16',
     audio_mode: initialData?.audio_mode || 'auto',
+    project_type: initialData?.project_type || 'discover',
+    require_image_approval: initialData?.require_image_approval || false,
     system_prompts: initialData?.system_prompts || {},
     workspace_id: initialData?.workspace_id || workspaces?.[0]?.id
   })
@@ -75,6 +82,36 @@ export default function ProjectForm({
           placeholder="Девушки и авто"
           required
         />
+      </div>
+
+      {/* Project Type */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Тип проекта *
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          {PROJECT_TYPES.map(type => (
+            <label
+              key={type.value}
+              className={`flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
+                formData.project_type === type.value
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <input
+                type="radio"
+                name="project_type"
+                value={type.value}
+                checked={formData.project_type === type.value}
+                onChange={() => setFormData({ ...formData, project_type: type.value })}
+                className="sr-only"
+              />
+              <span className="font-medium text-gray-900">{type.label}</span>
+              <span className="text-xs text-gray-500 mt-1">{type.description}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Workspace */}
@@ -206,6 +243,22 @@ export default function ProjectForm({
             </label>
           ))}
         </div>
+      </div>
+
+      {/* Workflow Control */}
+      <div>
+        <label className="flex items-center space-x-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.require_image_approval || false}
+            onChange={(e) => setFormData({ ...formData, require_image_approval: e.target.checked })}
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-5 w-5"
+          />
+          <div>
+            <span className="text-sm font-medium text-gray-700">Approve image before video</span>
+            <p className="text-xs text-gray-500">В AUTO режиме пауза после генерации картинки для approve</p>
+          </div>
+        </label>
       </div>
 
       {/* Advanced Settings */}

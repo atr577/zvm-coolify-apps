@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
 from app.db.base import get_db
 from app.models import Video, Project
 from app.models.user import User, WorkspaceMember
 from app.schemas import VideoCreate, VideoUpdate, VideoResponse
+from app.schemas.pagination import PaginatedResponse
 from app.core.deps import get_current_user
 
 router = APIRouter()
@@ -51,13 +52,15 @@ async def create_video(
     return db_video
 
 
-@router.get("/project/{project_id}", response_model=List[VideoResponse])
+@router.get("/project/{project_id}")
 async def list_videos_by_project(
     project_id: int,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):
-    """Получить все видео проекта"""
+) -> PaginatedResponse[VideoResponse]:
+    """Получить видео проекта с пагинацией"""
     # Проверить что проект существует и у пользователя есть доступ
     workspace_ids = get_user_workspace_ids(db, current_user.id)
     project = db.query(Project).filter(
@@ -67,8 +70,23 @@ async def list_videos_by_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    videos = db.query(Video).filter(Video.project_id == project_id).all()
-    return videos
+    # Count total
+    total = db.query(Video).filter(Video.project_id == project_id).count()
+
+    # Get paginated videos with eager loading
+    offset = (page - 1) * limit
+    videos = db.query(Video).filter(
+        Video.project_id == project_id
+    ).options(
+        joinedload(Video.project)
+    ).order_by(Video.created_at.desc()).offset(offset).limit(limit).all()
+
+    return PaginatedResponse(
+        items=videos,
+        total=total,
+        page=page,
+        limit=limit
+    )
 
 
 @router.get("/{video_id}", response_model=VideoResponse)
@@ -78,11 +96,13 @@ async def get_video(
     current_user: User = Depends(get_current_user)
 ):
     """Получить видео по ID"""
-    video = db.query(Video).filter(Video.id == video_id).first()
+    video = db.query(Video).options(
+        joinedload(Video.project)
+    ).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Проверить доступ через workspace
+    # Проверить доступ через workspace (project уже загружен)
     verify_video_access(db, video, current_user.id)
 
     return video
@@ -96,7 +116,9 @@ async def update_video(
     current_user: User = Depends(get_current_user)
 ):
     """Обновить видео"""
-    video = db.query(Video).filter(Video.id == video_id).first()
+    video = db.query(Video).options(
+        joinedload(Video.project)
+    ).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
@@ -119,7 +141,9 @@ async def delete_video(
     current_user: User = Depends(get_current_user)
 ):
     """Удалить видео (и все его workflow steps через cascade)"""
-    video = db.query(Video).filter(Video.id == video_id).first()
+    video = db.query(Video).options(
+        joinedload(Video.project)
+    ).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 

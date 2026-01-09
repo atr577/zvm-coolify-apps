@@ -5,6 +5,9 @@ from datetime import datetime
 # Audio mode options
 AudioMode = Literal["none", "scene", "music", "voiceover", "auto"]
 
+# Project type options
+ProjectType = Literal["discover", "remix"]
+
 # System prompts for each workflow step
 class SystemPrompts(BaseModel):
     story: Optional[str] = None
@@ -22,6 +25,8 @@ class ProjectBase(BaseModel):
     duration: int
     aspect_ratio: Literal["9:16", "16:9", "1:1"] = "9:16"
     audio_mode: AudioMode = "auto"
+    project_type: ProjectType = "discover"
+    require_image_approval: bool = False  # Pause after image for approval
     system_prompts: Optional[Dict[str, str]] = None
 
 
@@ -37,6 +42,8 @@ class ProjectUpdate(BaseModel):
     duration: Optional[int] = None
     aspect_ratio: Optional[Literal["9:16", "16:9", "1:1"]] = None
     audio_mode: Optional[AudioMode] = None
+    project_type: Optional[ProjectType] = None
+    require_image_approval: Optional[bool] = None
     system_prompts: Optional[Dict[str, str]] = None
 
 
