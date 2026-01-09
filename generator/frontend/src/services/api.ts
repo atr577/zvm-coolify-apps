@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -182,6 +182,25 @@ export const publishingApi = {
 
   retry: (publishResultId: number) =>
     api.post(`/api/publish/retry/${publishResultId}`),
+}
+
+// Invites API (admin only)
+export const invitesApi = {
+  list: () => api.get<Invite[]>('/api/auth/invites'),
+  create: (data: CreateInviteDto) => api.post<Invite>('/api/auth/invites', data),
+  delete: (id: number) => api.delete(`/api/auth/invites/${id}`),
+  validate: (token: string) => api.get<InviteValidation>(`/api/auth/invite/${token}`),
+}
+
+// Workspaces API
+export const workspacesApi = {
+  list: () => api.get<Workspace[]>('/api/workspaces'),
+  listAll: () => api.get<Workspace[]>('/api/workspaces/all'),  // Admin only
+  get: (id: number) => api.get<WorkspaceDetail>(`/api/workspaces/${id}`),
+  create: (data: CreateWorkspaceDto) => api.post<Workspace>('/api/workspaces', data),
+  update: (id: number, data: CreateWorkspaceDto) => api.patch<Workspace>(`/api/workspaces/${id}`, data),
+  delete: (id: number) => api.delete(`/api/workspaces/${id}`),
+  removeMember: (workspaceId: number, userId: number) => api.delete(`/api/workspaces/${workspaceId}/members/${userId}`),
 }
 
 // Metrics API

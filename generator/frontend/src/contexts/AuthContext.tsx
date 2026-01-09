@@ -8,6 +8,7 @@ interface User {
   is_active: boolean
   is_verified: boolean
   role: string
+  can_create_workspace: boolean
   created_at: string
 }
 
@@ -16,8 +17,9 @@ interface AuthContextType {
   token: string | null
   isLoading: boolean
   isAuthenticated: boolean
+  isAdmin: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, fullName?: string) => Promise<void>
+  register: (email: string, password: string, fullName?: string, inviteToken?: string) => Promise<void>
   logout: () => void
 }
 
@@ -64,11 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchUser()
   }
 
-  const register = async (email: string, password: string, fullName?: string) => {
+  const register = async (email: string, password: string, fullName?: string, inviteToken?: string) => {
     await api.post('/api/auth/register', {
       email,
       password,
-      full_name: fullName
+      full_name: fullName,
+      invite_token: inviteToken
     })
     await login(email, password)
   }
@@ -87,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         isLoading,
         isAuthenticated: !!user,
+        isAdmin: user?.role === 'admin',
         login,
         register,
         logout

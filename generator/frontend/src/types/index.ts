@@ -55,6 +55,7 @@ export type AspectRatio = '9:16' | '16:9' | '1:1'
 
 export interface Project {
   id: number
+  workspace_id: number
   name: string
   description: string | null
   story_template: string
@@ -196,4 +197,81 @@ export interface VideoMetricsSummary {
   total_comments: number
   total_shares: number
   avg_engagement_rate: number | null
+}
+
+// --- Invite & Workspace Types ---
+
+export type InviteType = 'standalone' | 'workspace'
+
+export interface Invite {
+  id: number
+  token: string
+  type: InviteType
+  email: string | null
+  workspace_id: number | null
+  workspace_name: string | null
+  created_by_id: number
+  created_at: string
+  expires_at: string
+  used_at: string | null
+  used_by_id: number | null
+  is_valid: boolean
+}
+
+export interface CreateInviteDto {
+  type: InviteType
+  email?: string
+  workspace_id?: number
+  expires_in_hours?: number
+}
+
+export interface InviteValidation {
+  valid: boolean
+  type?: InviteType
+  email?: string
+  workspace_name?: string
+  expires_at?: string
+  error?: string
+}
+
+export interface User {
+  id: number
+  email: string
+  full_name: string | null
+  is_active: boolean
+  is_verified: boolean
+  role: string
+  can_create_workspace: boolean
+  created_at: string
+}
+
+export interface Workspace {
+  id: number
+  name: string
+  owner_id: number
+  created_at: string
+  member_count?: number
+  is_owner?: boolean
+}
+
+export interface WorkspaceMember {
+  id: number
+  workspace_id: number
+  user_id: number
+  role: string
+  joined_at: string
+  user?: User
+}
+
+export interface WorkspaceDetail {
+  id: number
+  name: string
+  owner_id: number
+  created_at: string
+  members: WorkspaceMember[]
+  is_owner: boolean
+}
+
+export interface CreateWorkspaceDto {
+  name: string
 }

@@ -1,10 +1,15 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Film, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Film, Loader2, AlertCircle, Users, User } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { invitesApi } from '@/services/api'
+import type { InviteValidation } from '@/types'
 
 export default function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const inviteToken = searchParams.get('invite')
+
   const { register } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -13,9 +18,45 @@ export default function Register() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
+  // Invite validation state
+  const [inviteValidation, setInviteValidation] = useState<InviteValidation | null>(null)
+  const [isValidatingInvite, setIsValidatingInvite] = useState(true)
+
+  useEffect(() => {
+    if (!inviteToken) {
+      setIsValidatingInvite(false)
+      setInviteValidation({ valid: false, error: 'Invite token required' })
+      return
+    }
+
+    const validateInvite = async () => {
+      try {
+        const response = await invitesApi.validate(inviteToken)
+        setInviteValidation(response.data)
+        if (response.data.email) {
+          setEmail(response.data.email)
+        }
+      } catch (err: any) {
+        setInviteValidation({
+          valid: false,
+          error: err.response?.data?.detail || 'Invalid invite'
+        })
+      } finally {
+        setIsValidatingInvite(false)
+      }
+    }
+
+    validateInvite()
+  }, [inviteToken])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!inviteToken || !inviteValidation?.valid) {
+      setError('Valid invite required')
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
@@ -30,13 +71,52 @@ export default function Register() {
     setIsLoading(true)
 
     try {
-      await register(email, password, fullName || undefined)
+      await register(email, password, fullName || undefined, inviteToken)
       navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Loading state while validating invite
+  if (isValidatingInvite) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
+          <Loader2 className="h-12 w-12 text-primary-600 animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Validating invite...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Invalid or missing invite
+  if (!inviteValidation?.valid) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="flex justify-center">
+            <AlertCircle className="h-12 w-12 text-red-500" />
+          </div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Invalid Invite
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            {inviteValidation?.error || 'This invite link is invalid or has expired.'}
+          </p>
+          <div className="mt-6 text-center">
+            <Link
+              to="/login"
+              className="font-medium text-primary-600 hover:text-primary-500"
+            >
+              Go to login
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -48,7 +128,36 @@ export default function Register() {
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Create your account
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
+
+        {/* Invite info banner */}
+        <div className="mt-4 mx-4">
+          <div className={`rounded-lg p-4 ${
+            inviteValidation.type === 'workspace'
+              ? 'bg-blue-50 border border-blue-200'
+              : 'bg-green-50 border border-green-200'
+          }`}>
+            <div className="flex items-center">
+              {inviteValidation.type === 'workspace' ? (
+                <Users className="h-5 w-5 text-blue-600 mr-2" />
+              ) : (
+                <User className="h-5 w-5 text-green-600 mr-2" />
+              )}
+              <div>
+                {inviteValidation.type === 'workspace' ? (
+                  <p className="text-sm text-blue-800">
+                    You're joining workspace: <strong>{inviteValidation.workspace_name}</strong>
+                  </p>
+                ) : (
+                  <p className="text-sm text-green-800">
+                    You'll get your own workspace after registration
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 text-center text-sm text-gray-600">
           Already have an account?{' '}
           <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
             Sign in
@@ -95,9 +204,15 @@ export default function Register() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  disabled={!!inviteValidation.email}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
                 />
               </div>
+              {inviteValidation.email && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Email is fixed by invite
+                </p>
+              )}
             </div>
 
             <div>

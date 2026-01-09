@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Film, Home, User, LogOut, Share2, ChevronDown, BarChart3 } from 'lucide-react'
+import { Film, Home, User, LogOut, Share2, ChevronDown, BarChart3, Settings, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface LayoutProps {
@@ -8,7 +8,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const [showMenu, setShowMenu] = useState(false)
 
   return (
@@ -44,6 +44,22 @@ export default function Layout({ children }: LayoutProps) {
                 <Share2 className="h-5 w-5 mr-1" />
                 Social Accounts
               </Link>
+              <Link
+                to="/workspaces"
+                className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              >
+                <Users className="h-5 w-5 mr-1" />
+                Workspaces
+              </Link>
+              {isAdmin && (
+                <Link
+                  to="/settings"
+                  className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                >
+                  <Settings className="h-5 w-5 mr-1" />
+                  Settings
+                </Link>
+              )}
 
               {user && (
                 <div className="relative">
