@@ -2,19 +2,25 @@
 Video Metrics API - Track performance of published videos
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+import logging
 
 from app.db.base import get_db
 from app.models.video import Video, VideoMetrics, MetricsPeriod
+from app.models.project import PublishResult
+from app.models.user import SocialAccount
 from app.schemas.video import (
     VideoMetricsCreate,
     VideoMetricsUpdate,
     VideoMetricsResponse,
     VideoMetricsSummary
 )
+from app.services.metrics_fetcher import metrics_fetcher
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
@@ -285,3 +291,189 @@ async def get_metrics_leaderboard(
 
     summaries.sort(key=sort_key, reverse=True)
     return summaries[:limit]
+
+
+def determine_period(published_at: datetime) -> Optional[MetricsPeriod]:
+    """Determine which period to use based on time since publication"""
+    if not published_at:
+        return None
+
+    elapsed = datetime.utcnow() - published_at
+    hours = elapsed.total_seconds() / 3600
+
+    if hours < 0.5:
+        return None  # Too early
+    elif hours < 6:
+        return MetricsPeriod.MINUTES_30
+    elif hours < 24:
+        return MetricsPeriod.HOURS_6
+    elif hours < 168:  # 7 days
+        return MetricsPeriod.HOURS_24
+    else:
+        return MetricsPeriod.DAYS_7
+
+
+async def fetch_and_store_metrics(
+    video_id: int,
+    publish_result: PublishResult,
+    social_account: SocialAccount,
+    period: MetricsPeriod,
+    db: Session
+):
+    """Background task to fetch metrics from platform and store them"""
+    try:
+        # Fetch metrics from platform API
+        metrics_data = await metrics_fetcher.fetch(
+            platform=publish_result.platform,
+            post_id=publish_result.post_id,
+            access_token=social_account.access_token,
+            refresh_token=social_account.refresh_token
+        )
+
+        if not metrics_data:
+            logger.warning(f"No metrics returned for video {video_id} on {publish_result.platform}")
+            return
+
+        views = metrics_data.get("views", 0)
+        likes = metrics_data.get("likes", 0)
+        comments = metrics_data.get("comments", 0)
+        shares = metrics_data.get("shares", 0)
+
+        engagement_rate = calculate_engagement_rate(views, likes, comments, shares)
+
+        # Check if metrics for this period already exist
+        existing = db.query(VideoMetrics).filter(
+            VideoMetrics.video_id == video_id,
+            VideoMetrics.platform == publish_result.platform,
+            VideoMetrics.period == period
+        ).first()
+
+        if existing:
+            existing.views = views
+            existing.likes = likes
+            existing.comments = comments
+            existing.shares = shares
+            existing.engagement_rate = engagement_rate
+            existing.recorded_at = datetime.utcnow()
+            existing.is_manual = False
+        else:
+            db_metrics = VideoMetrics(
+                video_id=video_id,
+                platform=publish_result.platform,
+                period=period,
+                views=views,
+                likes=likes,
+                comments=comments,
+                shares=shares,
+                engagement_rate=engagement_rate,
+                is_manual=False
+            )
+            db.add(db_metrics)
+
+        db.commit()
+        logger.info(f"Fetched metrics for video {video_id} on {publish_result.platform}: {views} views, {likes} likes")
+
+    except Exception as e:
+        logger.error(f"Failed to fetch metrics for video {video_id}: {e}")
+
+
+@router.post("/video/{video_id}/fetch")
+async def fetch_video_metrics(
+    video_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch metrics from all platforms where video was published.
+    Runs in background and stores results.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Get all publish results for this video
+    publish_results = db.query(PublishResult).filter(
+        PublishResult.video_id == video_id,
+        PublishResult.status == "published",
+        PublishResult.post_id.isnot(None)
+    ).all()
+
+    if not publish_results:
+        raise HTTPException(status_code=400, detail="No published posts found for this video")
+
+    tasks_scheduled = []
+
+    for pr in publish_results:
+        # Determine appropriate period based on publish time
+        period = determine_period(pr.published_at)
+        if not period:
+            continue
+
+        # Find social account for this platform
+        social_account = db.query(SocialAccount).filter(
+            SocialAccount.platform == pr.platform,
+            SocialAccount.is_active == True
+        ).first()
+
+        if not social_account:
+            logger.warning(f"No active social account for {pr.platform}")
+            continue
+
+        # Schedule background fetch
+        background_tasks.add_task(
+            fetch_and_store_metrics,
+            video_id, pr, social_account, period, db
+        )
+        tasks_scheduled.append({
+            "platform": pr.platform,
+            "period": period.value,
+            "post_id": pr.post_id
+        })
+
+    return {
+        "status": "fetching",
+        "video_id": video_id,
+        "tasks": tasks_scheduled
+    }
+
+
+@router.post("/fetch-all")
+async def fetch_all_published_metrics(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch metrics for ALL published videos.
+    Use this for periodic batch updates.
+    """
+    # Get all published videos
+    published_results = db.query(PublishResult).filter(
+        PublishResult.status == "published",
+        PublishResult.post_id.isnot(None)
+    ).all()
+
+    total_scheduled = 0
+
+    for pr in published_results:
+        period = determine_period(pr.published_at)
+        if not period:
+            continue
+
+        social_account = db.query(SocialAccount).filter(
+            SocialAccount.platform == pr.platform,
+            SocialAccount.is_active == True
+        ).first()
+
+        if not social_account:
+            continue
+
+        background_tasks.add_task(
+            fetch_and_store_metrics,
+            pr.video_id, pr, social_account, period, db
+        )
+        total_scheduled += 1
+
+    return {
+        "status": "fetching",
+        "total_tasks_scheduled": total_scheduled
+    }
