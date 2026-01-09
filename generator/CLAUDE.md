@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Viral Video Generator - automated platform for creating short viral videos for Instagram Reels, TikTok, and YouTube Shorts using AI (GPT-5 + KLING v2.1 via AIMLAPI).
+REGGY - automated platform for creating short viral videos for Instagram Reels, TikTok, and YouTube Shorts using AI (GPT-5 + KLING v2.1 via AIMLAPI).
 
 **Core workflow:** 8-stage pipeline with AI self-validation and user checkpoints at each stage:
 Story → Description → Prompt → Image → Scenario → Video → Adaptation → Publishing

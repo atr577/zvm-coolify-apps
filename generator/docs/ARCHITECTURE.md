@@ -1,8 +1,8 @@
-# Архитектура и инфраструктура Viral Video Generator
+# Архитектура и инфраструктура REGGY
 
 ## Обзор проекта
 
-**Viral Video Generator** — платформа для автоматического создания коротких вирусных видео для Instagram Reels, TikTok и YouTube Shorts с использованием AI.
+**REGGY** — платформа для автоматического создания коротких вирусных видео для Instagram Reels, TikTok и YouTube Shorts с использованием AI.
 
 **Основной пайплайн:** Story → Description → Prompt → Image → Scenario → Video → Audio → Adaptation → Publishing
 
@@ -339,7 +339,7 @@ services:
 
 **Backend (.env):**
 ```env
-APP_NAME=Viral Video Generator
+APP_NAME=REGGY
 DEBUG=True
 SECRET_KEY=your-secret-key
 

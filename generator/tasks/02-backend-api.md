@@ -449,7 +449,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import projects, videos, ai_generation, workflow, publishing
 
-app = FastAPI(title="Viral Video Generator")
+app = FastAPI(title="REGGY")
 
 # CORS
 app.add_middleware(
@@ -469,7 +469,7 @@ app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"]
 
 @app.get("/")
 def read_root():
-    return {"message": "Viral Video Generator API"}
+    return {"message": "REGGY API"}
 ```
 
 **Чеклист:**

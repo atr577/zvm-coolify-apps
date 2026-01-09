@@ -5,7 +5,7 @@ from pydantic import field_validator
 
 class Settings(BaseSettings):
     # Application
-    APP_NAME: str = "Viral Video Generator"
+    APP_NAME: str = "REGGY"
     DEBUG: bool = True
     SECRET_KEY: str
     MOCK_MODE: bool = False

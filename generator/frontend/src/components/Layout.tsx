@@ -19,7 +19,7 @@ export default function Layout({ children }: LayoutProps) {
             <div className="flex items-center">
               <Film className="h-8 w-8 text-primary-600" />
               <span className="ml-2 text-xl font-bold text-gray-900">
-                Viral Video Generator
+                REGGY
               </span>
             </div>
             <div className="flex items-center space-x-4">

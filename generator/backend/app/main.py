@@ -56,7 +56,7 @@ app.include_router(metrics.router, prefix="/api", tags=["metrics"])
 @app.get("/")
 async def root():
     return {
-        "message": "Viral Video Generator API",
+        "message": "REGGY API",
         "version": "1.0.0",
         "docs": "/docs"
     }
