@@ -493,6 +493,242 @@ class TestApproveStep:
         assert "already approved" in response.json()["message"].lower()
 
 
+class TestGenerateScenario:
+    """Tests for POST /api/workflow/generate-scenario"""
+
+    @patch("app.services.openai_service.openai_service.generate_scenario")
+    @patch("app.services.openai_service.openai_service.validate_content")
+    def test_generate_scenario_success(
+        self,
+        mock_validate: MagicMock,
+        mock_generate: MagicMock,
+        client: TestClient,
+        auth_headers: dict,
+        test_video: Video,
+        db: Session
+    ):
+        """Should generate scenario from image and description."""
+        mock_generate.return_value = MOCK_SCENARIO
+        mock_validate.return_value = MOCK_VALIDATION_PASS
+
+        # Set up video with required data
+        test_video.image_url = MOCK_IMAGE_URL
+        db.commit()
+
+        response = client.post(
+            "/api/workflow/generate-scenario",
+            json={
+                "video_id": test_video.id,
+                "image_url": MOCK_IMAGE_URL,
+                "description_data": MOCK_DESCRIPTION
+            },
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "content" in data
+        assert data["content"]["motion_prompt"] == MOCK_SCENARIO["motion_prompt"]
+        assert data["validation"]["status"] == "pass"
+
+    @patch("app.services.openai_service.openai_service.generate_scenario")
+    @patch("app.services.openai_service.openai_service.validate_content")
+    def test_generate_scenario_with_camera_movement(
+        self,
+        mock_validate: MagicMock,
+        mock_generate: MagicMock,
+        client: TestClient,
+        auth_headers: dict,
+        test_video: Video,
+        db: Session
+    ):
+        """Should handle scenario with camera movement data."""
+        scenario_with_camera = {
+            **MOCK_SCENARIO,
+            "camera_movement": {
+                "type": "pan_left",
+                "speed": "medium"
+            }
+        }
+        mock_generate.return_value = scenario_with_camera
+        mock_validate.return_value = MOCK_VALIDATION_PASS
+
+        test_video.image_url = MOCK_IMAGE_URL
+        db.commit()
+
+        response = client.post(
+            "/api/workflow/generate-scenario",
+            json={
+                "video_id": test_video.id,
+                "image_url": MOCK_IMAGE_URL,
+                "description_data": MOCK_DESCRIPTION
+            },
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"]["camera_movement"]["type"] == "pan_left"
+
+
+class TestAdaptForPlatforms:
+    """Tests for POST /api/workflow/adapt-for-platforms"""
+
+    @patch("app.services.openai_service.openai_service.adapt_for_platforms")
+    @patch("app.services.openai_service.openai_service.validate_content")
+    def test_adapt_for_platforms_success(
+        self,
+        mock_validate: MagicMock,
+        mock_adapt: MagicMock,
+        client: TestClient,
+        auth_headers: dict,
+        test_video: Video,
+        db: Session
+    ):
+        """Should adapt content for multiple platforms."""
+        from tests.fixtures.mock_responses import MOCK_ADAPTATION
+
+        mock_adapt.return_value = MOCK_ADAPTATION
+        mock_validate.return_value = MOCK_VALIDATION_PASS
+
+        # Set up video with required data
+        test_video.story_data = MOCK_STORY
+        test_video.video_url = MOCK_VIDEO_URL
+        test_video.image_url = MOCK_IMAGE_URL
+        db.commit()
+
+        response = client.post(
+            "/api/workflow/adapt-for-platforms",
+            json={
+                "video_id": test_video.id,
+                "scenario_data": MOCK_SCENARIO,
+                "platforms": ["instagram", "tiktok"]
+            },
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "content" in data
+        assert "instagram" in data["content"]
+        assert "tiktok" in data["content"]
+
+
+class TestApproveVideoStep:
+    """Tests for approving VIDEO step which triggers audio generation."""
+
+    @patch("app.services.kling_service.kling_service.add_audio_to_video")
+    def test_approve_video_step_generates_audio(
+        self,
+        mock_audio: MagicMock,
+        client: TestClient,
+        auth_headers: dict,
+        test_video: Video,
+        db: Session
+    ):
+        """Approving VIDEO step should auto-generate 4 audio variants."""
+        from app.models.workflow_step import WorkflowStep
+
+        # Set up video with task_id (required for audio generation)
+        test_video.video_task_id = MOCK_TASK_ID
+        test_video.video_url = MOCK_VIDEO_URL
+        db.commit()
+
+        # Create VIDEO step awaiting approval
+        video_step = WorkflowStep(
+            video_id=test_video.id,
+            step_type=StepType.VIDEO,
+            status=WorkflowStatus.AWAITING_APPROVAL,
+            content={"video_url": MOCK_VIDEO_URL}
+        )
+        db.add(video_step)
+        db.commit()
+        db.refresh(video_step)
+
+        mock_audio.return_value = MOCK_AUDIO_VARIANTS
+
+        response = client.post(
+            "/api/workflow/approve-step",
+            json={"step_id": video_step.id, "approved": True},
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        mock_audio.assert_called_once_with(MOCK_TASK_ID)
+
+        # Verify audio step was created
+        db.refresh(test_video)
+        assert test_video.audio_variants == MOCK_AUDIO_VARIANTS
+        assert test_video.current_step == StepType.AUDIO
+
+
+class TestValidationRetry:
+    """Tests for validation retry logic."""
+
+    @patch("app.services.openai_service.openai_service.generate_story")
+    @patch("app.services.openai_service.openai_service.validate_content")
+    def test_validation_increments_attempts(
+        self,
+        mock_validate: MagicMock,
+        mock_generate: MagicMock,
+        client: TestClient,
+        auth_headers: dict,
+        test_video: Video,
+        db: Session
+    ):
+        """Should increment validation_attempts on each failure."""
+        mock_generate.return_value = MOCK_STORY
+        mock_validate.return_value = MOCK_VALIDATION_FAIL
+
+        # First attempt
+        response = client.post(
+            "/api/workflow/generate-story",
+            json={"video_id": test_video.id, "duration": 5},
+            headers=auth_headers
+        )
+        assert response.status_code == 200
+        step_id = response.json()["step_id"]
+
+        # Check attempts count
+        from app.models.workflow_step import WorkflowStep
+        step = db.query(WorkflowStep).filter(WorkflowStep.id == step_id).first()
+        assert step.validation_attempts == 1
+
+    @patch("app.services.openai_service.openai_service.generate_story")
+    @patch("app.services.openai_service.openai_service.validate_content")
+    def test_validation_pass_after_fail(
+        self,
+        mock_validate: MagicMock,
+        mock_generate: MagicMock,
+        client: TestClient,
+        auth_headers: dict,
+        test_video: Video,
+        db: Session
+    ):
+        """Should handle validation passing after initial failure."""
+        mock_generate.return_value = MOCK_STORY
+        # First call fails, second passes
+        mock_validate.side_effect = [MOCK_VALIDATION_FAIL, MOCK_VALIDATION_PASS]
+
+        # First attempt - fails validation
+        response1 = client.post(
+            "/api/workflow/generate-story",
+            json={"video_id": test_video.id, "duration": 5},
+            headers=auth_headers
+        )
+        assert response1.status_code == 200
+        assert response1.json()["validation"]["status"] == "fail"
+
+        # Second attempt - passes validation
+        response2 = client.post(
+            "/api/workflow/generate-story",
+            json={"video_id": test_video.id, "duration": 5},
+            headers=auth_headers
+        )
+        assert response2.status_code == 200
+        assert response2.json()["validation"]["status"] == "pass"
+
+
 class TestAutoGenerateToVideo:
     """Tests for POST /api/workflow/auto-generate-to-video"""
 
