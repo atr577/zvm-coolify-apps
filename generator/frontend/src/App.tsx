@@ -6,6 +6,7 @@ import VideoDetail from './pages/VideoDetail'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import SocialAccounts from './pages/SocialAccounts'
+import Analytics from './pages/Analytics'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -24,6 +25,7 @@ function App() {
                 <Route path="/project/:id/edit" element={<ProjectEdit />} />
                 <Route path="/project/:projectId/create-video" element={<CreateVideo />} />
                 <Route path="/video/:id" element={<VideoDetail />} />
+                <Route path="/analytics" element={<Analytics />} />
                 <Route path="/social-accounts" element={<SocialAccounts />} />
               </Routes>
             </Layout>

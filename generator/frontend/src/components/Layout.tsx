@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Film, Home, User, LogOut, Share2, ChevronDown } from 'lucide-react'
+import { Film, Home, User, LogOut, Share2, ChevronDown, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface LayoutProps {
@@ -29,6 +29,13 @@ export default function Layout({ children }: LayoutProps) {
               >
                 <Home className="h-5 w-5 mr-1" />
                 Dashboard
+              </Link>
+              <Link
+                to="/analytics"
+                className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              >
+                <BarChart3 className="h-5 w-5 mr-1" />
+                Analytics
               </Link>
               <Link
                 to="/social-accounts"

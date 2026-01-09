@@ -4,10 +4,21 @@ import { useQuery, useMutation, useQueryClient } from 'react-query'
 import {
   ArrowLeft, Settings, Trash2, CheckCircle, XCircle, Clock,
   ChevronDown, ChevronRight, ThumbsUp, RotateCcw,
-  Play, ExternalLink, Loader2, Volume2
+  Play, ExternalLink, Loader2, Volume2, Eye, Heart, MessageCircle, Share2,
+  Star, RefreshCw, TrendingUp
 } from 'lucide-react'
-import { videosApi, workflowApi } from '@/services/api'
+import { videosApi, workflowApi, metricsApi } from '@/services/api'
 import PublishingSettings from '@/components/PublishingSettings'
+
+function formatMetricNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+  }
+  return num.toString()
+}
 
 export default function VideoDetail() {
   const { id } = useParams<{ id: string }>()
@@ -25,6 +36,22 @@ export default function VideoDetail() {
     ['video', videoId],
     () => videosApi.get(videoId).then(res => res.data),
     { refetchInterval: 5000 }
+  )
+
+  // Fetch metrics for completed videos
+  const { data: metricsSummary, refetch: refetchMetrics } = useQuery(
+    ['metrics', videoId],
+    () => metricsApi.getSummary(videoId).then(res => res.data),
+    {
+      enabled: video?.status === 'completed',
+      refetchInterval: 60000 // Refresh every minute
+    }
+  )
+
+  // Set author rating mutation
+  const setRatingMutation = useMutation(
+    (rating: number) => metricsApi.setRating(videoId, rating),
+    { onSuccess: () => refetchMetrics() }
   )
 
   // Auto-generate mutation
@@ -447,6 +474,139 @@ export default function VideoDetail() {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Metrics Section */}
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <TrendingUp className="h-5 w-5 mr-2 text-purple-600" />
+                Performance Metrics
+              </h3>
+              <button
+                onClick={() => refetchMetrics()}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                title="Refresh metrics"
+              >
+                <RefreshCw className="h-4 w-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Author Rating */}
+            <div className="mb-6 p-4 bg-purple-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-purple-900">Your Rating (before publish)</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRatingMutation.mutate(star)}
+                      className={`p-1 transition ${
+                        (metricsSummary?.author_rating || video.author_rating || 0) >= star
+                          ? 'text-yellow-400'
+                          : 'text-gray-300 hover:text-yellow-300'
+                      }`}
+                    >
+                      <Star className="h-5 w-5 fill-current" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {(metricsSummary?.author_rating || video.author_rating) && (
+                <p className="text-xs text-purple-700 mt-1">
+                  Rated {metricsSummary?.author_rating || video.author_rating}/5 potential
+                </p>
+              )}
+            </div>
+
+            {/* Totals */}
+            {metricsSummary && (metricsSummary.total_views > 0 || metricsSummary.total_likes > 0) ? (
+              <>
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <Eye className="h-6 w-6 mx-auto mb-2 text-blue-500" />
+                    <div className="text-2xl font-bold text-gray-900">
+                      {formatMetricNumber(metricsSummary.total_views)}
+                    </div>
+                    <div className="text-xs text-gray-500">Views</div>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <Heart className="h-6 w-6 mx-auto mb-2 text-red-500" />
+                    <div className="text-2xl font-bold text-gray-900">
+                      {formatMetricNumber(metricsSummary.total_likes)}
+                    </div>
+                    <div className="text-xs text-gray-500">Likes</div>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <MessageCircle className="h-6 w-6 mx-auto mb-2 text-green-500" />
+                    <div className="text-2xl font-bold text-gray-900">
+                      {formatMetricNumber(metricsSummary.total_comments)}
+                    </div>
+                    <div className="text-xs text-gray-500">Comments</div>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <Share2 className="h-6 w-6 mx-auto mb-2 text-purple-500" />
+                    <div className="text-2xl font-bold text-gray-900">
+                      {formatMetricNumber(metricsSummary.total_shares)}
+                    </div>
+                    <div className="text-xs text-gray-500">Shares</div>
+                  </div>
+                </div>
+
+                {/* Engagement Rate */}
+                {metricsSummary.avg_engagement_rate && (
+                  <div className="mb-6 p-4 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-green-900">Engagement Rate</span>
+                      <span className="text-xl font-bold text-green-700">
+                        {metricsSummary.avg_engagement_rate.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Per Platform Table */}
+                {Object.keys(metricsSummary.platforms).length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-3">By Platform & Period</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-gray-500 border-b">
+                            <th className="pb-2">Platform</th>
+                            <th className="pb-2">Period</th>
+                            <th className="pb-2 text-right">Views</th>
+                            <th className="pb-2 text-right">Likes</th>
+                            <th className="pb-2 text-right">Comments</th>
+                            <th className="pb-2 text-right">Shares</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(metricsSummary.platforms).map(([platform, periods]) =>
+                            Object.entries(periods).map(([period, m]) => (
+                              <tr key={`${platform}-${period}`} className="border-b last:border-0">
+                                <td className="py-2 capitalize">{platform}</td>
+                                <td className="py-2 text-gray-500">{period}</td>
+                                <td className="py-2 text-right">{m.views.toLocaleString()}</td>
+                                <td className="py-2 text-right">{m.likes.toLocaleString()}</td>
+                                <td className="py-2 text-right">{m.comments.toLocaleString()}</td>
+                                <td className="py-2 text-right">{m.shares.toLocaleString()}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <TrendingUp className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>No metrics yet</p>
+                <p className="text-sm mt-1">Metrics will be collected automatically after publishing</p>
+              </div>
+            )}
           </div>
 
           {/* Collapsed Steps */}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FolderOpen, Settings, Film, AlertCircle, CheckCircle, Clock, Image } from 'lucide-react'
+import { Plus, FolderOpen, Settings, Film, AlertCircle, CheckCircle, Clock, Image, Eye, Heart, MessageCircle, Share2 } from 'lucide-react'
 import { projectsApi, videosApi } from '@/services/api'
 import ProjectForm from '@/components/ProjectForm'
 import type { Project, Video, CreateProjectDto, StepType } from '@/types'
@@ -365,11 +365,55 @@ function formatDate(dateString: string): string {
   })
 }
 
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+  }
+  return num.toString()
+}
+
+function getLatestMetrics(video: Video) {
+  if (!video.metrics || video.metrics.length === 0) return null
+
+  // Aggregate metrics across platforms, prefer latest period
+  const periodPriority = ['7d', '24h', '6h', '30m']
+  let totalViews = 0
+  let totalLikes = 0
+  let totalComments = 0
+  let totalShares = 0
+
+  // Group by platform, take best period for each
+  const platforms = new Set(video.metrics.map(m => m.platform))
+
+  for (const platform of platforms) {
+    const platformMetrics = video.metrics.filter(m => m.platform === platform)
+    // Find the latest period available
+    for (const period of periodPriority) {
+      const metric = platformMetrics.find(m => m.period === period)
+      if (metric) {
+        totalViews += metric.views
+        totalLikes += metric.likes
+        totalComments += metric.comments
+        totalShares += metric.shares
+        break
+      }
+    }
+  }
+
+  if (totalViews === 0 && totalLikes === 0) return null
+
+  return { views: totalViews, likes: totalLikes, comments: totalComments, shares: totalShares }
+}
+
 function VideoGridCard({ video, onClick, showProjectName, projectName }: VideoGridCardProps) {
   const stepIndex = getStepIndex(video.current_step)
   const isInProgress = ['pending', 'in_progress', 'awaiting_approval', 'validating'].includes(video.status)
   const isPublished = video.status === 'completed'
   const isError = video.status === 'failed' || video.status === 'validation_failed'
+  const metrics = getLatestMetrics(video)
 
   // Progress indicator dots
   const progressDots = STEP_ORDER.map((_, i) => (
@@ -471,6 +515,30 @@ function VideoGridCard({ video, onClick, showProjectName, projectName }: VideoGr
             )}
             {video.project.platforms.includes('youtube') && (
               <YouTubeIcon className="w-4 h-4 text-red-500" />
+            )}
+          </div>
+        )}
+
+        {/* Metrics (if published and has data) */}
+        {isPublished && metrics && (
+          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <Eye className="w-3 h-3" />
+              {formatNumber(metrics.views)}
+            </span>
+            <span className="flex items-center gap-1">
+              <Heart className="w-3 h-3" />
+              {formatNumber(metrics.likes)}
+            </span>
+            <span className="flex items-center gap-1">
+              <MessageCircle className="w-3 h-3" />
+              {formatNumber(metrics.comments)}
+            </span>
+            {metrics.shares > 0 && (
+              <span className="flex items-center gap-1">
+                <Share2 className="w-3 h-3" />
+                {formatNumber(metrics.shares)}
+              </span>
             )}
           </div>
         )}
