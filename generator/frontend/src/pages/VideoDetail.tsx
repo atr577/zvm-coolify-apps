@@ -18,7 +18,6 @@ export default function VideoDetail() {
   const [feedback, setFeedback] = useState('')
   const [showAllSteps, setShowAllSteps] = useState(false)
   const [selectedAudioVariant, setSelectedAudioVariant] = useState<number | null>(null)
-  const [playingVariant, setPlayingVariant] = useState<number | null>(null)
   const [expandedStepId, setExpandedStepId] = useState<number | null>(null)
   const [regeneratingStep, setRegeneratingStep] = useState<string | null>(null)
 

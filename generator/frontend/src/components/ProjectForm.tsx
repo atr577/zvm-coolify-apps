@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CreateProjectDto, AspectRatio } from '@/types'
+import { CreateProjectDto } from '@/types'
 
 interface ProjectFormProps {
   initialData?: Partial<CreateProjectDto>
