@@ -642,7 +642,7 @@ async def approve_step(
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    verify_video_ownership(step.video, current_user)
+    verify_video_ownership(db, step.video, current_user)
 
     # Prevent double approval - check if step is already approved
     if request.approved and step.status == WorkflowStatus.APPROVED:
