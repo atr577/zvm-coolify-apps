@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -182,6 +182,41 @@ export const publishingApi = {
 
   retry: (publishResultId: number) =>
     api.post(`/api/publish/retry/${publishResultId}`),
+}
+
+// Metrics API
+export const metricsApi = {
+  // Add/update metrics for a video
+  create: (videoId: number, data: CreateVideoMetricsDto) =>
+    api.post<VideoMetrics>(`/api/metrics/video/${videoId}`, data),
+
+  // Get all metrics for a video
+  getByVideo: (videoId: number, platform?: string, period?: MetricsPeriod) =>
+    api.get<VideoMetrics[]>(`/api/metrics/video/${videoId}`, {
+      params: { platform, period }
+    }),
+
+  // Get aggregated summary
+  getSummary: (videoId: number) =>
+    api.get<VideoMetricsSummary>(`/api/metrics/video/${videoId}/summary`),
+
+  // Update specific metrics entry
+  update: (videoId: number, platform: string, period: MetricsPeriod, data: Partial<CreateVideoMetricsDto>) =>
+    api.put<VideoMetrics>(`/api/metrics/video/${videoId}/${platform}/${period}`, data),
+
+  // Delete metrics entry
+  delete: (videoId: number, platform: string, period: MetricsPeriod) =>
+    api.delete(`/api/metrics/video/${videoId}/${platform}/${period}`),
+
+  // Set author rating (1-5)
+  setRating: (videoId: number, rating: number) =>
+    api.put(`/api/metrics/video/${videoId}/rating`, null, { params: { rating } }),
+
+  // Get leaderboard
+  getLeaderboard: (period: MetricsPeriod = '7d', sortBy: string = 'views', limit: number = 10) =>
+    api.get<VideoMetricsSummary[]>('/api/metrics/leaderboard', {
+      params: { period, sort_by: sortBy, limit }
+    }),
 }
 
 export default api

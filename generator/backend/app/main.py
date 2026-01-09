@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.base import engine, Base
-from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing
+from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics
 import os
 
 # Create database tables
@@ -35,6 +35,7 @@ app.include_router(videos.router, prefix="/api/videos", tags=["videos"])
 app.include_router(ai_generation.router, prefix="/api/ai", tags=["ai"])
 app.include_router(workflow.router, prefix="/api/workflow", tags=["workflow"])
 app.include_router(publishing.router, prefix="/api/publish", tags=["publish"])
+app.include_router(metrics.router, prefix="/api", tags=["metrics"])
 
 
 @app.get("/")

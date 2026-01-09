@@ -104,10 +104,12 @@ export interface Video {
   adaptation_data: Record<string, any> | null
   current_step: StepType
   status: WorkflowStatus
+  author_rating: number | null
   created_at: string
   updated_at: string
   workflow_steps?: WorkflowStep[]
   project?: Project
+  metrics?: VideoMetrics[]
 }
 
 export interface CreateVideoDto {
@@ -156,4 +158,42 @@ export interface PublishResult {
   error_message: string | null
   published_at: string | null
   created_at: string
+}
+
+// --- Metrics Types ---
+
+export type MetricsPeriod = '30m' | '6h' | '24h' | '7d'
+
+export interface VideoMetrics {
+  id: number
+  video_id: number
+  platform: string
+  period: MetricsPeriod
+  views: number
+  likes: number
+  comments: number
+  shares: number
+  engagement_rate: number | null
+  recorded_at: string
+  is_manual: boolean
+}
+
+export interface CreateVideoMetricsDto {
+  platform: string
+  period: MetricsPeriod
+  views: number
+  likes: number
+  comments: number
+  shares: number
+}
+
+export interface VideoMetricsSummary {
+  video_id: number
+  author_rating: number | null
+  platforms: Record<string, Record<MetricsPeriod, VideoMetrics>>
+  total_views: number
+  total_likes: number
+  total_comments: number
+  total_shares: number
+  avg_engagement_rate: number | null
 }

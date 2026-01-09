@@ -72,6 +72,9 @@ class Video(Base):
     current_step = Column(SQLEnum(StepType), default=StepType.STORY)
     status = Column(SQLEnum(WorkflowStatus), default=WorkflowStatus.PENDING)
 
+    # Author's subjective rating before posting (1-5)
+    author_rating = Column(Integer, nullable=True)  # 1=низкий потенциал, 5=вирусный хит
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -80,6 +83,51 @@ class Video(Base):
     project = relationship("Project", back_populates="videos")
     workflow_steps = relationship("WorkflowStep", back_populates="video", cascade="all, delete-orphan")
     publish_results = relationship("PublishResult", back_populates="video", cascade="all, delete-orphan")
+    metrics = relationship("VideoMetrics", back_populates="video", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Video(id={self.id}, title='{self.title}', workflow_mode={self.workflow_mode})>"
+
+
+class MetricsPeriod(str, enum.Enum):
+    """Time periods for metrics snapshots"""
+    MINUTES_30 = "30m"
+    HOURS_6 = "6h"
+    HOURS_24 = "24h"
+    DAYS_7 = "7d"
+
+
+class VideoMetrics(Base):
+    """
+    Performance metrics snapshot for a video at a specific time period.
+    Tracks views, likes, comments, shares for each platform.
+    """
+    __tablename__ = "video_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Which platform and time period
+    platform = Column(String(50), nullable=False)  # instagram, tiktok, youtube
+    period = Column(SQLEnum(MetricsPeriod), nullable=False)  # 30m, 6h, 24h, 7d
+
+    # Metrics
+    views = Column(Integer, default=0)
+    likes = Column(Integer, default=0)
+    comments = Column(Integer, default=0)
+    shares = Column(Integer, default=0)
+
+    # Calculated engagement rate (likes + comments + shares) / views * 100
+    engagement_rate = Column(Integer, nullable=True)  # stored as percentage * 100 (e.g., 5.5% = 550)
+
+    # When this snapshot was recorded
+    recorded_at = Column(DateTime, default=datetime.utcnow)
+
+    # Was this auto-fetched or manually entered
+    is_manual = Column(Boolean, default=True)
+
+    # Relationships
+    video = relationship("Video", back_populates="metrics")
+
+    def __repr__(self):
+        return f"<VideoMetrics(video_id={self.video_id}, platform='{self.platform}', period='{self.period.value}')>"
