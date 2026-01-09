@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T23:19:13.417053",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты эксперт по промптам для AI-генерации изображений. Создавай детальные, конкретные промпты на английском."
+      },
+      {
+        "role": "user",
+        "content": "\nНа основе визуального описания сцены создай промпт для генерации изображения.\n\nОПИСАНИЕ СЦЕНЫ:\n{'scene_summary': 'На кухне, в центре внимания, бостон терьер с хитрым выражением лица крадет еду со стола, уверенно подкрадываясь и проверяя, что никто не видит.', 'main_subject': {'type': 'animal', 'description': 'Бостон терьер с черной и белой шерстью, с выразительными большими глазами и хитрой ухмылкой. Он стоит на задних лапах, вытянув передние лапы к столу, как будто собирается схватить еду.', 'position': 'центральная часть кадра, ближе к столу'}, 'secondary_elements': [{'type': 'object', 'description': 'Стол на кухне, на котором стоит тарелка с едой — кусок сочного мяса и несколько овощей.', 'position': 'в центре кадра, чуть выше уровня собаки'}, {'type': 'object', 'description': 'Стул рядом со столом, немного отодвинут, чтобы подчеркнуть, что терьер использует его как опору для подъема.', 'position': 'слева от стола'}], 'environment': {'location': 'интерьер, кухня с яркими цветами и уютной атмосферой', 'time_of_day': 'день', 'weather': 'ясно, солнечно', 'background': 'на стенах висят уютные картины, а на кухонном шкафу стоят различные кухонные принадлежности'}, 'visual_style': {'lighting': 'естественное, яркое освещение, наполняющее кухню светом', 'color_palette': 'яркие и насыщенные цвета, такие как желтый, зеленый и красный, создающие веселое настроение', 'mood': 'комедийный и легкий', 'camera_angle': 'средний план, фокус на терьере и столе', 'aesthetic': 'vibrant и веселый'}, 'key_details': ['выразительное лицо бостон терьера с хитрым выражением', 'кусок еды, который он пытается схватить', 'кухонные принадлежности и яркие цвета на заднем плане'], 'text_overlay': {'text': 'Смотрите, как этот бостон терьер мастерски ворует еду!', 'position': 'top', 'style': 'bold', 'background_contrast': True}}\n\nСоздай промпт на АНГЛИЙСКОМ языке, который точно передаст эту сцену.\n\nВерни JSON:\n{\n  \"main_prompt\": \"основной промпт 50-150 слов, детальное описание сцены\",\n  \"style_suffix\": \"стилистические модификаторы: качество, стиль, освещение\",\n  \"negative_prompt\": \"что НЕ должно быть в изображении\",\n  \"recommended_aspect_ratio\": \"9:16\" | \"16:9\" | \"1:1\"\n}\n\nПРАВИЛА для main_prompt:\n1. Начни с главного субъекта (кто/что в центре)\n2. Добавь детали внешности/вида\n3. Опиши действие/позу\n4. Укажи окружение и фон\n5. Добавь освещение и атмосферу\n6. Закончи стилистикой (cinematic, photorealistic, etc.)\n\nПример хорошего промпта:\n\"Young confident businesswoman in elegant black suit, standing by floor-to-ceiling windows, city skyline behind her, golden sunset light illuminating her face, she's looking at camera with slight smile, modern minimalist office interior, cinematic composition, professional photography, shallow depth of field\"\n"
+      }
+    ],
+    "temperature": 0.6,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvtZWxJcrRRx4XAWsYV4UpHNxwWN7",
+    "object": "chat.completion",
+    "created": 1767914350,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"main_prompt\": \"A clever Boston Terrier with black and white fur, featuring expressive large eyes and a mischievous grin, is the main focus of this kitchen scene. The dog is standing on its hind legs, stretching its front paws towards a table, as if about to snatch a piece of juicy meat surrounded by colorful vegetables. The kitchen is bright and cheerful, filled with vibrant colors like yellow, green, and red, creating a light-hearted mood. A slightly pushed-back chair next to the table hints at the dog's sneaky maneuver. Natural daylight floods the space, illuminating cozy paintings on the walls and various kitchen utensils on the cabinets. The composition captures the playful essence and comedic spirit of this moment, framed in a lively and vibrant aesthetic.\",\n  \"style_suffix\": \"vibrant colors, natural bright lighting, cheerful and comedic mood, photorealistic style\",\n  \"negative_prompt\": \"no other animals, no humans, no dark colors, avoid cluttered backgrounds\",\n  \"recommended_aspect_ratio\": \"16:9\"\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 837,
+      "completion_tokens": 215,
+      "total_tokens": 1052,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

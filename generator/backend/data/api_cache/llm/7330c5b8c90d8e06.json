@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-01-08T22:37:53.486908",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "\nСоздай детальный сюжет видео на основе шаблона и конкретных параметров:\n\nШАБЛОН:\nСобака породы бостон терьре проказничает.\nСцена начинается с крупного плана морды собаки, дальше камера показывает проказы которые устроила собака\n\nКОНКРЕТНЫЙ КОНТЕНТ:\n\nANIMAL:\n  - breed: бостон терьер\n  - action: ворует еду\n  - expression: хитрый\n\nENVIRONMENT:\n  - location: кухня\n  - items: еда на столе\n  - mood: шаловливый\n\n\nДлительность: 15 секунд\nПлатформы: youtube\n\nВАЖНО: Используй ВСЕ параметры из \"КОНКРЕТНЫЙ КОНТЕНТ\" — они определяют что именно должно быть в видео.\n\nВерни детальную структуру сюжета как JSON с полями:\n- title: название сюжета\n- synopsis: краткое описание (2-3 предложения)\n- key_moments: список ключевых моментов\n- target_emotion: целевая эмоция\n- duration: 15\n"
+      }
+    ],
+    "temperature": 0.7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "logprobs": null,
+        "message": {
+          "annotations": [],
+          "content": "{\n  \"title\": \"Хитрый Бостон Терьер: Воришка на Кухне\",\n  \"synopsis\": \"В этом забавном видео наш бостон терьер проявляет свои шаловливые наклонности, крадя еду со стола в кухне. С хитрой улыбкой на морде, он ловко обходит препятствия и наслаждается своими проделками.\",\n  \"key_moments\": [\n    \"Крупный план морды бостон терьера с хитрым выражением, когда он подкрадывается к столу.\",\n    \"Смена кадра на стол, где на видном месте лежит аппетитная еда.\",\n    \"Собака, быстро и ловко, хватает кусочек еды и убегает с ним.\",\n    \"Крупный план морды собаки с кусочком еды в пасти, она выглядит очень довольной и гордой собой.\",\n    \"Завершающий кадр: собака прячется под столом, наслаждаясь своим уловом.\"\n  ],\n  \"target_emotion\": \"Улыбка и радость\",\n  \"duration\": 15\n}",
+          "refusal": null,
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1767911869,
+    "id": "chatcmpl-CvsvV7ZzQyERUqL7VBb7Ed3uLDqW5",
+    "model": "gpt-4o-mini-2024-07-18",
+    "object": "chat.completion",
+    "system_fingerprint": "fp_f97eff32c5",
+    "usage": {
+      "completion_tokens": 253,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens": 255,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      },
+      "total_tokens": 508
+    }
+  }
+}

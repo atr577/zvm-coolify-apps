@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-01-08T23:35:59.329412",
+  "category": "video",
+  "request": {
+    "image_url": "https://img.theapi.app/ephemeral/2d3aa3b8-4c6f-435a-9527-90b59f1c990f.jpeg",
+    "prompt": "Boston Terrier stealthily approaches the table, checking left and right with a cheeky expression, then jumps up to grab the food and quickly scurries away.",
+    "duration": 10,
+    "mode": "standard",
+    "negative_prompt": null,
+    "camera_control": {
+      "type": "pan_right",
+      "config": {
+        "horizontal": 0,
+        "vertical": 0,
+        "pan": 5,
+        "tilt": 0,
+        "zoom": 0,
+        "roll": 0
+      }
+    }
+  },
+  "response": {
+    "video_url": "https://storage.theapi.app/videos/299886701314978.mp4",
+    "task_id": "98448647-72f2-411b-a3b7-f64583059616"
+  }
+}

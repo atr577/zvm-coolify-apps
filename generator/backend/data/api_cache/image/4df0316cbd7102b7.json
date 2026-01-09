@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-01-08T22:24:28.921103",
+  "category": "image",
+  "request": {
+    "prompt": "An old wooden boat, slightly rusted and painted in vibrant red, floats gracefully on the mirror-like surface of a tranquil lake, slightly off-center to the right for dynamic composition. The boat features worn paddles and a small basket of fruits onboard, adding a rustic charm. To the left, a white swan glides elegantly through the water, wings spread wide and poised in a graceful stance. On the right, a pair of colorful flowers sway gently at the water's edge, their petals dancing in the light breeze. The serene morning sun filters through the thick foliage of surrounding green trees, creating a soft, natural light that enhances the vivid colors of the scene. The atmosphere is peaceful and inspiring, with the reflections of the boat and swan shimmering in the water, and gentle ripples caused by the boat's movement. The overall aesthetic is cinematic, bright, and picturesque.. high quality, cinematic, natural soft morning light --no no urban elements, no people, no dark colors, no stormy weather",
+    "aspect_ratio": "16:9",
+    "resolution": "1K"
+  },
+  "response": {
+    "image_url": "https://img.theapi.app/ephemeral/bd97f1d2-209f-48d0-95fe-02495c529575.jpeg",
+    "task_id": "3dc23d31-3355-4707-8dd4-c4f34b1201dd"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-01-08T21:48:02.026080",
+  "category": "video",
+  "request": {
+    "image_url": "https://img.theapi.app/ephemeral/b8ac6c3d-819d-4f51-b5ec-3a2a1dc645e7.jpeg",
+    "prompt": "The Boston Terrier slowly tilts its head to the left, its ears perking up slightly. Its gaze shifts subtly toward the door, as if hearing a faint sound.",
+    "duration": 5,
+    "mode": "standard",
+    "negative_prompt": null,
+    "camera_control": {
+      "type": "zoom_in",
+      "config": {
+        "horizontal": 0,
+        "vertical": 0,
+        "pan": 0,
+        "tilt": 0,
+        "zoom": 5,
+        "roll": 0
+      }
+    }
+  },
+  "response": {
+    "video_url": "https://storage.theapi.app/videos/299880268525874.mp4",
+    "task_id": "86a7dbf0-1b08-4a02-a0de-184d7f8e2c84"
+  }
+}

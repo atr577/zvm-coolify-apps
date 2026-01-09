@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-01-08T20:44:29.125701",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "\nНа основе этого шаблона концепции, сгенерируй 10 уникальных вариантов контента.\n\nШАБЛОН КОНЦЕПЦИИ:\nкрупные план – Собака породы бостон терьер смотрит в камеру, после этого камера показывает какой бардак устроила собака\n\nДля каждого варианта предоставь:\n1. Детали персонажа (внешность, наряд, возраст)\n2. Детали автомобиля (марка, модель, цвет)\n3. Детали локации (город, достопримечательность, время суток)\n\nСделай варианты разнообразными и интересными.\n\n\nВерни результат как JSON массив объектов с полями:\n- id: порядковый номер (1-10)\n- description: краткое описание варианта (1 строка)\n- content_variables: объект с полями:\n  - character: {appearance, outfit, age}\n  - vehicle: {brand, model, color}\n  - location: {city, landmark, time}\n\nВАЖНО: description должен быть кратким и информативным, например:\n\"Блондинка в красном платье, Ferrari красная, Париж, закат\"\n"
+      }
+    ],
+    "temperature": 0.7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-Cvr9QWBxEN3YtPKSm9ngRDKAX9lxD",
+    "object": "chat.completion",
+    "created": 1767905044,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "\n{\n  \"concepts\": [\n    {\n      \"id\": 1,\n      \"description\": \"Смешанная порода в ярком свитере, Jeep черный, Нью-Йорк, утро\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"смешанная порода, короткая шерсть, большие уши\",\n          \"outfit\": \"яркий свитер\",\n          \"age\": \"2 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Jeep\",\n          \"model\": \"Wrangler\",\n          \"color\": \"черный\"\n        },\n        \"location\": {\n          \"city\": \"Нью-Йорк\",\n          \"landmark\": \"Центральный парк\",\n          \"time\": \"утро\"\n        }\n      }\n    },\n    {\n      \"id\": 2,\n      \"description\": \"Бостон терьер в шляпе, Mini Cooper синий, Лондон, вечер\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, черно-белая шерсть, выразительные глаза\",\n          \"outfit\": \"шляпа\",\n          \"age\": \"3 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Mini\",\n          \"model\": \"Cooper\",\n          \"color\": \"синий\"\n        },\n        \"location\": {\n          \"city\": \"Лондон\",\n          \"landmark\": \"Тауэрский мост\",\n          \"time\": \"вечер\"\n        }\n      }\n    },\n    {\n      \"id\": 3,\n      \"description\": \"Щенок в костюме, Volkswagen желтый, Токио, ночь\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"щенок бостон терьера, маленький, игривый\",\n          \"outfit\": \"костюм\",\n          \"age\": \"6 месяцев\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Volkswagen\",\n          \"model\": \"Beetle\",\n          \"color\": \"желтый\"\n        },\n        \"location\": {\n          \"city\": \"Токио\",\n          \"landmark\": \"Синдзюку\",\n          \"time\": \"ночь\"\n        }\n      }\n    },\n    {\n      \"id\": 4,\n      \"description\": \"Собака в спортивной футболке, Ford Mustang красный, Лос-Анджелес, полдень\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, мускулистый, энергичный\",\n          \"outfit\": \"спортивная футболка\",\n          \"age\": \"4 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Ford\",\n          \"model\": \"Mustang\",\n          \"color\": \"красный\"\n        },\n        \"location\": {\n          \"city\": \"Лос-Анджелес\",\n          \"landmark\": \"Голливудская звезда\",\n          \"time\": \"полдень\"\n        }\n      }\n    },\n    {\n      \"id\": 5,\n      \"description\": \"Собака в очках, Tesla белая, Сан-Франциско, рассвет\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, стильный, забавный\",\n          \"outfit\": \"очках\",\n          \"age\": \"5 лет\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Tesla\",\n          \"model\": \"Model 3\",\n          \"color\": \"белая\"\n        },\n        \"location\": {\n          \"city\": \"Сан-Франциско\",\n          \"landmark\": \"Золотые ворота\",\n          \"time\": \"рассвет\"\n        }\n      }\n    },\n    {\n      \"id\": 6,\n      \"description\": \"Собака с бантом, Chevrolet Camaro черный, Майами, вечер\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, ухоженный, игривый\",\n          \"outfit\": \"бант\",\n          \"age\": \"3 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Chevrolet\",\n          \"model\": \"Camaro\",\n          \"color\": \"черный\"\n        },\n        \"location\": {\n          \"city\": \"Майами\",\n          \"landmark\": \"Южный пляж\",\n          \"time\": \"вечер\"\n        }\n      }\n    },\n    {\n      \"id\": 7,\n      \"description\": \"Собака с игрушкой, BMW X5 серый, Берлин, день\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, активный, игривый\",\n          \"outfit\": \"без одежды\",\n          \"age\": \"2 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"BMW\",\n          \"model\": \"X5\",\n          \"color\": \"серый\"\n        },\n        \"location\": {\n          \"city\": \"Берлин\",\n          \"landmark\": \"Бранденбургские ворота\",\n          \"time\": \"день\"\n        }\n      }\n    },\n    {\n      \"id\": 8,\n      \"description\": \"Собака в шарфе, Audi A3 зеленая, Рим, закат\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, изящный, дружелюбный\",\n          \"outfit\": \"шарф\",\n          \"age\": \"4 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Audi\",\n          \"model\": \"A3\",\n          \"color\": \"зеленая\"\n        },\n        \"location\": {\n          \"city\": \"Рим\",\n          \"landmark\": \"Колизей\",\n          \"time\": \"закат\"\n        }\n      }\n    },\n    {\n      \"id\": 9,\n      \"description\": \"Собака в кепке, Honda Civic серебристый, Барселона, утро\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, энергичный, дружелюбный\",\n          \"outfit\": \"кепка\",\n          \"age\": \"3 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Honda\",\n          \"model\": \"Civic\",\n          \"color\": \"серебристый\"\n        },\n        \"location\": {\n          \"city\": \"Барселона\",\n          \"landmark\": \"Саграда Фамилия\",\n          \"time\": \"утро\"\n        }\n      }\n    },\n    {\n      \"id\": 10,\n      \"description\": \"Собака с игрушечным мячом, Subaru Forester синий, Сидней, ночь\",\n      \"content_variables\": {\n        \"character\": {\n          \"appearance\": \"бостон терьер, игривый, милый\",\n          \"outfit\": \"без одежды\",\n          \"age\": \"2 года\"\n        },\n        \"vehicle\": {\n          \"brand\": \"Subaru\",\n          \"model\": \"Forester\",\n          \"color\": \"синий\"\n        },\n        \"location\": {\n          \"city\": \"Сидней\",\n          \"landmark\": \"Оперный театр\",\n          \"time\": \"ночь\"\n        }\n      }\n    }\n  ]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 254,
+      "completion_tokens": 1583,
+      "total_tokens": 1837,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

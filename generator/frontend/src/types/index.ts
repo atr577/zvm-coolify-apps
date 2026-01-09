@@ -1,0 +1,159 @@
+export type WorkflowStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'validating'
+  | 'validation_failed'
+  | 'awaiting_approval'
+  | 'approved'
+  | 'rejected'
+  | 'completed'
+  | 'failed'
+
+export type StepType =
+  | 'story'
+  | 'description'
+  | 'prompt'
+  | 'image'
+  | 'scenario'
+  | 'video'
+  | 'audio'
+  | 'adaptation'
+  | 'publishing'
+
+export type ValidationStatus = 'pass' | 'pass_with_warnings' | 'fail'
+
+export interface ValidationResult {
+  id: number
+  status: ValidationStatus
+  score: number | null
+  criteria_results: Record<string, any> | null
+  warnings: string[] | null
+  errors: string[] | null
+  recommendations: string[] | null
+  created_at: string
+}
+
+export interface WorkflowStep {
+  id: number
+  video_id: number
+  step_type: StepType
+  status: WorkflowStatus
+  content: Record<string, any> | null
+  validation_attempts: number
+  max_validation_attempts: number
+  user_approved: boolean
+  user_feedback: string | null
+  prompt_used: string | null
+  generation_time_seconds: number | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  validations: ValidationResult[]
+}
+
+export type AspectRatio = '9:16' | '16:9' | '1:1'
+
+export interface Project {
+  id: number
+  name: string
+  description: string | null
+  story_template: string
+  platforms: string[]
+  duration: number
+  aspect_ratio: AspectRatio
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateProjectDto {
+  name: string
+  description?: string
+  story_template: string
+  platforms: string[]
+  duration: number
+  aspect_ratio?: AspectRatio
+}
+
+export interface UpdateProjectDto {
+  name?: string
+  description?: string
+  story_template?: string
+  platforms?: string[]
+  duration?: number
+  aspect_ratio?: AspectRatio
+}
+
+export type WorkflowMode = 'MANUAL' | 'AUTO'
+
+export interface Video {
+  id: number
+  project_id: number
+  title: string
+  workflow_mode: WorkflowMode
+  content_variables: Record<string, any> | null
+  story_data: Record<string, any> | null
+  description_data: Record<string, any> | null
+  prompt_data: Record<string, any> | null
+  image_prompt: string | null
+  image_url: string | null
+  scenario_data: Record<string, any> | null
+  video_url: string | null
+  video_task_id: string | null
+  audio_variants: string[] | null
+  video_with_audio_url: string | null
+  adaptation_data: Record<string, any> | null
+  current_step: StepType
+  status: WorkflowStatus
+  created_at: string
+  updated_at: string
+  workflow_steps?: WorkflowStep[]
+  project?: Project
+}
+
+export interface CreateVideoDto {
+  project_id: number
+  title: string
+  workflow_mode?: WorkflowMode
+  content_variables?: Record<string, any>
+}
+
+export interface UpdateVideoDto {
+  title?: string
+  workflow_mode?: WorkflowMode
+  content_variables?: Record<string, any>
+  story_data?: Record<string, any>
+  description_data?: Record<string, any>
+  image_prompt?: string
+  image_url?: string
+  scenario_data?: Record<string, any>
+  video_url?: string
+  adaptation_data?: Record<string, any>
+  current_step?: StepType
+  status?: WorkflowStatus
+}
+
+export interface ContentVariant {
+  id: number
+  description: string
+  content_variables: {
+    character?: Record<string, any>
+    vehicle?: Record<string, any>
+    location?: Record<string, any>
+    [key: string]: Record<string, any> | undefined
+  }
+}
+
+export interface GenerateVariantsResponse {
+  variants: ContentVariant[]
+}
+
+export interface PublishResult {
+  id: number
+  platform: string
+  status: string
+  post_id: string | null
+  post_url: string | null
+  error_message: string | null
+  published_at: string | null
+  created_at: string
+}

@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-01-08T22:23:40.408266",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "\nСоздай детальный сюжет видео на основе шаблона и конкретных параметров:\n\nШАБЛОН:\nкрупные план – Собака породы бостон терьер смотрит в камеру, после этого камера показывает какой бардак устроила собака\n\nКОНКРЕТНЫЙ КОНТЕНТ:\n\nANIMAL:\n  - breed: бостон терьер\n  - action: прыгает\n  - expression: веселый\n\nENVIRONMENT:\n  - location: гостиная\n  - items: разбросанные подушки и игрушки\n  - mood: игривый\n\n\nДлительность: 15 секунд\nПлатформы: youtube\n\nВАЖНО: Используй ВСЕ параметры из \"КОНКРЕТНЫЙ КОНТЕНТ\" — они определяют что именно должно быть в видео.\n\nВерни детальную структуру сюжета как JSON с полями:\n- title: название сюжета\n- synopsis: краткое описание (2-3 предложения)\n- key_moments: список ключевых моментов\n- target_emotion: целевая эмоция\n- duration: 15\n"
+      }
+    ],
+    "temperature": 0.7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvshkDbJhJSkPVqqgOToYprPP3gxO",
+    "object": "chat.completion",
+    "created": 1767911016,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"title\": \"Веселый Бостон Терьер: Праздник Бардака\",\n  \"synopsis\": \"В этом коротком видео мы наблюдаем за игривым бостон терьером, который не может удержаться от прыжков в уютной гостиной. После того, как собака показывает свою веселую натуру, камера переключается на беспорядок, который она устроила, заставляя зрителей улыбнуться.\",\n  \"key_moments\": [\n    {\n      \"moment\": \"Крупный план собаки\",\n      \"description\": \"Бостон терьер с веселым выражением лица смотрит прямо в камеру, его глаза сияют от радости.\"\n    },\n    {\n      \"moment\": \"Прыжки собаки\",\n      \"description\": \"Собака начинает прыгать вокруг, демонстрируя свою игривую натуру и энергичность.\"\n    },\n    {\n      \"moment\": \"Обзор гостиной\",\n      \"description\": \"Камера медленно поворачивается, показывая разбросанные подушки и игрушки по всей комнате, создавая атмосферу веселья и хаоса.\"\n    },\n    {\n      \"moment\": \"Финальный кадр\",\n      \"description\": \"Собака снова в кадре, выглядящая довольной и гордой за свои проделки, с игрушкой в пасти.\"\n    }\n  ],\n  \"target_emotion\": \"радость\",\n  \"duration\": 15\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 248,
+      "completion_tokens": 318,
+      "total_tokens": 566,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

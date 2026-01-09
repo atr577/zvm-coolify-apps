@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-01-08T20:54:37.711154",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "\nНа основе этого шаблона концепции, сгенерируй 10 уникальных вариантов контента.\n\nШАБЛОН КОНЦЕПЦИИ:\nкрупные план – Собака породы бостон терьер смотрит в камеру, после этого камера показывает какой бардак устроила собака\n\nСделай варианты разнообразными и интересными.\n\n\nВАЖНО: Верни ТОЛЬКО JSON массив, без обёртки. Формат ответа:\n\n[\n  {\n    \"id\": 1,\n    \"description\": \"Блондинка в красном платье, Ferrari красная, Париж, закат\",\n    \"content_variables\": {\n      \"character\": {\"appearance\": \"blonde hair, slim\", \"outfit\": \"red evening dress\", \"age\": \"25\"},\n      \"vehicle\": {\"brand\": \"Ferrari\", \"model\": \"SF90\", \"color\": \"red\"},\n      \"location\": {\"city\": \"Paris\", \"landmark\": \"Eiffel Tower\", \"time\": \"sunset\"}\n    }\n  },\n  {\n    \"id\": 2,\n    \"description\": \"Брюнетка в белом костюме, Lamborghini белая, Дубай, ночь\",\n    \"content_variables\": {\n      \"character\": {\"appearance\": \"brunette, tall\", \"outfit\": \"white suit\", \"age\": \"28\"},\n      \"vehicle\": {\"brand\": \"Lamborghini\", \"model\": \"Urus\", \"color\": \"white\"},\n      \"location\": {\"city\": \"Dubai\", \"landmark\": \"Burj Khalifa\", \"time\": \"night\"}\n    }\n  }\n]\n\nВерни ровно 10 вариантов в таком же формате.\n"
+      }
+    ],
+    "temperature": 0.7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvrJRAETYc8V6MIQuYARGR0QuK65K",
+    "object": "chat.completion",
+    "created": 1767905665,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"content\": [\n    {\n      \"id\": 1,\n      \"description\": \"Бостон терьер сидит на диване, рядом разбросаны игрушки, камера показывает его довольное лицо.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"small, short hair\", \"outfit\": \"none\", \"age\": \"2\"},\n        \"setting\": {\"furniture\": \"sofa\", \"items\": \"toys scattered\", \"mood\": \"happy\"}\n      }\n    },\n    {\n      \"id\": 2,\n      \"description\": \"Бостон терьер в парке, у него в пасти кусок еды, камера показывает недовольного хозяина.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"small, playful\", \"outfit\": \"none\", \"age\": \"3\"},\n        \"setting\": {\"location\": \"park\", \"action\": \"food stealing\", \"mood\": \"frustrated owner\"}\n      }\n    },\n    {\n      \"id\": 3,\n      \"description\": \"Бостон терьер на кухне, стоит на задних лапах, камера показывает разбросанные продукты.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"compact, energetic\", \"outfit\": \"none\", \"age\": \"1\"},\n        \"setting\": {\"location\": \"kitchen\", \"items\": \"scattered groceries\", \"mood\": \"chaotic\"}\n      }\n    },\n    {\n      \"id\": 4,\n      \"description\": \"Бостон терьер в спальне, камера показывает его с улыбкой, а вокруг разложены носки.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"cute, mischievous\", \"outfit\": \"none\", \"age\": \"4\"},\n        \"setting\": {\"location\": \"bedroom\", \"items\": \"socks everywhere\", \"mood\": \"playful\"}\n      }\n    },\n    {\n      \"id\": 5,\n      \"description\": \"Бостон терьер на улице, с грязными лапами, камера показывает его довольное выражение.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"small, muddy\", \"outfit\": \"none\", \"age\": \"2\"},\n        \"setting\": {\"location\": \"street\", \"action\": \"playing in dirt\", \"mood\": \"happy\"}\n      }\n    },\n    {\n      \"id\": 6,\n      \"description\": \"Бостон терьер в зале, камера показывает его с ленивым взглядом, вокруг разбросаны подушки.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"chubby, relaxed\", \"outfit\": \"none\", \"age\": \"5\"},\n        \"setting\": {\"location\": \"living room\", \"items\": \"cushions everywhere\", \"mood\": \"lazy\"}\n      }\n    },\n    {\n      \"id\": 7,\n      \"description\": \"Бостон терьер на пляже, камера показывает его с игривым взглядом и рядом раскиданные игрушки для песка.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"playful, happy\", \"outfit\": \"none\", \"age\": \"3\"},\n        \"setting\": {\"location\": \"beach\", \"items\": \"beach toys scattered\", \"mood\": \"joyful\"}\n      }\n    },\n    {\n      \"id\": 8,\n      \"description\": \"Бостон терьер в машине, камера показывает его с высунутым языком, за окном виден беспорядок.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"excited, small\", \"outfit\": \"none\", \"age\": \"2\"},\n        \"setting\": {\"location\": \"car\", \"items\": \"mess inside\", \"mood\": \"excited\"}\n      }\n    },\n    {\n      \"id\": 9,\n      \"description\": \"Бостон терьер в саду, камера показывает его с гордостью, вокруг разбросаны обрезанные цветы.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"curious, small\", \"outfit\": \"none\", \"age\": \"2\"},\n        \"setting\": {\"location\": \"garden\", \"items\": \"cut flowers everywhere\", \"mood\": \"proud\"}\n      }\n    },\n    {\n      \"id\": 10,\n      \"description\": \"Бостон терьер в офисе, камера показывает его с серьезным лицом, а вокруг разбросаны документы.\",\n      \"content_variables\": {\n        \"character\": {\"appearance\": \"serious, small\", \"outfit\": \"none\", \"age\": \"3\"},\n        \"setting\": {\"location\": \"office\", \"items\": \"papers everywhere\", \"mood\": \"serious\"}\n      }\n    }\n  ]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 368,
+      "completion_tokens": 1028,
+      "total_tokens": 1396,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

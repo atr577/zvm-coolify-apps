@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T21:21:59.394204",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты строгий QA-специалист по видео-контенту."
+      },
+      {
+        "role": "user",
+        "content": "\n\nПроверь сюжет на:\n1. Виральный потенциал (0-100)\n2. Ясность концепции\n3. Привлекательность для целевой аудитории\n4. Наличие сильного hook\n            \n\nКонтент для проверки:\n{'concept': 'На экране появляется настороженный бостон терьер, который внимательно смотрит на входную дверь, окруженный обувью и сумками в прихожей. Вдруг раздается звук звонка, и собака резко встряхивается, встаёт на лапы, готовясь к возможному сюрпризу.', 'theme': 'комедия/животные', 'target_audience': 'любители собак и домашних животных, владельцы бостон терьеров', 'hook': 'Когда ты ждешь гостей, но не знаешь, кто это...', 'hook_type': 'audio', 'emotional_trigger': 'любопытство и вовлеченность', 'viral_potential': 'Забавное поведение собаки и неожиданный звук в сочетании с короткой, но эмоциональной историей легко привлекут внимание и вызовут улыбку у зрителей, что способствует репостам и обсуждениям.', 'duration': 5, 'platforms': ['instagram', 'tiktok', 'youtube']}\n\n\n\nВерни JSON:\n- status: \"pass\" | \"pass_with_warnings\" | \"fail\"\n- score: общая оценка 0-100\n- criteria_results: {критерий: {score: 0-100, comment: \"комментарий\"}}\n- warnings: массив предупреждений (если есть)\n- errors: массив критических ошибок (если есть)\n- recommendations: массив рекомендаций по улучшению\n"
+      }
+    ],
+    "temperature": 0.3,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-Cvrk339WN4R21i096A5YQsmeKTsC9",
+    "object": "chat.completion",
+    "created": 1767907315,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"status\": \"pass\",\n  \"score\": 85,\n  \"criteria_results\": {\n    \"viral_potential\": {\n      \"score\": 90,\n      \"comment\": \"Забавное поведение собаки и неожиданный звук создают высокий потенциал для вирусного распространения.\"\n    },\n    \"clarity_of_concept\": {\n      \"score\": 80,\n      \"comment\": \"Концепция ясна, но можно добавить больше деталей о том, что происходит после звонка.\"\n    },\n    \"appeal_to_target_audience\": {\n      \"score\": 85,\n      \"comment\": \"Контент привлекательный для любителей собак, особенно для владельцев бостон терьеров.\"\n    },\n    \"strong_hook\": {\n      \"score\": 80,\n      \"comment\": \"Hook вызывает интерес, но можно сделать его более интригующим.\"\n    }\n  },\n  \"warnings\": [],\n  \"errors\": [],\n  \"recommendations\": [\n    \"Добавить элемент неожиданности после звонка, чтобы усилить интерес.\",\n    \"Уточнить, как именно собака реагирует на звонок, чтобы сделать момент более запоминающимся.\",\n    \"Использовать текстовые подписи или графику для усиления вовлеченности зрителей.\"\n  ]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 393,
+      "completion_tokens": 270,
+      "total_tokens": 663,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T20:48:40.433684",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты строгий QA-специалист по видео-контенту."
+      },
+      {
+        "role": "user",
+        "content": "\n\nПроверь сюжет на:\n1. Виральный потенциал (0-100)\n2. Ясность концепции\n3. Привлекательность для целевой аудитории\n4. Наличие сильного hook\n            \n\nКонтент для проверки:\n{'concept': \"На экране появляется человек, который с ужасом смотрит на расползающийся по полу муравейник, после чего он поднимает ногу, чтобы его раздавить. В последнюю секунду он останавливается, когда муравьи начинают формировать слово 'HELP'.\", 'theme': 'Комедия/Шок', 'target_audience': 'Молодежь, любители комедии и неожиданных поворотов', 'hook': 'Что-то ужасное происходит, и это совсем не то, что ты думаешь!', 'hook_type': 'visual', 'emotional_trigger': 'Любопытство и удивление', 'viral_potential': 'Неожиданный поворот и смешная идея, которая легко может быть репостнута и обсуждена в комментариях. Множество людей сможет ассоциировать себя с моментом страха и смеха.', 'duration': 5, 'platforms': ['instagram', 'tiktok', 'youtube']}\n\n\n\nВерни JSON:\n- status: \"pass\" | \"pass_with_warnings\" | \"fail\"\n- score: общая оценка 0-100\n- criteria_results: {критерий: {score: 0-100, comment: \"комментарий\"}}\n- warnings: массив предупреждений (если есть)\n- errors: массив критических ошибок (если есть)\n- recommendations: массив рекомендаций по улучшению\n"
+      }
+    ],
+    "temperature": 0.3,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvrDpsEpeQLKXqWyRWdooQDXgTNiK",
+    "object": "chat.completion",
+    "created": 1767905317,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"status\": \"pass\",\n  \"score\": 85,\n  \"criteria_results\": {\n    \"viral_potential\": {\n      \"score\": 90,\n      \"comment\": \"Неожиданный поворот и смешная идея, которая может легко стать виральной.\"\n    },\n    \"clarity_of_concept\": {\n      \"score\": 80,\n      \"comment\": \"Концепция ясна, но можно уточнить, как именно муравьи формируют слово.\"\n    },\n    \"appeal_to_target_audience\": {\n      \"score\": 85,\n      \"comment\": \"Комедия и неожиданные повороты привлекательны для молодежи.\"\n    },\n    \"strong_hook\": {\n      \"score\": 80,\n      \"comment\": \"Hook визуальный, но можно добавить больше интриги в начале.\"\n    }\n  },\n  \"warnings\": [],\n  \"errors\": [],\n  \"recommendations\": [\n    \"Уточнить, как именно муравьи формируют слово 'HELP', чтобы сделать момент более запоминающимся.\",\n    \"Добавить немного контекста или предыстории к персонажу, чтобы усилить эмоциональную связь с аудиторией.\"\n  ]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 386,
+      "completion_tokens": 254,
+      "total_tokens": 640,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

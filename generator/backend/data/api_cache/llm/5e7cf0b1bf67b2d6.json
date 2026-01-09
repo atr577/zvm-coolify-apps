@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T21:07:35.766824",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты эксперт по созданию вирального видео-контента."
+      },
+      {
+        "role": "user",
+        "content": "\nСгенерируй идею для вирального короткого видео (Instagram Reels/TikTok/YouTube Shorts).\n\nВВОДНЫЕ ПАРАМЕТРЫ:\nДлительность видео: 5 секунд\n\n\nКОНТЕНТ ВИДЕО (ОБЯЗАТЕЛЬНО использовать):\n\nCHARACTER:\n  - appearance: small, short hair\n  - outfit: none\n  - age: 2\n\nSETTING:\n  - furniture: sofa\n  - items: toys scattered\n  - mood: happy\n\n\n\nВерни результат в формате JSON с такими полями:\n- concept: концепция видео (2-3 предложения) - что происходит в кадре\n- theme: тема/жанр\n- target_audience: целевая аудитория\n- hook: захватывающий hook для первых 3 секунд - что зацепит зрителя\n- hook_type: тип хука - \"visual\" | \"text\" | \"audio\"\n  - visual: сама картинка цепляет (драма, красота, шок)\n  - text: текст на экране цепляет (вопрос, список, интрига)\n  - audio: звук/голос цепляет (voiceover, мем-саунд, музыка)\n- emotional_trigger: эмоциональный триггер (страх упустить, восхищение, любопытство и т.д.)\n- viral_potential: почему это будет вирально (1-2 предложения)\n- duration: 5\n- platforms: ['instagram', 'tiktok', 'youtube']\n\nВАЖНО:\n- ОБЯЗАТЕЛЬНО используй данные из \"КОНТЕНТ ВИДЕО\" если они указаны\n- Концепция должна быть ИМЕННО про указанный контент (животное, локацию и т.д.)\n- Фокус на виральности, эмоциональном вовлечении и трендовых элементах\n- Hook должен работать в первые 3 секунды\n- Концепция должна быть реализуема за 5 секунд\n- hook_type определяет как будет построен первый кадр\n"
+      }
+    ],
+    "temperature": 0.8,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvrW8jD0OoCLi9M9BHZJoVGu2qcjF",
+    "object": "chat.completion",
+    "created": 1767906452,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"concept\": \"Маленький ребенок с короткой стрижкой весело играет с игрушками на диване, неожиданно начинает танцевать в ритме веселой музыки. В конце кадра он делает смешное выражение лица, что вызывает улыбку у зрителей.\",\n  \"theme\": \"семейный/развлекательный контент\",\n  \"target_audience\": \"родители, бабушки и дедушки, молодые семьи\",\n  \"hook\": \"Что может быть смешнее, чем танцы двухлетки?\",\n  \"hook_type\": \"audio\",\n  \"emotional_trigger\": \"восхищение и радость\",\n  \"viral_potential\": \"Дети всегда вызывают положительные эмоции, а танцы под популярную музыку добавляют элемент развлекательности, что делает видео легко делящимся.\",\n  \"duration\": 5,\n  \"platforms\": [\"instagram\", \"tiktok\", \"youtube\"]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 472,
+      "completion_tokens": 203,
+      "total_tokens": 675,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

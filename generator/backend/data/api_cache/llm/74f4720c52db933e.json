@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T20:48:35.701970",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты эксперт по созданию вирального видео-контента."
+      },
+      {
+        "role": "user",
+        "content": "\nСгенерируй идею для вирального короткого видео (Instagram Reels/TikTok/YouTube Shorts).\n\nВВОДНЫЕ ПАРАМЕТРЫ:\nДлительность видео: 5 секунд\n\n\n\nВерни результат в формате JSON с такими полями:\n- concept: концепция видео (2-3 предложения) - что происходит в кадре\n- theme: тема/жанр\n- target_audience: целевая аудитория\n- hook: захватывающий hook для первых 3 секунд - что зацепит зрителя\n- hook_type: тип хука - \"visual\" | \"text\" | \"audio\"\n  - visual: сама картинка цепляет (драма, красота, шок)\n  - text: текст на экране цепляет (вопрос, список, интрига)\n  - audio: звук/голос цепляет (voiceover, мем-саунд, музыка)\n- emotional_trigger: эмоциональный триггер (страх упустить, восхищение, любопытство и т.д.)\n- viral_potential: почему это будет вирально (1-2 предложения)\n- duration: 5\n- platforms: ['instagram', 'tiktok', 'youtube']\n\nВАЖНО:\n- Учитывай заданные параметры\n- Фокус на виральности, эмоциональном вовлечении и трендовых элементах\n- Hook должен работать в первые 3 секунды\n- Концепция должна быть реализуема за 5 секунд\n- hook_type определяет как будет построен первый кадр\n"
+      }
+    ],
+    "temperature": 0.8,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "logprobs": null,
+        "message": {
+          "annotations": [],
+          "content": "{\n  \"concept\": \"На экране появляется человек, который с ужасом смотрит на расползающийся по полу муравейник, после чего он поднимает ногу, чтобы его раздавить. В последнюю секунду он останавливается, когда муравьи начинают формировать слово 'HELP'.\",\n  \"theme\": \"Комедия/Шок\",\n  \"target_audience\": \"Молодежь, любители комедии и неожиданных поворотов\",\n  \"hook\": \"Что-то ужасное происходит, и это совсем не то, что ты думаешь!\",\n  \"hook_type\": \"visual\",\n  \"emotional_trigger\": \"Любопытство и удивление\",\n  \"viral_potential\": \"Неожиданный поворот и смешная идея, которая легко может быть репостнута и обсуждена в комментариях. Множество людей сможет ассоциировать себя с моментом страха и смеха.\",\n  \"duration\": 5,\n  \"platforms\": [\"instagram\", \"tiktok\", \"youtube\"]\n}",
+          "refusal": null,
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1767905312,
+    "id": "chatcmpl-CvrDk4kjmxOdHBfZlp0nJWqovDopq",
+    "model": "gpt-4o-mini-2024-07-18",
+    "object": "chat.completion",
+    "system_fingerprint": "fp_f97eff32c5",
+    "usage": {
+      "completion_tokens": 227,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens": 359,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      },
+      "total_tokens": 586
+    }
+  }
+}

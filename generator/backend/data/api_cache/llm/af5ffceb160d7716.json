@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T23:03:19.522619",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты эксперт по созданию вирального видео-контента."
+      },
+      {
+        "role": "user",
+        "content": "\nСгенерируй идею для вирального короткого видео (Instagram Reels/TikTok/YouTube Shorts).\n\nВВОДНЫЕ ПАРАМЕТРЫ:\nЦелевые платформы: youtube\nДлительность видео: 10 секунд\n\n\nКОНТЕНТ ВИДЕО (ОБЯЗАТЕЛЬНО использовать):\n\nANIMAL:\n  - breed: бостон терьер\n  - action: ворует еду\n  - expression: хитрый\n\nENVIRONMENT:\n  - location: кухня\n  - items: еда на столе\n  - mood: шаловливый\n\n\n\nВерни результат в формате JSON с такими полями:\n- concept: концепция видео (2-3 предложения) - что происходит в кадре\n- theme: тема/жанр\n- target_audience: целевая аудитория\n- hook: захватывающий hook для первых 3 секунд - что зацепит зрителя\n- hook_type: тип хука - \"visual\" | \"text\" | \"audio\"\n  - visual: сама картинка цепляет (драма, красота, шок)\n  - text: текст на экране цепляет (вопрос, список, интрига)\n  - audio: звук/голос цепляет (voiceover, мем-саунд, музыка)\n- emotional_trigger: эмоциональный триггер (страх упустить, восхищение, любопытство и т.д.)\n- viral_potential: почему это будет вирально (1-2 предложения)\n- duration: 10\n- platforms: ['youtube']\n\nВАЖНО:\n- ОБЯЗАТЕЛЬНО используй данные из \"КОНТЕНТ ВИДЕО\" если они указаны\n- Концепция должна быть ИМЕННО про указанный контент (животное, локацию и т.д.)\n- Фокус на виральности, эмоциональном вовлечении и трендовых элементах\n- Hook должен работать в первые 3 секунды\n- Концепция должна быть реализуема за 10 секунд\n- hook_type определяет как будет построен первый кадр\n"
+      }
+    ],
+    "temperature": 0.8,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvtK9BHlMc4528tBD9zyFmPoyrFHg",
+    "object": "chat.completion",
+    "created": 1767913397,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"concept\": \"На кухне хитрый бостон терьер подкрадывается к столу, где стоит аппетитная еда. Он быстро хватает кусочек и с умным выражением лица убегает, оставляя хозяина в недоумении.\",\n  \"theme\": \"Комедийный момент с животными\",\n  \"target_audience\": \"Любители собак и домашнего контента\",\n  \"hook\": \"Сможет ли он это сделать?\",\n  \"hook_type\": \"text\",\n  \"emotional_trigger\": \"Любопытство и смех\",\n  \"viral_potential\": \"Видеоролики с животными всегда вызывают улыбку и делятся среди друзей. Хитрый бостон терьер и его шаловливые выходки привлечет внимание и вызовет положительные эмоции.\",\n  \"duration\": 10,\n  \"platforms\": [\"youtube\"]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 484,
+      "completion_tokens": 194,
+      "total_tokens": 678,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-01-08T23:18:25.338519",
+  "category": "llm",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Ты строгий QA-специалист по видео-контенту."
+      },
+      {
+        "role": "user",
+        "content": "\n\nПроверь сюжет на:\n1. Виральный потенциал (0-100)\n2. Ясность концепции\n3. Привлекательность для целевой аудитории\n4. Наличие сильного hook\n            \n\nКонтент для проверки:\n{'concept': 'На кухне бостон терьер с хитрым выражением лица крадёт еду с стола. Он уверенно подходит к столу, проверяет, никто ли не видит, и с ловкостью хватает кусок еды, быстро уносясь в сторону.', 'hook': 'Смотрите, как этот бостон терьер мастерски ворует еду!', 'hook_type': 'visual', 'climax': \"В конце видео, когда терьер уже унес еду, он оборачивается и делает забавное лицо, как будто говорит: 'Я ничего не делал!'\", 'tone': 'comedic', 'pacing': 'fast', 'emotional_trigger': 'смех', 'duration': 10}\n\n\n\nВерни JSON:\n- status: \"pass\" | \"pass_with_warnings\" | \"fail\"\n- score: общая оценка 0-100\n- criteria_results: {критерий: {score: 0-100, comment: \"комментарий\"}}\n- warnings: массив предупреждений (если есть)\n- errors: массив критических ошибок (если есть)\n- recommendations: массив рекомендаций по улучшению\n"
+      }
+    ],
+    "temperature": 0.3,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-CvtYkZUSlPfMFpmGnqL2WCSFGm8eW",
+    "object": "chat.completion",
+    "created": 1767914302,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"status\": \"pass\",\n  \"score\": 85,\n  \"criteria_results\": {\n    \"viral_potential\": {\n      \"score\": 80,\n      \"comment\": \"Смешные и милые моменты с животными часто становятся вирусными, особенно если они хорошо сняты.\"\n    },\n    \"clarity_of_concept\": {\n      \"score\": 90,\n      \"comment\": \"Концепция ясна и легко воспринимается, что делает её доступной для широкой аудитории.\"\n    },\n    \"appeal_to_target_audience\": {\n      \"score\": 85,\n      \"comment\": \"Смешные видео с животными привлекают внимание широкой аудитории, особенно любителей собак.\"\n    },\n    \"strong_hook\": {\n      \"score\": 85,\n      \"comment\": \"Хук визуальный и интригующий, что хорошо подходит для привлечения зрителей.\"\n    }\n  },\n  \"warnings\": [],\n  \"errors\": [],\n  \"recommendations\": [\n    \"Добавить немного музыкального сопровождения для усиления комедийного эффекта.\",\n    \"Убедиться, что видео снято с хорошим качеством, чтобы подчеркнуть выражения лица терьера.\"\n  ]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 329,
+      "completion_tokens": 259,
+      "total_tokens": 588,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "system_fingerprint": "fp_f97eff32c5"
+  }
+}
