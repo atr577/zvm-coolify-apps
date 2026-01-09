@@ -134,15 +134,20 @@ def test_workspace(db: Session, test_user: User) -> Workspace:
 
 
 @pytest.fixture
-def test_project(db: Session, test_workspace: Workspace) -> Project:
+def test_project(db: Session, test_workspace: Workspace, test_user: User) -> Project:
     """Create a test project."""
+    from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
+
     project = Project(
         name="Test Project",
         workspace_id=test_workspace.id,
+        user_id=test_user.id,
         story_template="A story about {animal} in {location}",
         platforms=["instagram", "tiktok"],
         duration=5,
-        aspect_ratio="9:16"
+        aspect_ratio="9:16",
+        audio_mode="auto",
+        system_prompts=DEFAULT_SYSTEM_PROMPTS
     )
     db.add(project)
     db.commit()

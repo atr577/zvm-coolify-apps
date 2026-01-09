@@ -822,9 +822,11 @@ class TestAccessControl:
         other_project = Project(
             name="Other Project",
             workspace_id=other_workspace.id,
+            user_id=other_user.id,
             story_template="test",
             platforms=["instagram"],
-            duration=5
+            duration=5,
+            audio_mode="auto"
         )
         db.add(other_project)
         db.commit()
