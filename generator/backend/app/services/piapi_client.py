@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from app.core.config import settings
+from app.core.models_config import IMAGE_MODEL_CONFIGS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -544,7 +545,52 @@ class PiAPIClient:
         return await self.wait_for_sound(task_id)
 
 
-    # ============ Nano Banana Pro (Image Generation) ============
+    # ============ Image Generation (model-agnostic) ============
+
+    def _build_image_payload(
+        self,
+        prompt: str,
+        aspect_ratio: str,
+        image_urls: list = None,
+        **kwargs
+    ) -> dict:
+        """Build image generation payload based on model config."""
+        model_name = settings.IMAGE_MODEL
+        config = IMAGE_MODEL_CONFIGS.get(model_name)
+
+        if not config:
+            # Fallback for unknown models - use basic format
+            config = {
+                "model": model_name,
+                "task_type": settings.IMAGE_TASK_TYPE,
+                "use_dimensions": False,
+                "defaults": {}
+            }
+
+        input_data = {"prompt": prompt}
+
+        if config.get("use_dimensions"):
+            dims = config.get("dimensions", {})
+            width, height = dims.get(aspect_ratio, (576, 1024))
+            input_data["width"] = width
+            input_data["height"] = height
+        else:
+            input_data["aspect_ratio"] = aspect_ratio
+
+        # Add model-specific defaults
+        input_data.update(config.get("defaults", {}))
+
+        # Override with any explicit kwargs
+        input_data.update({k: v for k, v in kwargs.items() if v is not None})
+
+        if image_urls:
+            input_data["image_urls"] = image_urls
+
+        return {
+            "model": config["model"],
+            "task_type": config["task_type"],
+            "input": input_data
+        }
 
     async def create_image_task(
         self,
@@ -556,25 +602,19 @@ class PiAPIClient:
         safety_level: str = "low"
     ) -> str:
         """
-        Create Nano Banana Pro image generation task
+        Create image generation task (model from settings.IMAGE_MODEL)
         Returns task_id for polling
         """
-        payload = {
-            "model": "gemini",
-            "task_type": "nano-banana-pro",
-            "input": {
-                "prompt": prompt,
-                "aspect_ratio": aspect_ratio,
-                "resolution": resolution,
-                "output_format": output_format,
-                "safety_level": safety_level
-            }
-        }
+        payload = self._build_image_payload(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            image_urls=image_urls,
+            resolution=resolution,
+            output_format=output_format,
+            safety_level=safety_level
+        )
 
-        if image_urls:
-            payload["input"]["image_urls"] = image_urls
-
-        logger.info(f"Creating Nano Banana image task: {prompt[:50]}...")
+        logger.info(f"Creating {settings.IMAGE_MODEL} image task: {prompt[:50]}...")
 
         response = await self._make_request(
             "POST",
@@ -612,7 +652,7 @@ class PiAPIClient:
                 image_url = (
                     output.get("image_url") or
                     output.get("url") or
-                    # Nano Banana Pro returns image_urls array
+                    # Various formats: image_urls array, images array
                     (output.get("image_urls", [None])[0] if output.get("image_urls") else None) or
                     (output.get("images", [{}])[0].get("url") if output.get("images") else None)
                 )
@@ -639,7 +679,7 @@ class PiAPIClient:
         resolution: str = "1K",
         image_urls: list = None
     ) -> str:
-        """Generate image with Nano Banana Pro, returns image URL"""
+        """Generate image using configured model (settings.IMAGE_MODEL), returns image URL"""
         task_id = await self.create_image_task(
             prompt=prompt,
             aspect_ratio=aspect_ratio,

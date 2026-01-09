@@ -184,6 +184,8 @@ class WorkflowOrchestrator:
         filled_prompt = self._fill_template()
         self.video.story_data = {"filled_template": filled_prompt}
         self.video.image_prompt = filled_prompt
+        self.video.current_step = StepType.IMAGE  # Remix starts at IMAGE
+        self.video.status = WorkflowStatus.IN_PROGRESS
         self.db.commit()
 
         # Step 1: Image
@@ -390,14 +392,16 @@ class WorkflowOrchestrator:
 
         # Build result
         if audio_result.get("status") == "skipped":
+            # Generate publishing meta and complete
+            await self._generate_publishing_meta()
             return WorkflowResult(
                 video_id=self.video.id,
                 steps_completed=self.steps_completed,
-                message=f"{'Resumed: ' if is_resume else ''}{mode.capitalize()} video completed (no audio).",
+                message=f"{'Resumed: ' if is_resume else ''}{mode.capitalize()} video completed. Ready for publishing.",
                 mode=mode,
                 total_time_seconds=self._elapsed_time(),
                 audio_skipped=True,
-                next_action="generate_adaptation" if mode == "discover" else None
+                next_action=None
             )
         else:
             return WorkflowResult(
@@ -409,6 +413,34 @@ class WorkflowOrchestrator:
                 audio_variants=audio_result.get("content", {}).get("audio_variants", []),
                 next_action="select_audio_variant"
             )
+
+    async def _generate_publishing_meta(self):
+        """Generate publishing metadata for the video."""
+        from app.services.openai_service import openai_service
+
+        platforms = self.project.platforms if self.project else ["youtube"]
+
+        # Get context for meta generation
+        prompt_context = (
+            self.video.image_prompt or
+            (self.video.story_data.get("concept", "") if self.video.story_data else "") or
+            (self.project.story_template if self.project else "") or
+            "Video content"
+        )
+
+        try:
+            meta = await openai_service.generate_publishing_meta(
+                prompt_or_template=prompt_context,
+                platforms=platforms,
+                image_url=self.video.image_url
+            )
+            self.video.publishing_meta = meta
+        except Exception as e:
+            logger.warning(f"Failed to generate publishing meta: {e}")
+            self.video.publishing_meta = {}
+
+        self.video.status = WorkflowStatus.COMPLETED
+        self.db.commit()
 
     def _fill_template(self) -> str:
         """Fill story template with content variables."""

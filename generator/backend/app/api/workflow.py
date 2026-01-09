@@ -357,6 +357,20 @@ async def generate_image(
     negative_prompt = None
     style_suffix = None
 
+    # For remix mode: optionally refill template from project
+    if request.refill_from_template and video.project and video.project.project_type == "remix":
+        filled_prompt = video.project.story_template or ""
+        content_variables = video.content_variables or {}
+        for key, value in content_variables.items():
+            if isinstance(value, dict):
+                value_str = ", ".join(f"{k}: {v}" for k, v in value.items())
+            else:
+                value_str = str(value)
+            filled_prompt = filled_prompt.replace(f"{{{key}}}", value_str)
+        prompt_str = filled_prompt
+        video.image_prompt = filled_prompt  # Update stored prompt
+        db.commit()
+
     if request.prompt_data:
         if not prompt_str:
             prompt_str = request.prompt_data.get("main_prompt", "")
@@ -508,44 +522,37 @@ async def select_audio_variant(
 
     db.commit()
 
-    # Auto-generate Adaptation after audio selection
+    # Generate publishing meta and complete workflow
     project = video.project
-    adaptation_step = WorkflowStep(
-        video_id=video.id,
-        step_type=StepType.ADAPTATION,
-        status=WorkflowStatus.IN_PROGRESS,
-        started_at=datetime.utcnow()
-    )
-    db.add(adaptation_step)
-    db.commit()
-    db.refresh(adaptation_step)
+    platforms = project.platforms if project else ["youtube"]
 
-    # Собираем полный контекст для адаптации
-    full_context = {
-        "story": video.story_data,
-        "scenario": video.scenario_data,
-        "image_url": video.image_url,
-        "video_url": selected_url  # Используем видео с выбранным аудио
-    }
-
-    adaptation_data = await openai_service.adapt_for_platforms(
-        full_context,
-        project.platforms
+    # Get context for meta generation
+    prompt_context = (
+        video.image_prompt or
+        (video.story_data.get("concept", "") if video.story_data else "") or
+        (project.story_template if project else "") or
+        "Video content"
     )
 
-    adaptation_step.content = adaptation_data
-    adaptation_step.status = WorkflowStatus.AWAITING_APPROVAL
-    adaptation_step.completed_at = datetime.utcnow()
-    adaptation_step.generation_time_seconds = (datetime.utcnow() - adaptation_step.started_at).total_seconds()
+    try:
+        meta = await openai_service.generate_publishing_meta(
+            prompt_or_template=prompt_context,
+            platforms=platforms,
+            image_url=video.image_url
+        )
+        video.publishing_meta = meta
+    except Exception as e:
+        # If meta generation fails, continue without it
+        video.publishing_meta = {}
 
-    video.adaptation_data = adaptation_data
-    video.current_step = StepType.ADAPTATION
+    # Mark video as completed
+    video.status = WorkflowStatus.COMPLETED
     db.commit()
 
     return {
-        "message": f"Selected audio variant {request.variant_index + 1}. Adaptation generated.",
+        "message": f"Selected audio variant {request.variant_index + 1}. Video ready for publishing.",
         "video_with_audio_url": selected_url,
-        "adaptation": adaptation_data
+        "publishing_meta": video.publishing_meta
     }
 
 
@@ -576,6 +583,75 @@ async def adapt_for_platforms(
         return await step.execute(request, request.custom_prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate-meta")
+async def generate_publishing_meta(
+    video_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate publishing metadata (title, description, hashtags) for video.
+    Called when video is ready for publishing (after audio step).
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    verify_video_ownership(db, video, current_user)
+
+    project = video.project
+    if not project:
+        raise HTTPException(status_code=400, detail="Video has no project")
+
+    platforms = project.platforms or ["youtube"]
+
+    # Get context for meta generation
+    # Use image_prompt for remix, or story_data for discover
+    prompt_context = (
+        video.image_prompt or
+        video.story_data.get("concept", "") if video.story_data else "" or
+        project.story_template or
+        "Video content"
+    )
+
+    try:
+        meta = await openai_service.generate_publishing_meta(
+            prompt_or_template=prompt_context,
+            platforms=platforms,
+            image_url=video.image_url
+        )
+
+        video.publishing_meta = meta
+        db.commit()
+
+        return {
+            "video_id": video_id,
+            "publishing_meta": meta
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/update-meta")
+async def update_publishing_meta(
+    video_id: int,
+    meta: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update publishing metadata (user edits)."""
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    verify_video_ownership(db, video, current_user)
+
+    video.publishing_meta = meta
+    db.commit()
+
+    return {"video_id": video_id, "publishing_meta": meta}
 
 
 @router.post("/approve-step")

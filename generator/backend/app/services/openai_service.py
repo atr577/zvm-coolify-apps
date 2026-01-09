@@ -736,6 +736,84 @@ class OpenAIService:
             logger.error(f"Failed to adapt for platforms: {e}")
             raise
 
+    async def generate_publishing_meta(
+        self,
+        prompt_or_template: str,
+        platforms: List[str],
+        image_url: Optional[str] = None
+    ) -> Dict[str, Dict[str, str]]:
+        """
+        Generate simple publishing metadata (title, description, hashtags) for platforms.
+        Works with minimal context - just the prompt/template used for generation.
+        """
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock publishing meta")
+            await asyncio.sleep(0.5)
+            return {
+                platform: {
+                    "title": f"Mock title for {platform}",
+                    "description": f"Mock description for {platform}",
+                    "hashtags": f"#mock #{platform} #shorts"
+                }
+                for platform in platforms
+            }
+
+        prompt = f"""
+Create publishing metadata for video on platforms: {', '.join(platforms)}
+
+VIDEO CONTEXT (generation prompt):
+{prompt_or_template[:1000]}
+
+For each platform create:
+- title: short catchy title (up to 100 chars)
+- description: description with CTA (up to 500 chars). DO NOT include hashtags here!
+- hashtags: relevant hashtags separated by space (ONLY here, not in description)
+
+Return ONLY JSON:
+{{
+  "{platforms[0]}": {{
+    "title": "...",
+    "description": "...",
+    "hashtags": "#tag1 #tag2 #tag3"
+  }}
+}}
+
+Platforms: {', '.join(platforms)}
+"""
+
+        try:
+            result = await self.client.generate_json(
+                prompt=prompt,
+                system_prompt="You are an SMM expert. Create viral titles and descriptions in English.",
+                temperature=0.7
+            )
+
+            # Extract platform data from response
+            platform_data = result
+            if isinstance(result, dict):
+                has_platform_keys = any(p in result for p in platforms)
+                if not has_platform_keys:
+                    for key in ["platforms", "data", "result"]:
+                        if key in result and isinstance(result[key], dict):
+                            platform_data = result[key]
+                            break
+
+            filtered_result = {
+                platform: platform_data.get(platform, {
+                    "title": "Untitled",
+                    "description": "",
+                    "hashtags": ""
+                })
+                for platform in platforms
+            }
+
+            logger.info(f"Publishing meta generated for: {', '.join(filtered_result.keys())}")
+            return filtered_result
+
+        except PiAPIError as e:
+            logger.error(f"Failed to generate publishing meta: {e}")
+            raise
+
     async def generate_content_variants(
         self,
         story_template: str,

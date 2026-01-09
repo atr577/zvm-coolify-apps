@@ -11,7 +11,7 @@ Extracts common logic:
 """
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from sqlalchemy.orm import Session
 
 from app.models.video import Video, StepType, WorkflowStatus
@@ -59,7 +59,8 @@ class BaseWorkflowStep(ABC):
     async def execute(
         self,
         request: Any,
-        custom_prompt: Optional[CustomPrompt] = None
+        custom_prompt: Optional[CustomPrompt] = None,
+        feedback: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Main execution flow for a workflow step.
@@ -67,11 +68,12 @@ class BaseWorkflowStep(ABC):
         1. Get or create step
         2. Build prompt with project's system_prompt
         3. Get effective prompt (user custom > project > default)
-        4. Save prompt tracking data
-        5. Generate content
-        6. Save content to video
-        7. Validate (if required)
-        8. Return response
+        4. Apply feedback if provided (from previous rejection)
+        5. Save prompt tracking data
+        6. Generate content
+        7. Save content to video with meta
+        8. Validate (if required)
+        9. Return response
         """
         # 1. Get or create step
         self.step = self._get_or_create_step()
@@ -82,14 +84,24 @@ class BaseWorkflowStep(ABC):
         # 3. Get effective prompt
         effective_prompt = self._get_effective_prompt(original_prompt_data, custom_prompt)
 
-        # 4. Save prompt tracking data
-        self._save_prompt_tracking(original_prompt_data, custom_prompt)
+        # 4. Apply feedback if provided or from last rejected step
+        effective_feedback = feedback or self.get_last_feedback()
+        if effective_feedback:
+            effective_prompt = self._apply_feedback(effective_prompt, effective_feedback)
+            feedback = effective_feedback  # For tracking
+
+        # Store effective prompt for meta tracking
+        self._effective_prompt = effective_prompt
+        self._feedback_used = feedback
+
+        # 5. Save prompt tracking data (including feedback)
+        self._save_prompt_tracking(original_prompt_data, custom_prompt, feedback)
 
         try:
-            # 5. Generate content
+            # 6. Generate content
             content = await self.generate(request, effective_prompt)
 
-            # 6. Save content
+            # 7. Save content with meta
             self._save_content(content)
 
             # 7. Validate if required
@@ -181,10 +193,41 @@ class BaseWorkflowStep(ABC):
             user_prompt=prompt_data.user_prompt
         )
 
+    def _apply_feedback(
+        self,
+        prompt: CustomPrompt,
+        feedback: str
+    ) -> CustomPrompt:
+        """
+        Apply user feedback to the prompt for regeneration.
+
+        Uses accumulated feedback history with numbered iterations.
+        Subclasses can override for step-specific feedback handling.
+        """
+        # Get feedback history (set by get_last_feedback)
+        history = getattr(self, '_feedback_history', [feedback])
+
+        if len(history) == 1:
+            # Single feedback - simple format
+            feedback_addition = f"\n\n--- USER FEEDBACK FOR IMPROVEMENT ---\nThe previous version was rejected. Please address this feedback:\n{feedback}\n--- END FEEDBACK ---"
+        else:
+            # Multiple iterations - numbered format
+            feedback_lines = []
+            for i, fb in enumerate(history, 1):
+                feedback_lines.append(f"Iteration {i}: {fb}")
+
+            feedback_addition = f"\n\n--- USER FEEDBACK HISTORY ({len(history)} iterations) ---\nPrevious versions were rejected. Please address ALL feedback points:\n" + "\n".join(feedback_lines) + "\n--- END FEEDBACK ---"
+
+        return CustomPrompt(
+            system_prompt=prompt.system_prompt,
+            user_prompt=prompt.user_prompt + feedback_addition
+        )
+
     def _save_prompt_tracking(
         self,
         original_prompt_data: PromptData,
-        custom_prompt: Optional[CustomPrompt]
+        custom_prompt: Optional[CustomPrompt],
+        feedback: Optional[str] = None
     ):
         """Save prompt tracking data to step."""
         self.step.original_prompt = original_prompt_data.to_dict()
@@ -198,10 +241,30 @@ class BaseWorkflowStep(ABC):
         else:
             self.step.prompt_manually_edited = False
 
+        # Store feedback used for this generation
+        if feedback:
+            self.step.user_feedback = feedback
+
     def _save_content(self, content: Dict[str, Any]):
-        """Save generated content to step and video."""
-        self.step.content = content
-        setattr(self.video, self.content_field, content)
+        """Save generated content to step and video with meta info."""
+        # Add _meta with effective prompt used for generation
+        meta = {
+            "effective_prompt": {
+                "system_prompt": self._effective_prompt.system_prompt if hasattr(self, '_effective_prompt') else None,
+                "user_prompt": self._effective_prompt.user_prompt if hasattr(self, '_effective_prompt') else None
+            },
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        if hasattr(self, '_feedback_used') and self._feedback_used:
+            meta["feedback_applied"] = self._feedback_used
+        # Save feedback history for accumulation across iterations
+        if hasattr(self, '_feedback_history') and self._feedback_history:
+            meta["feedback_history"] = self._feedback_history
+
+        content_with_meta = {**content, "_meta": meta}
+
+        self.step.content = content_with_meta
+        setattr(self.video, self.content_field, content_with_meta)
         self.video.current_step = self.step_type
         self.video.status = WorkflowStatus.IN_PROGRESS
 
@@ -256,6 +319,11 @@ class BaseWorkflowStep(ABC):
             "prompt_manually_edited": self.step.prompt_manually_edited
         }
 
+        # Include feedback info if it was applied
+        if hasattr(self, '_feedback_used') and self._feedback_used:
+            response["feedback_applied"] = True
+            response["feedback_text"] = self._feedback_used
+
         if validation:
             response["validation"] = {
                 "status": validation.status.value,
@@ -272,3 +340,40 @@ class BaseWorkflowStep(ABC):
         self.step.status = WorkflowStatus.FAILED
         self.step.completed_at = datetime.utcnow()
         self.db.commit()
+
+    def get_last_feedback(self) -> Optional[str]:
+        """
+        Get feedback to apply for regeneration, including history from previous iterations.
+
+        Returns combined feedback string with all iterations numbered.
+        """
+        new_feedback = None
+
+        # Get new feedback from current step or last rejected
+        if self.step and self.step.user_feedback:
+            new_feedback = self.step.user_feedback
+            self.step.user_feedback = None
+        else:
+            last_rejected = self.db.query(WorkflowStep).filter(
+                WorkflowStep.video_id == self.video.id,
+                WorkflowStep.step_type == self.step_type,
+                WorkflowStep.status == WorkflowStatus.REJECTED,
+                WorkflowStep.user_feedback.isnot(None)
+            ).order_by(WorkflowStep.created_at.desc()).first()
+            if last_rejected:
+                new_feedback = last_rejected.user_feedback
+
+        if not new_feedback:
+            return None
+
+        # Get previous feedback history from video's content field
+        previous_content = getattr(self.video, self.content_field, None)
+        previous_history: List[str] = []
+        if previous_content and isinstance(previous_content, dict):
+            meta = previous_content.get("_meta", {})
+            previous_history = meta.get("feedback_history", [])
+
+        # Build accumulated feedback list
+        self._feedback_history = previous_history + [new_feedback]
+
+        return new_feedback  # Return just new feedback, history stored in _feedback_history

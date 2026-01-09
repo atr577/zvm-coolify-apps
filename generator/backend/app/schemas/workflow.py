@@ -64,6 +64,7 @@ class GenerateImageRequest(BaseModel):
     prompt_data: Optional[Dict[str, Any]] = None  # Or structured prompt with main_prompt, negative_prompt, etc.
     aspect_ratio: str = Field(default="9:16", pattern="^(16:9|9:16|1:1)$")  # Default vertical for Reels/TikTok/Shorts
     mode: str = Field(default="std", pattern="^(std|pro)$")
+    refill_from_template: bool = False  # Re-fill prompt from project template (for remix regeneration)
 
 
 class GenerateScenarioRequest(BaseModel):

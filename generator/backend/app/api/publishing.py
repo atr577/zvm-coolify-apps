@@ -235,16 +235,19 @@ async def publish_to_youtube(
     db.refresh(publish_record)
 
     try:
-        tags = request.hashtags.split() if request.hashtags else []
+        # Append hashtags to description for YouTube
+        description = request.description or ""
+        if request.hashtags:
+            description = f"{description}\n\n{request.hashtags}"
 
         result = await social_publisher.publish(
             platform="youtube",
             video_url=request.video_url,
             title=request.title,
-            description=request.description,
+            description=description,
             access_token=social_account.access_token,
             refresh_token=social_account.refresh_token,
-            tags=tags,
+            tags=[],  # Tags via API often don't show, using description instead
             privacy_status=request.privacy_status or "public"
         )
 

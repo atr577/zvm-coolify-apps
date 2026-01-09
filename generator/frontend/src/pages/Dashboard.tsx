@@ -65,7 +65,7 @@ export default function Dashboard() {
   // Получить все проекты
   const { data: projects, isLoading: projectsLoading } = useQuery(
     'projects',
-    () => projectsApi.list().then(res => res.data)
+    () => projectsApi.list().then(res => res.data.items)
   )
 
   // Получить workspaces пользователя
@@ -83,8 +83,8 @@ export default function Dashboard() {
 
       await Promise.all(
         projects.map(async (project) => {
-          const videos = await videosApi.listByProject(project.id).then(res => res.data)
-          videosByProject[project.id] = videos
+          const res = await videosApi.listByProject(project.id)
+          videosByProject[project.id] = res.data.items
         })
       )
 
@@ -396,10 +396,17 @@ const YouTubeIcon = ({ className }: { className?: string }) => (
 )
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('ru-RU', {
+  const date = new Date(dateString)
+  const datePart = date.toLocaleDateString('ru-RU', {
     day: 'numeric',
     month: 'short'
   })
+  const timePart = date.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+  return `${datePart} ${timePart}`
 }
 
 function formatNumber(num: number): string {

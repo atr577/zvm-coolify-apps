@@ -26,6 +26,8 @@ class ProjectBrief(BaseModel):
     name: str
     platforms: List[str]
     duration: int
+    project_type: str = "discover"
+    require_image_approval: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,6 +67,7 @@ class VideoResponse(BaseModel):
     audio_variants: Optional[List[str]] = None
     video_with_audio_url: Optional[str] = None
     adaptation_data: Optional[Dict[str, Any]] = None
+    publishing_meta: Optional[Dict[str, Any]] = None
 
     current_step: str
     status: str

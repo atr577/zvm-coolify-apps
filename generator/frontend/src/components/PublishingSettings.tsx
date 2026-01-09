@@ -87,7 +87,7 @@ export default function PublishingSettings({
     const meta = getPlatformMeta(platform)
     const title = meta.title || 'Video'
     const description = meta.description || ''
-    const hashtags = meta.hashtags?.join(' ') || ''
+    const hashtags = Array.isArray(meta.hashtags) ? meta.hashtags.join(' ') : (meta.hashtags || '')
 
     try {
       let response
@@ -275,11 +275,11 @@ export default function PublishingSettings({
                               <p className="text-sm text-gray-800">{meta.description}</p>
                             </div>
                           )}
-                          {meta.hashtags && meta.hashtags.length > 0 && (
+                          {meta.hashtags && (Array.isArray(meta.hashtags) ? meta.hashtags.length > 0 : meta.hashtags) && (
                             <div>
                               <p className="text-xs font-medium text-gray-500 mb-1">Хэштеги:</p>
                               <p className="text-sm text-purple-600">
-                                {meta.hashtags.join(' ')}
+                                {Array.isArray(meta.hashtags) ? meta.hashtags.join(' ') : meta.hashtags}
                               </p>
                             </div>
                           )}

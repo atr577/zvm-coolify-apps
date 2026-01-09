@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse } from '@/types'
 
 // Flexible types for workflow data from API (may have additional/missing fields)
 type WorkflowData = Record<string, unknown>
@@ -15,7 +15,7 @@ const api = axios.create({
 
 // Projects API
 export const projectsApi = {
-  list: () => api.get<Project[]>('/api/projects'),
+  list: (page = 1, limit = 100) => api.get<PaginatedResponse<Project>>('/api/projects', { params: { page, limit } }),
   get: (id: number) => api.get<Project>(`/api/projects/${id}`),
   create: (data: CreateProjectDto) => api.post<Project>('/api/projects', data),
   update: (id: number, data: UpdateProjectDto) =>
@@ -25,8 +25,8 @@ export const projectsApi = {
 
 // Videos API
 export const videosApi = {
-  listByProject: (projectId: number) =>
-    api.get<Video[]>(`/api/videos/project/${projectId}`),
+  listByProject: (projectId: number, page = 1, limit = 100) =>
+    api.get<PaginatedResponse<Video>>(`/api/videos/project/${projectId}`, { params: { page, limit } }),
   get: (id: number) => api.get<Video>(`/api/videos/${id}`),
   create: (data: CreateVideoDto) =>
     api.post<Video>('/api/videos', data),
@@ -105,7 +105,7 @@ export const workflowApi = {
       custom_prompt: customPrompt
     }),
 
-  generateImage: (videoId: number, promptOrData: string | WorkflowData, aspectRatio = '9:16', mode = 'std') =>
+  generateImage: (videoId: number, promptOrData: string | WorkflowData, aspectRatio = '9:16', mode = 'std', refillFromTemplate = false) =>
     api.post('/api/workflow/generate-image', {
       video_id: videoId,
       ...(typeof promptOrData === 'string'
@@ -113,7 +113,8 @@ export const workflowApi = {
         : { prompt_data: promptOrData, prompt: (promptOrData as { main_prompt?: string }).main_prompt }
       ),
       aspect_ratio: aspectRatio,
-      mode
+      mode,
+      refill_from_template: refillFromTemplate
     }),
 
   generateScenario: (videoId: number, imageUrl: string, descriptionData: WorkflowData, customPrompt?: CustomPrompt) =>
@@ -150,6 +151,12 @@ export const workflowApi = {
       platforms,
       custom_prompt: customPrompt
     }),
+
+  generateMeta: (videoId: number) =>
+    api.post(`/api/workflow/generate-meta?video_id=${videoId}`),
+
+  updateMeta: (videoId: number, meta: Record<string, { title: string; description: string; hashtags: string }>) =>
+    api.patch(`/api/workflow/update-meta?video_id=${videoId}`, meta),
 
   approveStep: (stepId: number, approved: boolean, feedback?: string, regenerate: boolean = true) =>
     api.post('/api/workflow/approve-step', {

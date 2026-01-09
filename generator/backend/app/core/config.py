@@ -22,7 +22,9 @@ class Settings(BaseSettings):
 
     # Модели
     GPT_MODEL: str = "gpt-4o-mini"  # Доступные: gpt-4o-mini, gpt-4o, claude-3-7-sonnet-20250219
-    KLING_MODEL: str = "2.1"  # Доступные: 1.5, 1.6, 2.1, 2.1-master, 2.5, 2.6
+    KLING_MODEL: str = "2.5"  # Доступные: 1.5, 1.6, 2.1, 2.1-master, 2.5, 2.6
+    IMAGE_MODEL: str = "qwen-image"  # Доступные: qwen-image, nano-banana-pro
+    IMAGE_TASK_TYPE: str = "txt2img"  # qwen: txt2img, nano-banana: nano-banana-pro
 
     # Instagram OAuth
     INSTAGRAM_CLIENT_ID: str = ""

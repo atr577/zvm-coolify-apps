@@ -135,6 +135,7 @@ export interface Video {
   audio_variants: string[] | null
   video_with_audio_url: string | null
   adaptation_data: Record<string, any> | null
+  publishing_meta: Record<string, any> | null
   current_step: StepType
   status: WorkflowStatus
   author_rating: number | null
@@ -378,6 +379,16 @@ export interface ApiError {
   message: string
   detail?: string
   status?: number
+}
+
+// --- Pagination ---
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+  pages?: number
 }
 
 export function isApiError(error: unknown): error is { response?: { data?: { detail?: string } }; message?: string } {

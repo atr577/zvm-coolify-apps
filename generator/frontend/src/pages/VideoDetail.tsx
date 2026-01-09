@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { videosApi, workflowApi, metricsApi, CustomPrompt } from '@/services/api'
 import PublishingSettings from '@/components/PublishingSettings'
+import PublishingMetaEditor from '@/components/PublishingMetaEditor'
 import PromptEditor from '@/components/PromptEditor'
 import { VideoHeader } from '@/components/video'
 import type { KeyMoment, PlatformAdaptation } from '@/types'
@@ -94,7 +95,7 @@ export default function VideoDetail() {
   // Delete mutation
   const deleteMutation = useMutation(
     () => videosApi.delete(videoId),
-    { onSuccess: () => navigate('/') }
+    { onSuccess: () => navigate(video?.project_id ? `/?project=${video.project_id}` : '/') }
   )
 
   // Toggle workflow mode mutation
@@ -107,15 +108,22 @@ export default function VideoDetail() {
 
   // Approve step mutation
   const approveStepMutation = useMutation(
-    ({ stepId, approved, feedback }: { stepId: number; approved: boolean; feedback?: string }) =>
+    ({ stepId, approved, feedback, stepType: _stepType }: { stepId: number; approved: boolean; feedback?: string; stepType?: string }) =>
       workflowApi.approveStep(stepId, approved, feedback),
     {
-      onSuccess: (data) => {
+      onSuccess: (data, variables) => {
         setFeedback('')
         queryClient.invalidateQueries(['video', videoId])
         // If backend signals to continue workflow (after image approval), trigger auto-generate
         if (data.data?.continue_workflow) {
           autoGenerateMutation.mutate()
+        }
+        // If rejected (regenerate), immediately trigger regeneration
+        if (!variables.approved && variables.stepType) {
+          // Small delay to let backend update complete
+          setTimeout(() => {
+            handleRegenerateStep(variables.stepType!)
+          }, 100)
         }
       }
     }
@@ -135,6 +143,7 @@ export default function VideoDetail() {
 
   // Regenerate step
   const handleRegenerateStep = async (stepType: string) => {
+    console.log('handleRegenerateStep called:', stepType, { video: !!video, regeneratingStep })
     if (!video || regeneratingStep) return
     const getStepContent = (type: string) => video.workflow_steps?.find(s => s.step_type === type)?.content
     const customPrompt = customPrompts[stepType] || undefined
@@ -163,16 +172,31 @@ export default function VideoDetail() {
           break
         }
         case 'image': {
-          // Use edited image prompt if available, otherwise use prompt_data from video
+          // Use edited image prompt if available, otherwise use prompt_data or image_prompt (for Remix)
           const originalPromptData = video.prompt_data || getStepContent('prompt')
-          const promptData = editedImagePrompt ? {
-            ...originalPromptData,
-            main_prompt: editedImagePrompt.main_prompt,
-            negative_prompt: editedImagePrompt.negative_prompt,
-            style_suffix: editedImagePrompt.style_suffix
-          } : originalPromptData
           const aspectRatio = video.project?.aspect_ratio || '9:16'
-          if (promptData) await workflowApi.generateImage(videoId, promptData, aspectRatio)
+          const isRemix = video.project?.project_type === 'remix'
+          console.log('Regenerate image:', { originalPromptData: !!originalPromptData, imagePrompt: video.image_prompt?.substring(0, 50), aspectRatio, isRemix })
+
+          // For Remix mode: always refill from template unless user edited the prompt
+          if (isRemix && !editedImagePrompt) {
+            // Pass empty prompt and refillFromTemplate=true to get fresh template from project
+            console.log('Remix mode: refilling from project template')
+            await workflowApi.generateImage(videoId, '', aspectRatio, 'std', true)
+          } else if (!originalPromptData && video.image_prompt) {
+            // Fallback for remix with edited prompt
+            const prompt = editedImagePrompt?.main_prompt || video.image_prompt
+            console.log('Using image_prompt for Remix:', prompt.substring(0, 50))
+            await workflowApi.generateImage(videoId, prompt, aspectRatio)
+          } else if (originalPromptData || editedImagePrompt) {
+            const promptData = editedImagePrompt ? {
+              ...originalPromptData,
+              main_prompt: editedImagePrompt.main_prompt,
+              negative_prompt: editedImagePrompt.negative_prompt,
+              style_suffix: editedImagePrompt.style_suffix
+            } : originalPromptData
+            if (promptData) await workflowApi.generateImage(videoId, promptData, aspectRatio)
+          }
           // Clear edited prompt after generation
           setEditedImagePrompt(null)
           break
@@ -245,11 +269,32 @@ export default function VideoDetail() {
   const renderStepContent = (stepType: string, content: Record<string, any> | null) => {
     if (!content) return <p className="text-gray-500 italic">No content</p>
 
+    // Check if feedback was applied during regeneration
+    const feedbackHistory: string[] = content._meta?.feedback_history || []
+    const iterationCount = feedbackHistory.length
+    const FeedbackBadge = iterationCount > 0 ? (
+      <div className="mb-2 group relative">
+        <div className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full cursor-help">
+          <MessageCircle className="h-3 w-3 mr-1" />
+          {iterationCount === 1 ? 'Feedback applied' : `${iterationCount} feedback iterations`}
+        </div>
+        {/* Tooltip with feedback history */}
+        <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg">
+          {feedbackHistory.map((fb, i) => (
+            <div key={i} className={i > 0 ? 'mt-1 pt-1 border-t border-gray-600' : ''}>
+              <span className="text-blue-300">#{i + 1}:</span> {fb}
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null
+
     try {
       switch (stepType.toLowerCase()) {
         case 'story':
           return (
             <div className="space-y-2">
+              {FeedbackBadge}
               {content.concept && <div><span className="font-medium">Concept:</span> {content.concept}</div>}
               {content.hook && <div><span className="font-medium">Hook:</span> {content.hook} <span className="text-gray-500">({content.hook_type})</span></div>}
               {content.climax && <div><span className="font-medium">Climax:</span> {content.climax}</div>}
@@ -262,6 +307,7 @@ export default function VideoDetail() {
         case 'description':
           return (
             <div className="space-y-2">
+              {FeedbackBadge}
               {content.scene_summary && <div><span className="font-medium">Scene:</span> {content.scene_summary}</div>}
               {content.main_subject?.description && <div><span className="font-medium">Main Subject:</span> {content.main_subject.description}</div>}
               {content.environment && (
@@ -290,6 +336,7 @@ export default function VideoDetail() {
         case 'prompt':
           return (
             <div className="space-y-2">
+              {FeedbackBadge}
               {content.main_prompt && <div><span className="font-medium">Prompt:</span> <span className="text-sm">{content.main_prompt}</span></div>}
               {content.negative_prompt && <div><span className="font-medium">Negative:</span> <span className="text-sm text-gray-600">{content.negative_prompt}</span></div>}
               {content.style_keywords && <div><span className="font-medium">Style:</span> {Array.isArray(content.style_keywords) ? content.style_keywords.join(', ') : content.style_keywords}</div>}
@@ -311,6 +358,7 @@ export default function VideoDetail() {
         case 'scenario':
           return (
             <div className="space-y-2">
+              {FeedbackBadge}
               {content.motion_prompt && <div><span className="font-medium">Motion:</span> <span className="text-sm">{content.motion_prompt}</span></div>}
               {content.camera_movement && (
                 <div>
@@ -352,14 +400,17 @@ export default function VideoDetail() {
         case 'adaptation':
           return (
             <div className="space-y-2">
-              {Object.entries(content).map(([platform, data]: [string, PlatformAdaptation | undefined]) => (
-                <div key={platform} className="border-l-2 border-purple-300 pl-3">
-                  <div className="font-medium capitalize">{platform}</div>
-                  {data?.title && <div className="text-sm"><span className="text-gray-500">Title:</span> {data.title}</div>}
-                  {data?.description && <div className="text-sm"><span className="text-gray-500">Description:</span> {data.description}</div>}
-                  {data?.hashtags && <div className="text-sm"><span className="text-gray-500">Hashtags:</span> {data.hashtags}</div>}
-                </div>
-              ))}
+              {FeedbackBadge}
+              {Object.entries(content)
+                .filter(([key]) => key !== '_meta')
+                .map(([platform, data]: [string, PlatformAdaptation | undefined]) => (
+                  <div key={platform} className="border-l-2 border-purple-300 pl-3">
+                    <div className="font-medium capitalize">{platform}</div>
+                    {data?.title && <div className="text-sm"><span className="text-gray-500">Title:</span> {data.title}</div>}
+                    {data?.description && <div className="text-sm"><span className="text-gray-500">Description:</span> {data.description}</div>}
+                    {data?.hashtags && <div className="text-sm"><span className="text-gray-500">Hashtags:</span> {data.hashtags}</div>}
+                  </div>
+                ))}
             </div>
           )
         default:
@@ -403,12 +454,17 @@ export default function VideoDetail() {
     const st = s.status?.toLowerCase()
     return st === 'awaiting_approval' || st === 'in_progress'
   })
-  const failedStep = steps.find(s => s.status?.toLowerCase() === 'failed')
+  const pendingSteps = steps.filter(s => s.status?.toLowerCase() === 'pending')
+  // Only show failed step if there's no pending step of the same type (pending supersedes failed)
+  const failedStep = steps.find(s => {
+    if (s.status?.toLowerCase() !== 'failed') return false
+    const hasPendingOfSameType = pendingSteps.some(p => p.step_type === s.step_type)
+    return !hasPendingOfSameType
+  })
   const completedSteps = steps.filter(s => {
     const st = s.status?.toLowerCase()
     return st === 'approved' || st === 'completed'
   })
-  const pendingSteps = steps.filter(s => s.status?.toLowerCase() === 'pending')
   // Remix: Image → Video → Audio (3 steps)
   // Discover: Story → Description → Prompt → Image → Scenario → Video → Audio → Adaptation → Publishing (9 steps)
   const isRemix = video.project?.project_type === 'remix'
@@ -445,7 +501,7 @@ export default function VideoDetail() {
                       controls
                       className="w-full h-full object-contain"
                     />
-                    {video.video_with_audio_url && (
+                    {video.video_with_audio_url && video.video_with_audio_url !== video.video_url && (
                       <div className="absolute bottom-2 left-2">
                         <span className="px-2 py-1 bg-green-500 text-white text-xs rounded flex items-center">
                           <Volume2 className="h-3 w-3 mr-1" />
@@ -457,29 +513,25 @@ export default function VideoDetail() {
                 )}
               </div>
 
-              {/* Publishing Status */}
-              <div className="flex flex-col justify-center">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Published to:</h3>
-                <div className="space-y-3">
-                  {video.project?.platforms?.map((platform: string) => (
-                    <div key={platform} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
-                        <span className="font-medium">
-                          {platform === 'instagram' ? 'Instagram Reels' :
-                           platform === 'tiktok' ? 'TikTok' : 'YouTube Shorts'}
-                        </span>
-                      </div>
-                      <a href="#" className="text-purple-600 hover:text-purple-700 text-sm flex items-center">
-                        Open <ExternalLink className="h-3 w-3 ml-1" />
-                      </a>
-                    </div>
-                  ))}
-                </div>
+              {/* Publishing Metadata & Settings */}
+              <div className="flex flex-col">
+                {/* Meta Editor */}
+                <PublishingMetaEditor
+                  videoId={videoId}
+                  platforms={video.project?.platforms || []}
+                  initialMeta={video.publishing_meta || video.adaptation_data || null}
+                />
 
-                <button className="mt-6 w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-purple-400 hover:text-purple-600 transition">
-                  + Publish to more platforms
-                </button>
+                {/* Publishing */}
+                <div className="mt-4">
+                  <PublishingSettings
+                    videoId={videoId}
+                    publishingStepId={0}
+                    adaptationData={video.publishing_meta || video.adaptation_data || {}}
+                    platforms={video.project?.platforms || []}
+                    videoUrl={video.video_with_audio_url || video.video_url || ''}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -934,13 +986,14 @@ export default function VideoDetail() {
                         onClick={() => approveStepMutation.mutate({
                           stepId: currentStep.id,
                           approved: false,
-                          feedback
+                          feedback,
+                          stepType: currentStep.step_type
                         })}
-                        disabled={approveStepMutation.isLoading}
+                        disabled={approveStepMutation.isLoading || !!regeneratingStep}
                         className="flex-1 flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
                       >
                         <RotateCcw className="h-5 w-5 mr-2" />
-                        Regenerate
+                        {regeneratingStep === currentStep.step_type ? 'Regenerating...' : 'Regenerate'}
                       </button>
                     </div>
                   </div>

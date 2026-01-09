@@ -66,7 +66,8 @@ class Video(Base):
     video_task_id = Column(String(255), nullable=True)  # KLING task ID for audio generation
     audio_variants = Column(JSON, nullable=True)  # List of 4 video URLs with different audio
     video_with_audio_url = Column(Text, nullable=True)  # Selected video with audio
-    adaptation_data = Column(JSON, nullable=True)
+    adaptation_data = Column(JSON, nullable=True)  # Deprecated: use publishing_meta
+    publishing_meta = Column(JSON, nullable=True)  # {title, description, hashtags} per platform
 
     # State
     current_step = Column(SQLEnum(StepType), default=StepType.STORY)
