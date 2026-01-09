@@ -69,5 +69,4 @@ celerybeat.pid
 # Redis
 dump.rdb
 
-# Tasks (temporary)
-tasks/
+# Tasks - tracked for project planning
