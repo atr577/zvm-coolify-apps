@@ -5,7 +5,7 @@ import {
   ArrowLeft, Settings, Trash2, CheckCircle, XCircle, Clock,
   ChevronDown, ChevronRight, ThumbsUp, RotateCcw,
   Play, ExternalLink, Loader2, Volume2, Eye, Heart, MessageCircle, Share2,
-  Star, RefreshCw, TrendingUp
+  Star, RefreshCw, TrendingUp, Youtube, Instagram, Music2
 } from 'lucide-react'
 import { videosApi, workflowApi, metricsApi } from '@/services/api'
 import PublishingSettings from '@/components/PublishingSettings'
@@ -565,35 +565,86 @@ export default function VideoDetail() {
                   </div>
                 )}
 
-                {/* Per Platform Table */}
+                {/* Per Period Table */}
                 {Object.keys(metricsSummary.platforms).length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">By Platform & Period</h4>
+                    <h4 className="text-sm font-medium text-gray-700 mb-3">By Period</h4>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-left text-gray-500 border-b">
-                            <th className="pb-2">Platform</th>
-                            <th className="pb-2">Period</th>
-                            <th className="pb-2 text-right">Views</th>
-                            <th className="pb-2 text-right">Likes</th>
-                            <th className="pb-2 text-right">Comments</th>
-                            <th className="pb-2 text-right">Shares</th>
+                            <th className="pb-2 w-20">Period</th>
+                            <th className="pb-2">Views</th>
+                            <th className="pb-2">Likes</th>
+                            <th className="pb-2">Comments</th>
+                            <th className="pb-2">Shares</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.entries(metricsSummary.platforms).map(([platform, periods]) =>
-                            Object.entries(periods).map(([period, m]) => (
-                              <tr key={`${platform}-${period}`} className="border-b last:border-0">
-                                <td className="py-2 capitalize">{platform}</td>
-                                <td className="py-2 text-gray-500">{period}</td>
-                                <td className="py-2 text-right">{m.views.toLocaleString()}</td>
-                                <td className="py-2 text-right">{m.likes.toLocaleString()}</td>
-                                <td className="py-2 text-right">{m.comments.toLocaleString()}</td>
-                                <td className="py-2 text-right">{m.shares.toLocaleString()}</td>
+                          {(['30m', '6h', '24h', '7d'] as const).map(period => {
+                            // Collect metrics for this period from all platforms
+                            const platformMetrics: { platform: string; views: number; likes: number; comments: number; shares: number }[] = []
+                            Object.entries(metricsSummary.platforms).forEach(([platformName, periods]) => {
+                              if (periods[period]) {
+                                const m = periods[period]
+                                platformMetrics.push({ platform: platformName, views: m.views, likes: m.likes, comments: m.comments, shares: m.shares })
+                              }
+                            })
+                            if (platformMetrics.length === 0) return null
+
+                            const PlatformIcon = ({ platform }: { platform: string }) => {
+                              if (platform === 'youtube') return <Youtube className="h-4 w-4 text-red-600 mr-1" />
+                              if (platform === 'instagram') return <Instagram className="h-4 w-4 text-pink-600 mr-1" />
+                              if (platform === 'tiktok') return <Music2 className="h-4 w-4 text-black mr-1" />
+                              return <span className="text-gray-600 mr-1">•</span>
+                            }
+
+                            return (
+                              <tr key={period} className="border-b last:border-0">
+                                <td className="py-3 font-medium text-gray-700">{period}</td>
+                                <td className="py-3">
+                                  <div className="flex flex-col gap-1">
+                                    {platformMetrics.map(m => (
+                                      <span key={m.platform} className="flex items-center">
+                                        <PlatformIcon platform={m.platform} />
+                                        <span>{m.views.toLocaleString()}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="py-3">
+                                  <div className="flex flex-col gap-1">
+                                    {platformMetrics.map(m => (
+                                      <span key={m.platform} className="flex items-center">
+                                        <PlatformIcon platform={m.platform} />
+                                        <span>{m.likes.toLocaleString()}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="py-3">
+                                  <div className="flex flex-col gap-1">
+                                    {platformMetrics.map(m => (
+                                      <span key={m.platform} className="flex items-center">
+                                        <PlatformIcon platform={m.platform} />
+                                        <span>{m.comments.toLocaleString()}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="py-3">
+                                  <div className="flex flex-col gap-1">
+                                    {platformMetrics.map(m => (
+                                      <span key={m.platform} className="flex items-center">
+                                        <PlatformIcon platform={m.platform} />
+                                        <span>{m.shares.toLocaleString()}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
                               </tr>
-                            ))
-                          )}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
