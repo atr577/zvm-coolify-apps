@@ -1,3 +1,10 @@
+# API Cache (local caching of API responses)
+backend/data/api_cache/
+generator/backend/data/api_cache/
+
+# Database files at any level
+*.db
+
 # Python
 __pycache__/
 *.py[cod]
