@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
+import logging
 from app.db.base import get_db
 from app.models.video import Video
 from app.models.project import PublishResult
@@ -8,6 +9,9 @@ from app.models.user import User, SocialAccount
 from app.schemas.publishing import PublishRequest, PublishResponse
 from app.services.social_service import social_publisher
 from app.core.deps import get_current_user
+from app.core.scheduler import schedule_metrics_for_video
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -72,6 +76,16 @@ async def publish_to_instagram(
         publish_record.post_url = result.get("post_url")
         publish_record.published_at = datetime.utcnow()
         db.commit()
+
+        # Schedule metrics fetch jobs
+        if publish_record.post_id:
+            schedule_metrics_for_video(
+                video_id=video.id,
+                platform="instagram",
+                post_id=publish_record.post_id,
+                published_at=publish_record.published_at
+            )
+            logger.info(f"Scheduled metrics jobs for video {video.id} on Instagram")
 
         return PublishResponse(
             success=True,
@@ -144,6 +158,16 @@ async def publish_to_tiktok(
         publish_record.post_id = result.get("post_id")
         publish_record.published_at = datetime.utcnow()
         db.commit()
+
+        # Schedule metrics fetch jobs
+        if publish_record.post_id:
+            schedule_metrics_for_video(
+                video_id=video.id,
+                platform="tiktok",
+                post_id=publish_record.post_id,
+                published_at=publish_record.published_at
+            )
+            logger.info(f"Scheduled metrics jobs for video {video.id} on TikTok")
 
         return PublishResponse(
             success=True,
@@ -221,6 +245,16 @@ async def publish_to_youtube(
         publish_record.post_url = result.get("post_url")
         publish_record.published_at = datetime.utcnow()
         db.commit()
+
+        # Schedule metrics fetch jobs
+        if publish_record.post_id:
+            schedule_metrics_for_video(
+                video_id=video.id,
+                platform="youtube",
+                post_id=publish_record.post_id,
+                published_at=publish_record.published_at
+            )
+            logger.info(f"Scheduled metrics jobs for video {video.id} on YouTube")
 
         return PublishResponse(
             success=True,
