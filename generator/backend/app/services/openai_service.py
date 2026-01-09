@@ -5,7 +5,8 @@ Handles all text generation and content validation
 
 from app.services.piapi_client import piapi_client, PiAPIError
 from app.core.config import settings
-from typing import Dict, Any, List
+from app.schemas.workflow import CustomPrompt
+from typing import Dict, Any, List, Optional
 import logging
 import asyncio
 import json
@@ -28,7 +29,8 @@ class OpenAIService:
         duration: int = 5,
         platforms: List[str] = None,
         additional_notes: str = None,
-        content_variables: Dict[str, Any] = None
+        content_variables: Dict[str, Any] = None,
+        custom_prompt: Optional[CustomPrompt] = None
     ) -> Dict[str, Any]:
         """
         Генерация сюжета на основе вводных от пользователя и content_variables
@@ -104,18 +106,30 @@ class OpenAIService:
 """
 
         try:
-            result = await self.client.generate_json(
-                prompt=prompt,
-                system_prompt="Ты эксперт по созданию вирального видео-контента.",
-                temperature=0.8
-            )
+            # Use custom prompt if provided
+            if custom_prompt:
+                result = await self.client.generate_json(
+                    prompt=custom_prompt.user_prompt,
+                    system_prompt=custom_prompt.system_prompt,
+                    temperature=0.8
+                )
+            else:
+                result = await self.client.generate_json(
+                    prompt=prompt,
+                    system_prompt="Ты эксперт по созданию вирального видео-контента.",
+                    temperature=0.8
+                )
             logger.info(f"Story generated successfully")
             return result
         except PiAPIError as e:
             logger.error(f"Failed to generate story: {e}")
             raise
 
-    async def generate_description(self, story_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_description(
+        self,
+        story_data: Dict[str, Any],
+        custom_prompt: Optional[CustomPrompt] = None
+    ) -> Dict[str, Any]:
         """
         Генерация детального визуального описания сцены
         Адаптируется под любой тип контента
@@ -239,18 +253,30 @@ class OpenAIService:
 """
 
         try:
-            result = await self.client.generate_json(
-                prompt=prompt,
-                system_prompt="Ты визуальный режиссёр. Твоя задача — превратить абстрактную идею в конкретное визуальное описание сцены для генерации изображения.",
-                temperature=0.7
-            )
+            # Use custom prompt if provided
+            if custom_prompt:
+                result = await self.client.generate_json(
+                    prompt=custom_prompt.user_prompt,
+                    system_prompt=custom_prompt.system_prompt,
+                    temperature=0.7
+                )
+            else:
+                result = await self.client.generate_json(
+                    prompt=prompt,
+                    system_prompt="Ты визуальный режиссёр. Твоя задача — превратить абстрактную идею в конкретное визуальное описание сцены для генерации изображения.",
+                    temperature=0.7
+                )
             logger.info(f"Description generated successfully")
             return result
         except PiAPIError as e:
             logger.error(f"Failed to generate description: {e}")
             raise
 
-    async def generate_image_prompt(self, description_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_image_prompt(
+        self,
+        description_data: Dict[str, Any],
+        custom_prompt: Optional[CustomPrompt] = None
+    ) -> Dict[str, Any]:
         """
         Создание структурированного промпта для генерации изображения
         """
@@ -289,11 +315,19 @@ class OpenAIService:
 """
 
         try:
-            result = await self.client.generate_json(
-                prompt=prompt,
-                system_prompt="Ты эксперт по промптам для AI-генерации изображений. Создавай детальные, конкретные промпты на английском.",
-                temperature=0.6
-            )
+            # Use custom prompt if provided
+            if custom_prompt:
+                result = await self.client.generate_json(
+                    prompt=custom_prompt.user_prompt,
+                    system_prompt=custom_prompt.system_prompt,
+                    temperature=0.6
+                )
+            else:
+                result = await self.client.generate_json(
+                    prompt=prompt,
+                    system_prompt="Ты эксперт по промптам для AI-генерации изображений. Создавай детальные, конкретные промпты на английском.",
+                    temperature=0.6
+                )
             logger.info(f"Image prompt generated successfully")
             return result
         except PiAPIError as e:
@@ -305,7 +339,8 @@ class OpenAIService:
         image_url: str,
         description_data: Dict[str, Any],
         story_data: Dict[str, Any] = None,
-        duration: int = 5
+        duration: int = 5,
+        custom_prompt: Optional[CustomPrompt] = None
     ) -> Dict[str, Any]:
         """
         Создание сценария движения для видео на основе описания сцены.
@@ -430,11 +465,19 @@ class OpenAIService:
 """
 
         try:
-            result = await self.client.generate_json(
-                prompt=prompt,
-                system_prompt="Ты режиссёр коротких видео. Создавай плавные, кинематографичные сценарии движения.",
-                temperature=0.7
-            )
+            # Use custom prompt if provided
+            if custom_prompt:
+                result = await self.client.generate_json(
+                    prompt=custom_prompt.user_prompt,
+                    system_prompt=custom_prompt.system_prompt,
+                    temperature=0.7
+                )
+            else:
+                result = await self.client.generate_json(
+                    prompt=prompt,
+                    system_prompt="Ты режиссёр коротких видео. Создавай плавные, кинематографичные сценарии движения.",
+                    temperature=0.7
+                )
             logger.info("Scenario generated successfully")
             return result
         except PiAPIError as e:
@@ -545,7 +588,8 @@ class OpenAIService:
     async def adapt_for_platforms(
         self,
         content_data: Dict[str, Any],
-        platforms: List[str]
+        platforms: List[str],
+        custom_prompt: Optional[CustomPrompt] = None
     ) -> Dict[str, Dict[str, str]]:
         """
         Адаптация контента для разных платформ
@@ -626,11 +670,19 @@ class OpenAIService:
 """
 
         try:
-            result = await self.client.generate_json(
-                prompt=prompt,
-                system_prompt="Ты SMM-эксперт по всем социальным платформам.",
-                temperature=0.6
-            )
+            # Use custom prompt if provided
+            if custom_prompt:
+                result = await self.client.generate_json(
+                    prompt=custom_prompt.user_prompt,
+                    system_prompt=custom_prompt.system_prompt,
+                    temperature=0.6
+                )
+            else:
+                result = await self.client.generate_json(
+                    prompt=prompt,
+                    system_prompt="Ты SMM-эксперт по всем социальным платформам.",
+                    temperature=0.6
+                )
 
             # GPT может обернуть ответ в объект типа {"platforms": {...}, "adaptations": {...}}
             # Извлекаем данные платформ

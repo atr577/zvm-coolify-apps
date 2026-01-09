@@ -52,21 +52,55 @@ export interface StoryParams {
   duration: number
   platforms?: string[]
   additional_notes?: string
+  custom_prompt?: {
+    system_prompt: string
+    user_prompt: string
+  }
+}
+
+export interface CustomPrompt {
+  system_prompt: string
+  user_prompt: string
+}
+
+export interface PreviewPromptRequest {
+  video_id: number
+  step_type: 'story' | 'description' | 'prompt' | 'scenario' | 'adaptation'
+  context?: Record<string, any>
+}
+
+export interface PreviewPromptResponse {
+  system_prompt: string
+  user_prompt: string
+  step_type: string
+  can_edit: boolean
 }
 
 // Workflow API (обновленный для video_id)
 export const workflowApi = {
+  // Preview prompt before generation
+  previewPrompt: (request: PreviewPromptRequest) =>
+    api.post<PreviewPromptResponse>('/api/workflow/preview-prompt', request),
+
   generateStory: (videoId: number, params: StoryParams) =>
     api.post('/api/workflow/generate-story', {
       video_id: videoId,
       ...params
     }),
 
-  generateDescription: (videoId: number, storyData: any) =>
-    api.post('/api/workflow/generate-description', { video_id: videoId, story_data: storyData }),
+  generateDescription: (videoId: number, storyData: any, customPrompt?: CustomPrompt) =>
+    api.post('/api/workflow/generate-description', {
+      video_id: videoId,
+      story_data: storyData,
+      custom_prompt: customPrompt
+    }),
 
-  generatePrompt: (videoId: number, descriptionData: any) =>
-    api.post('/api/workflow/generate-prompt', { video_id: videoId, description_data: descriptionData }),
+  generatePrompt: (videoId: number, descriptionData: any, customPrompt?: CustomPrompt) =>
+    api.post('/api/workflow/generate-prompt', {
+      video_id: videoId,
+      description_data: descriptionData,
+      custom_prompt: customPrompt
+    }),
 
   generateImage: (videoId: number, promptOrData: string | any, aspectRatio = '9:16', mode = 'std') =>
     api.post('/api/workflow/generate-image', {
@@ -79,11 +113,12 @@ export const workflowApi = {
       mode
     }),
 
-  generateScenario: (videoId: number, imageUrl: string, descriptionData: any) =>
+  generateScenario: (videoId: number, imageUrl: string, descriptionData: any, customPrompt?: CustomPrompt) =>
     api.post('/api/workflow/generate-scenario', {
       video_id: videoId,
       image_url: imageUrl,
-      description_data: descriptionData
+      description_data: descriptionData,
+      custom_prompt: customPrompt
     }),
 
   generateVideo: (videoId: number, imageUrl: string, scenarioData: any, duration = 5, mode = 'std') =>
@@ -105,11 +140,12 @@ export const workflowApi = {
       variant_index: variantIndex
     }),
 
-  adaptForPlatforms: (videoId: number, scenarioData: any, platforms: string[]) =>
+  adaptForPlatforms: (videoId: number, scenarioData: any, platforms: string[], customPrompt?: CustomPrompt) =>
     api.post('/api/workflow/adapt-for-platforms', {
       video_id: videoId,
       scenario_data: scenarioData,
-      platforms
+      platforms,
+      custom_prompt: customPrompt
     }),
 
   approveStep: (stepId: number, approved: boolean, feedback?: string, regenerate: boolean = true) =>

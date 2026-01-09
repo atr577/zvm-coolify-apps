@@ -60,7 +60,8 @@ export default function ProjectEdit() {
         <ProjectForm
           initialData={{
             ...project,
-            description: project.description ?? undefined
+            description: project.description ?? undefined,
+            system_prompts: project.system_prompts ?? undefined
           }}
           onSubmit={(data) => updateMutation.mutate(data)}
           onCancel={() => navigate('/')}

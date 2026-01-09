@@ -1,21 +1,53 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from 'react-query'
-import { WorkflowStep } from '@/types'
-import { ChevronDown, ChevronRight, CheckCircle, Clock, XCircle, ThumbsUp, ThumbsDown, RotateCcw, Play } from 'lucide-react'
-import { workflowApi } from '@/services/api'
+import { WorkflowStep, Video } from '@/types'
+import { ChevronDown, ChevronRight, CheckCircle, Clock, XCircle, ThumbsUp, ThumbsDown, RotateCcw, Play, Edit2 } from 'lucide-react'
+import { workflowApi, CustomPrompt } from '@/services/api'
+import PromptEditor from './PromptEditor'
 
 interface VideoWorkflowViewProps {
   steps: WorkflowStep[]
   videoId: number
+  video?: Video
   onStepApproved?: (stepId: number) => void
-  onRegenerateStep?: (stepType: string) => void
+  onRegenerateStep?: (stepType: string, customPrompt?: CustomPrompt) => void
 }
 
-export default function VideoWorkflowView({ steps, videoId, onStepApproved, onRegenerateStep }: VideoWorkflowViewProps) {
+export default function VideoWorkflowView({ steps, videoId, video, onStepApproved, onRegenerateStep }: VideoWorkflowViewProps) {
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({})
   const [feedback, setFeedback] = useState<Record<number, string>>({})
   const [lastApprovedStepId, setLastApprovedStepId] = useState<number | null>(null)
+  const [customPrompts, setCustomPrompts] = useState<Record<string, CustomPrompt | null>>({})
   const queryClient = useQueryClient()
+
+  // Handle custom prompt changes from PromptEditor
+  const handlePromptChange = (stepType: string, customPrompt: CustomPrompt | null) => {
+    setCustomPrompts(prev => ({ ...prev, [stepType]: customPrompt }))
+  }
+
+  // Get context for prompt preview based on step type
+  const getPromptContext = (stepType: string): Record<string, any> | undefined => {
+    if (!video) return undefined
+
+    switch (stepType) {
+      case 'description':
+        return { story_data: video.story_data }
+      case 'prompt':
+        return { description_data: video.description_data }
+      case 'scenario':
+        return {
+          image_url: video.image_url,
+          description_data: video.description_data
+        }
+      case 'adaptation':
+        return {
+          scenario_data: video.scenario_data,
+          platforms: video.project?.platforms
+        }
+      default:
+        return undefined
+    }
+  }
 
   // Auto-expand next step after approval
   useEffect(() => {
@@ -160,8 +192,41 @@ export default function VideoWorkflowView({ steps, videoId, onStepApproved, onRe
             {/* Expanded content */}
             {isExpanded && (
               <div className="px-4 pb-4 border-t space-y-3 mt-2">
-                {/* Prompt used */}
-                {step.prompt_used && (
+                {/* Prompt tracking info */}
+                {step.prompt_manually_edited && (
+                  <div className="flex items-center space-x-2 text-sm bg-yellow-50 p-2 rounded">
+                    <Edit2 className="h-4 w-4 text-yellow-600" />
+                    <span className="text-yellow-800 font-medium">
+                      Generated with custom prompt
+                    </span>
+                  </div>
+                )}
+
+                {/* Show original or custom prompt if available */}
+                {(step.custom_prompt || step.original_prompt) && (
+                  <div>
+                    <h5 className="text-sm font-semibold text-gray-700 mb-1">
+                      {step.prompt_manually_edited ? 'Custom Prompt Used:' : 'Prompt Used:'}
+                    </h5>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 uppercase">System:</span>
+                        <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-24">
+                          {(step.custom_prompt || step.original_prompt)?.system_prompt}
+                        </pre>
+                      </div>
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 uppercase">User:</span>
+                        <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-48">
+                          {(step.custom_prompt || step.original_prompt)?.user_prompt}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Legacy prompt_used field */}
+                {step.prompt_used && !step.original_prompt && (
                   <div>
                     <h5 className="text-sm font-semibold text-gray-700 mb-1">
                       Промпт:
@@ -261,13 +326,28 @@ export default function VideoWorkflowView({ steps, videoId, onStepApproved, onRe
                 {step.status === 'pending' && onRegenerateStep && index > 0 && (
                   steps[index - 1]?.status === 'approved' || steps[index - 1]?.status === 'completed'
                 ) && (
-                  <div className="pt-3 border-t">
+                  <div className="pt-3 border-t space-y-3">
+                    {/* Show PromptEditor for AI-generated steps */}
+                    {['story', 'description', 'prompt', 'scenario', 'adaptation'].includes(step.step_type) && (
+                      <PromptEditor
+                        videoId={videoId}
+                        stepType={step.step_type as 'story' | 'description' | 'prompt' | 'scenario' | 'adaptation'}
+                        context={getPromptContext(step.step_type)}
+                        onPromptChange={(customPrompt) => handlePromptChange(step.step_type, customPrompt)}
+                      />
+                    )}
                     <button
-                      onClick={() => onRegenerateStep(step.step_type)}
+                      onClick={() => onRegenerateStep(step.step_type, customPrompts[step.step_type] || undefined)}
                       className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition"
                     >
                       <Play className="h-4 w-4 mr-2" />
                       Generate {getStepLabel(step.step_type)}
+                      {customPrompts[step.step_type] && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-yellow-200 text-yellow-800">
+                          <Edit2 className="h-3 w-3 mr-0.5" />
+                          Custom
+                        </span>
+                      )}
                     </button>
                   </div>
                 )}

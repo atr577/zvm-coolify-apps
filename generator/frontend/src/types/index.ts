@@ -33,6 +33,12 @@ export interface ValidationResult {
   created_at: string
 }
 
+export interface PromptData {
+  system_prompt: string
+  user_prompt: string
+  temperature?: number
+}
+
 export interface WorkflowStep {
   id: number
   video_id: number
@@ -44,6 +50,9 @@ export interface WorkflowStep {
   user_approved: boolean
   user_feedback: string | null
   prompt_used: string | null
+  original_prompt: PromptData | null
+  custom_prompt: PromptData | null
+  prompt_manually_edited: boolean
   generation_time_seconds: number | null
   started_at: string | null
   completed_at: string | null
@@ -52,6 +61,15 @@ export interface WorkflowStep {
 }
 
 export type AspectRatio = '9:16' | '16:9' | '1:1'
+export type AudioMode = 'none' | 'scene' | 'music' | 'voiceover' | 'auto'
+
+export interface SystemPrompts {
+  story?: string
+  description?: string
+  prompt?: string
+  scenario?: string
+  adaptation?: string
+}
 
 export interface Project {
   id: number
@@ -62,6 +80,8 @@ export interface Project {
   platforms: string[]
   duration: number
   aspect_ratio: AspectRatio
+  audio_mode: AudioMode
+  system_prompts: SystemPrompts | null
   created_at: string
   updated_at: string
 }
@@ -73,6 +93,9 @@ export interface CreateProjectDto {
   platforms: string[]
   duration: number
   aspect_ratio?: AspectRatio
+  audio_mode?: AudioMode
+  system_prompts?: SystemPrompts
+  workspace_id?: number
 }
 
 export interface UpdateProjectDto {

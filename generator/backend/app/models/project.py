@@ -23,7 +23,8 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
-    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
 
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -35,6 +36,13 @@ class Project(Base):
     platforms = Column(JSON, nullable=False)  # ["instagram", "tiktok", "youtube"]
     duration = Column(Integer, nullable=False)  # 5, 10, 15 seconds
     aspect_ratio = Column(String(10), nullable=False, default="9:16")  # 9:16 (vertical), 16:9 (horizontal), 1:1 (square)
+
+    # Audio mode: none, scene, music, voiceover, auto
+    audio_mode = Column(String(20), nullable=False, default="auto")
+
+    # System prompts for each workflow step (optional overrides)
+    # JSON: {"story": "...", "description": "...", "prompt": "...", "scenario": "...", "adaptation": "..."}
+    system_prompts = Column(JSON, nullable=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

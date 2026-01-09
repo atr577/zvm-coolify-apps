@@ -6,6 +6,7 @@ from app.models import Project
 from app.models.user import User, WorkspaceMember
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
 from app.core.deps import get_current_user
+from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
 
 router = APIRouter()
 
@@ -41,13 +42,24 @@ async def create_project(
     if workspace_id not in workspace_ids:
         raise HTTPException(status_code=403, detail="No access to this workspace")
 
+    # Merge user-provided system_prompts with defaults
+    system_prompts = {**DEFAULT_SYSTEM_PROMPTS}
+    if project.system_prompts:
+        for key, value in project.system_prompts.items():
+            if value:  # Only override if user provided non-empty value
+                system_prompts[key] = value
+
     db_project = Project(
         name=project.name,
         description=project.description,
         story_template=project.story_template,
         platforms=project.platforms,
         duration=project.duration,
-        workspace_id=workspace_id
+        aspect_ratio=project.aspect_ratio,
+        audio_mode=project.audio_mode,
+        system_prompts=system_prompts,
+        workspace_id=workspace_id,
+        user_id=current_user.id
     )
     db.add(db_project)
     db.commit()

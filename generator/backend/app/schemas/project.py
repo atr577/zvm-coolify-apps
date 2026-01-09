@@ -1,6 +1,17 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from datetime import datetime
+
+# Audio mode options
+AudioMode = Literal["none", "scene", "music", "voiceover", "auto"]
+
+# System prompts for each workflow step
+class SystemPrompts(BaseModel):
+    story: Optional[str] = None
+    description: Optional[str] = None
+    prompt: Optional[str] = None
+    scenario: Optional[str] = None
+    adaptation: Optional[str] = None
 
 
 class ProjectBase(BaseModel):
@@ -10,6 +21,8 @@ class ProjectBase(BaseModel):
     platforms: List[str]
     duration: int
     aspect_ratio: Literal["9:16", "16:9", "1:1"] = "9:16"
+    audio_mode: AudioMode = "auto"
+    system_prompts: Optional[Dict[str, str]] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -23,11 +36,13 @@ class ProjectUpdate(BaseModel):
     platforms: Optional[List[str]] = None
     duration: Optional[int] = None
     aspect_ratio: Optional[Literal["9:16", "16:9", "1:1"]] = None
+    audio_mode: Optional[AudioMode] = None
+    system_prompts: Optional[Dict[str, str]] = None
 
 
 class ProjectResponse(ProjectBase):
     id: int
-    workspace_id: int
+    workspace_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

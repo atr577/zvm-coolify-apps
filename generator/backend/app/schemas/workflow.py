@@ -1,5 +1,36 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from enum import Enum
+
+
+class StepTypeEnum(str, Enum):
+    STORY = "story"
+    DESCRIPTION = "description"
+    PROMPT = "prompt"
+    SCENARIO = "scenario"
+    ADAPTATION = "adaptation"
+
+
+class CustomPrompt(BaseModel):
+    """Custom prompt provided by user."""
+    system_prompt: str
+    user_prompt: str
+
+
+class PreviewPromptRequest(BaseModel):
+    """Request to preview prompt before generation."""
+    video_id: int
+    step_type: StepTypeEnum
+    # Context data for building the prompt (depends on step type)
+    context: Optional[Dict[str, Any]] = None
+
+
+class PreviewPromptResponse(BaseModel):
+    """Response with prompt preview."""
+    system_prompt: str
+    user_prompt: str
+    step_type: str
+    can_edit: bool = True
 
 
 class GenerateStoryRequest(BaseModel):
@@ -12,16 +43,19 @@ class GenerateStoryRequest(BaseModel):
     platforms: Optional[List[str]] = None  # Целевые платформы
     additional_notes: Optional[str] = None  # Дополнительные указания
     content_variables: Optional[Dict[str, Any]] = None  # Переменные контента (animal, environment, etc.)
+    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
 
 
 class GenerateDescriptionRequest(BaseModel):
     video_id: int
     story_data: Dict[str, Any]  # Данные сюжета из предыдущего этапа
+    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
 
 
 class GeneratePromptRequest(BaseModel):
     video_id: int
     description_data: Dict[str, Any]  # Данные описания
+    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
 
 
 class GenerateImageRequest(BaseModel):
@@ -36,6 +70,7 @@ class GenerateScenarioRequest(BaseModel):
     video_id: int
     image_url: str
     description_data: Dict[str, Any]
+    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
 
 
 class GenerateVideoRequest(BaseModel):
@@ -60,6 +95,7 @@ class AdaptForPlatformsRequest(BaseModel):
     video_id: int
     platforms: List[str] = Field(..., min_items=1)  # ["instagram", "tiktok", "youtube"]
     scenario_data: Dict[str, Any]
+    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
 
 
 class ApprovalRequest(BaseModel):

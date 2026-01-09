@@ -27,7 +27,12 @@ class WorkflowStep(Base):
     validation_attempts = Column(Integer, default=0)
     max_validation_attempts = Column(Integer, default=3)
 
-    # Debug info
+    # Prompt tracking
+    original_prompt = Column(JSON, nullable=True)  # System-generated prompt
+    custom_prompt = Column(JSON, nullable=True)    # User-edited prompt (if modified)
+    prompt_manually_edited = Column(Boolean, default=False)
+
+    # Debug info (legacy)
     prompt_used = Column(Text, nullable=True)
     generation_time_seconds = Column(Float, nullable=True)
 

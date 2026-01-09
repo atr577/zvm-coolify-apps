@@ -5,10 +5,11 @@ import {
   ArrowLeft, Settings, Trash2, CheckCircle, XCircle, Clock,
   ChevronDown, ChevronRight, ThumbsUp, RotateCcw,
   Play, ExternalLink, Loader2, Volume2, Eye, Heart, MessageCircle, Share2,
-  Star, RefreshCw, TrendingUp, Youtube, Instagram, Music2
+  Star, RefreshCw, TrendingUp, Youtube, Instagram, Music2, Edit2
 } from 'lucide-react'
-import { videosApi, workflowApi, metricsApi } from '@/services/api'
+import { videosApi, workflowApi, metricsApi, CustomPrompt } from '@/services/api'
 import PublishingSettings from '@/components/PublishingSettings'
+import PromptEditor from '@/components/PromptEditor'
 
 function formatMetricNumber(num: number): string {
   if (num >= 1000000) {
@@ -31,6 +32,20 @@ export default function VideoDetail() {
   const [selectedAudioVariant, setSelectedAudioVariant] = useState<number | null>(null)
   const [expandedStepId, setExpandedStepId] = useState<number | null>(null)
   const [regeneratingStep, setRegeneratingStep] = useState<string | null>(null)
+  const [customPrompts, setCustomPrompts] = useState<Record<string, CustomPrompt | null>>({})
+  const [editedImagePrompt, setEditedImagePrompt] = useState<{
+    main_prompt: string
+    negative_prompt: string
+    style_suffix: string
+  } | null>(null)
+  const [editedVideoPrompt, setEditedVideoPrompt] = useState<{
+    motion_prompt: string
+  } | null>(null)
+
+  // Handle custom prompt changes from PromptEditor
+  const handlePromptChange = (stepType: string, customPrompt: CustomPrompt | null) => {
+    setCustomPrompts(prev => ({ ...prev, [stepType]: customPrompt }))
+  }
 
   const { data: video, isLoading } = useQuery(
     ['video', videoId],
@@ -63,31 +78,19 @@ export default function VideoDetail() {
     }
   )
 
-  // Auto-start generation
+  // Auto-start generation (only for AUTO mode)
+  // In MANUAL mode, we show PromptEditor and let user trigger generation
   useEffect(() => {
     if (!video) return
     const hasNoWorkflow = !video.workflow_steps || video.workflow_steps.length === 0
     if (video.status === 'pending' && hasNoWorkflow) {
-      if (video.workflow_mode === 'MANUAL') {
-        startStoryMutation.mutate()
-      } else {
+      if (video.workflow_mode !== 'MANUAL') {
+        // Only auto-generate for AUTO mode
         autoGenerateMutation.mutate()
       }
+      // For MANUAL mode, we show the "Start Story" card with PromptEditor
     }
   }, [video?.id])
-
-  // Start Story mutation
-  const startStoryMutation = useMutation(
-    () => {
-      const project = video?.project
-      return workflowApi.generateStory(videoId, {
-        theme: project?.story_template || '',
-        duration: project?.duration || 5,
-        platforms: project?.platforms || [],
-      })
-    },
-    { onSuccess: () => queryClient.invalidateQueries(['video', videoId]) }
-  )
 
   // Delete mutation
   const deleteMutation = useMutation(
@@ -131,6 +134,7 @@ export default function VideoDetail() {
   const handleRegenerateStep = async (stepType: string) => {
     if (!video || regeneratingStep) return
     const getStepContent = (type: string) => video.workflow_steps?.find(s => s.step_type === type)?.content
+    const customPrompt = customPrompts[stepType] || undefined
 
     setRegeneratingStep(stepType)
     try {
@@ -141,41 +145,58 @@ export default function VideoDetail() {
             theme: project?.story_template || '',
             duration: project?.duration || 5,
             platforms: project?.platforms || [],
+            custom_prompt: customPrompt
           })
           break
         }
         case 'description': {
           const storyData = video.story_data || getStepContent('story')
-          if (storyData) await workflowApi.generateDescription(videoId, storyData)
+          if (storyData) await workflowApi.generateDescription(videoId, storyData, customPrompt)
           break
         }
         case 'prompt': {
           const descriptionData = video.description_data || getStepContent('description')
-          if (descriptionData) await workflowApi.generatePrompt(videoId, descriptionData)
+          if (descriptionData) await workflowApi.generatePrompt(videoId, descriptionData, customPrompt)
           break
         }
         case 'image': {
-          const promptData = video.prompt_data || getStepContent('prompt')
+          // Use edited image prompt if available, otherwise use prompt_data from video
+          const originalPromptData = video.prompt_data || getStepContent('prompt')
+          const promptData = editedImagePrompt ? {
+            ...originalPromptData,
+            main_prompt: editedImagePrompt.main_prompt,
+            negative_prompt: editedImagePrompt.negative_prompt,
+            style_suffix: editedImagePrompt.style_suffix
+          } : originalPromptData
           const aspectRatio = video.project?.aspect_ratio || '9:16'
           if (promptData) await workflowApi.generateImage(videoId, promptData, aspectRatio)
+          // Clear edited prompt after generation
+          setEditedImagePrompt(null)
           break
         }
         case 'scenario': {
           const imageUrl = video.image_url
           const descriptionData = video.description_data || getStepContent('description')
-          if (imageUrl && descriptionData) await workflowApi.generateScenario(videoId, imageUrl, descriptionData)
+          if (imageUrl && descriptionData) await workflowApi.generateScenario(videoId, imageUrl, descriptionData, customPrompt)
           break
         }
         case 'video': {
           const imageUrl = video.image_url
-          const scenarioData = video.scenario_data || getStepContent('scenario')
+          const originalScenarioData = video.scenario_data || getStepContent('scenario')
+          // Use edited motion prompt if available
+          const scenarioData = editedVideoPrompt ? {
+            ...originalScenarioData,
+            motion_prompt: editedVideoPrompt.motion_prompt
+          } : originalScenarioData
           if (imageUrl && scenarioData) await workflowApi.generateVideo(videoId, imageUrl, scenarioData)
+          // Clear edited prompt after generation
+          setEditedVideoPrompt(null)
           break
         }
         case 'adaptation': {
           const scenarioData = video.scenario_data || getStepContent('scenario')
           const platforms = video.project?.platforms
-          if (scenarioData && platforms) await workflowApi.adaptForPlatforms(videoId, scenarioData, platforms)
+          if (scenarioData && platforms) await workflowApi.adaptForPlatforms(videoId, scenarioData, platforms, customPrompt)
           break
         }
         case 'audio': {
@@ -183,6 +204,8 @@ export default function VideoDetail() {
           break
         }
       }
+      // Clear custom prompt after generation
+      setCustomPrompts(prev => ({ ...prev, [stepType]: null }))
       queryClient.invalidateQueries(['video', videoId])
     } catch (error) {
       console.error('Failed to regenerate step:', error)
@@ -367,14 +390,20 @@ export default function VideoDetail() {
 
   // Current step data
   const steps = video.workflow_steps || []
-  const currentStep = steps.find(s => s.status === 'awaiting_approval' || s.status === 'in_progress')
-  const failedStep = steps.find(s => (s.status as string).toUpperCase() === 'FAILED')
-  const completedSteps = steps.filter(s => s.status === 'approved' || s.status === 'completed')
-  const pendingSteps = steps.filter(s => s.status === 'pending')
-  const totalSteps = 10
+  const currentStep = steps.find(s => {
+    const st = s.status?.toLowerCase()
+    return st === 'awaiting_approval' || st === 'in_progress'
+  })
+  const failedStep = steps.find(s => s.status?.toLowerCase() === 'failed')
+  const completedSteps = steps.filter(s => {
+    const st = s.status?.toLowerCase()
+    return st === 'approved' || st === 'completed'
+  })
+  const pendingSteps = steps.filter(s => s.status?.toLowerCase() === 'pending')
+  const totalSteps = 9
   const completedCount = completedSteps.length
-  const isCompleted = video.status === 'completed'
-  const isPublishing = video.current_step === 'publishing'
+  const isCompleted = video.status?.toLowerCase() === 'completed'
+  const isPublishing = video.current_step?.toLowerCase() === 'publishing'
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -673,12 +702,39 @@ export default function VideoDetail() {
             </button>
 
             {showAllSteps && (
-              <div className="border-t px-4 pb-4">
+              <div className="border-t">
                 {steps.map((step, index) => (
-                  <div key={step.id} className="flex items-center space-x-3 py-2 border-b last:border-0">
-                    {getStatusIcon(step.status)}
-                    <span className="text-sm text-gray-500">Step {index + 1}:</span>
-                    <span className="text-sm font-medium">{getStepLabel(step.step_type)}</span>
+                  <div key={step.id} className="border-b last:border-0">
+                    <button
+                      onClick={() => setExpandedStepId(expandedStepId === step.id ? null : step.id)}
+                      className={`w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 transition ${
+                        expandedStepId === step.id ? 'bg-gray-50' : ''
+                      }`}
+                    >
+                      {getStatusIcon(step.status)}
+                      <span className="text-sm text-gray-500 w-16">Step {index + 1}</span>
+                      <span className="text-sm font-medium text-gray-700">{getStepLabel(step.step_type)}</span>
+                      <span className="text-xs text-gray-400 capitalize ml-auto mr-2">
+                        {step.status?.toLowerCase().replace('_', ' ')}
+                      </span>
+                      {step.content && (
+                        expandedStepId === step.id
+                          ? <ChevronDown className="h-4 w-4 text-gray-400" />
+                          : <ChevronRight className="h-4 w-4 text-gray-400" />
+                      )}
+                    </button>
+                    {expandedStepId === step.id && step.content && (
+                      <div className="px-4 pb-4 pt-2 bg-gray-50 border-t">
+                        <div className="text-sm text-gray-700">
+                          {renderStepContent(step.step_type, step.content)}
+                        </div>
+                        {step.generation_time_seconds && (
+                          <div className="mt-2 text-xs text-gray-400">
+                            Generated in {step.generation_time_seconds.toFixed(1)}s
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -690,6 +746,54 @@ export default function VideoDetail() {
       {/* IN PROGRESS STATE */}
       {!isCompleted && (
         <div className="space-y-6">
+          {/* First step - Story generation for new MANUAL videos */}
+          {video.workflow_mode === 'MANUAL' && steps.length === 0 && (
+            <div className="bg-white rounded-xl shadow-lg border-2 border-purple-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b">
+                <div className="flex items-center space-x-3">
+                  <Play className="h-6 w-6 text-purple-600" />
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Step 1: Story</h2>
+                    <p className="text-sm text-gray-600">Generate the story concept</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                {/* PromptEditor for Story */}
+                <PromptEditor
+                  videoId={videoId}
+                  stepType="story"
+                  context={{
+                    theme: video.project?.story_template,
+                    duration: video.project?.duration,
+                    platforms: video.project?.platforms
+                  }}
+                  onPromptChange={(customPrompt) => handlePromptChange('story', customPrompt)}
+                  disabled={!!regeneratingStep}
+                />
+
+                <button
+                  onClick={() => handleRegenerateStep('story')}
+                  disabled={!!regeneratingStep}
+                  className="w-full flex items-center justify-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+                >
+                  {regeneratingStep === 'story' ? (
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="h-5 w-5 mr-2" />
+                  )}
+                  {regeneratingStep === 'story' ? 'Generating...' : 'Generate Story'}
+                  {customPrompts['story'] && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-200 text-yellow-800">
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      Custom
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Publishing Settings */}
           {isPublishing && video.adaptation_data && (
             <PublishingSettings
@@ -697,7 +801,7 @@ export default function VideoDetail() {
               publishingStepId={steps.find(s => s.step_type === 'publishing')?.id || 0}
               adaptationData={video.adaptation_data}
               platforms={video.project?.platforms || []}
-              videoUrl={video.video_url || ''}
+              videoUrl={video.video_with_audio_url || video.video_url || ''}
             />
           )}
 
@@ -880,14 +984,32 @@ export default function VideoDetail() {
                   </div>
                 </div>
               </div>
-              <div className="p-6">
+              <div className="p-6 space-y-4">
                 {failedStep.content && (
-                  <div className="mb-4 bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
+                  <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
                     <div className="text-sm text-gray-600">
                       {renderStepContent(failedStep.step_type, failedStep.content)}
                     </div>
                   </div>
                 )}
+
+                {/* PromptEditor for AI-generated steps */}
+                {['story', 'description', 'prompt', 'scenario', 'adaptation'].includes(failedStep.step_type) && (
+                  <PromptEditor
+                    videoId={videoId}
+                    stepType={failedStep.step_type as 'story' | 'description' | 'prompt' | 'scenario' | 'adaptation'}
+                    context={
+                      failedStep.step_type === 'description' ? { story_data: video.story_data } :
+                      failedStep.step_type === 'prompt' ? { description_data: video.description_data } :
+                      failedStep.step_type === 'scenario' ? { image_url: video.image_url, description_data: video.description_data } :
+                      failedStep.step_type === 'adaptation' ? { scenario_data: video.scenario_data, platforms: video.project?.platforms } :
+                      undefined
+                    }
+                    onPromptChange={(customPrompt) => handlePromptChange(failedStep.step_type, customPrompt)}
+                    disabled={!!regeneratingStep}
+                  />
+                )}
+
                 <button
                   onClick={() => handleRegenerateStep(failedStep.step_type)}
                   disabled={!!regeneratingStep}
@@ -899,6 +1021,12 @@ export default function VideoDetail() {
                     <RotateCcw className="h-5 w-5 mr-2" />
                   )}
                   {regeneratingStep === failedStep.step_type ? 'Regenerating...' : `Regenerate ${getStepLabel(failedStep.step_type)}`}
+                  {customPrompts[failedStep.step_type] && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-200 text-yellow-800">
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      Custom
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -906,7 +1034,7 @@ export default function VideoDetail() {
 
           {/* No current step but has pending */}
           {!currentStep && !failedStep && pendingSteps.length > 0 && !isPublishing && (
-            <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900">Next: {getStepLabel(pendingSteps[0].step_type)}</h3>
@@ -914,19 +1042,173 @@ export default function VideoDetail() {
                     {regeneratingStep === pendingSteps[0].step_type ? 'Generating...' : 'Ready to generate'}
                   </p>
                 </div>
-                <button
-                  onClick={() => handleRegenerateStep(pendingSteps[0].step_type)}
-                  disabled={!!regeneratingStep}
-                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {regeneratingStep === pendingSteps[0].step_type ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4 mr-2" />
-                  )}
-                  {regeneratingStep === pendingSteps[0].step_type ? 'Generating...' : 'Generate'}
-                </button>
               </div>
+
+              {/* PromptEditor for AI-generated steps */}
+              {['story', 'description', 'prompt', 'scenario', 'adaptation'].includes(pendingSteps[0].step_type) && (
+                <PromptEditor
+                  videoId={videoId}
+                  stepType={pendingSteps[0].step_type as 'story' | 'description' | 'prompt' | 'scenario' | 'adaptation'}
+                  context={
+                    pendingSteps[0].step_type === 'description' ? { story_data: video.story_data } :
+                    pendingSteps[0].step_type === 'prompt' ? { description_data: video.description_data } :
+                    pendingSteps[0].step_type === 'scenario' ? { image_url: video.image_url, description_data: video.description_data } :
+                    pendingSteps[0].step_type === 'adaptation' ? { scenario_data: video.scenario_data, platforms: video.project?.platforms } :
+                    undefined
+                  }
+                  onPromptChange={(customPrompt) => handlePromptChange(pendingSteps[0].step_type, customPrompt)}
+                  disabled={!!regeneratingStep}
+                />
+              )}
+
+              {/* Show editable image prompt for IMAGE step (from previous PROMPT step) */}
+              {pendingSteps[0].step_type === 'image' && video.prompt_data && (
+                <div className="border rounded-lg bg-gray-50">
+                  <div className="flex items-center justify-between p-3 border-b bg-white rounded-t-lg">
+                    <span className="text-sm font-medium text-gray-700">
+                      Image Prompt for KLING
+                    </span>
+                    {editedImagePrompt && (
+                      <div className="flex items-center space-x-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Modified
+                        </span>
+                        <button
+                          onClick={() => setEditedImagePrompt(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase mb-1 block">
+                        Main Prompt
+                      </label>
+                      <textarea
+                        value={editedImagePrompt?.main_prompt ?? video.prompt_data.main_prompt ?? ''}
+                        onChange={(e) => setEditedImagePrompt(prev => ({
+                          main_prompt: e.target.value,
+                          negative_prompt: prev?.negative_prompt ?? video.prompt_data?.negative_prompt ?? '',
+                          style_suffix: prev?.style_suffix ?? video.prompt_data?.style_suffix ?? ''
+                        }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                        rows={5}
+                        disabled={!!regeneratingStep}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase mb-1 block">
+                        Negative Prompt
+                      </label>
+                      <textarea
+                        value={editedImagePrompt?.negative_prompt ?? video.prompt_data.negative_prompt ?? ''}
+                        onChange={(e) => setEditedImagePrompt(prev => ({
+                          main_prompt: prev?.main_prompt ?? video.prompt_data?.main_prompt ?? '',
+                          negative_prompt: e.target.value,
+                          style_suffix: prev?.style_suffix ?? video.prompt_data?.style_suffix ?? ''
+                        }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-red-700"
+                        rows={2}
+                        disabled={!!regeneratingStep}
+                        placeholder="e.g. blurry, low quality, watermark..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase mb-1 block">
+                        Style Suffix
+                      </label>
+                      <textarea
+                        value={editedImagePrompt?.style_suffix ?? video.prompt_data.style_suffix ?? ''}
+                        onChange={(e) => setEditedImagePrompt(prev => ({
+                          main_prompt: prev?.main_prompt ?? video.prompt_data?.main_prompt ?? '',
+                          negative_prompt: prev?.negative_prompt ?? video.prompt_data?.negative_prompt ?? '',
+                          style_suffix: e.target.value
+                        }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                        rows={2}
+                        disabled={!!regeneratingStep}
+                        placeholder="e.g. cinematic, 8k, professional lighting..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Show editable scenario prompt for VIDEO step */}
+              {pendingSteps[0].step_type === 'video' && video.scenario_data && (
+                <div className="border rounded-lg bg-gray-50">
+                  <div className="flex items-center justify-between p-3 border-b bg-white rounded-t-lg">
+                    <span className="text-sm font-medium text-gray-700">
+                      Video Motion Prompt for KLING
+                    </span>
+                    {editedVideoPrompt && (
+                      <div className="flex items-center space-x-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Modified
+                        </span>
+                        <button
+                          onClick={() => setEditedVideoPrompt(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase mb-1 block">
+                        Motion Prompt
+                      </label>
+                      <textarea
+                        value={editedVideoPrompt?.motion_prompt ?? video.scenario_data.motion_prompt ?? ''}
+                        onChange={(e) => setEditedVideoPrompt({ motion_prompt: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                        rows={4}
+                        disabled={!!regeneratingStep}
+                      />
+                    </div>
+                    {video.scenario_data.camera_movement && (
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600 uppercase mb-1 block">
+                          Camera Movement (info)
+                        </label>
+                        <pre className="text-xs bg-white p-3 rounded border overflow-x-auto whitespace-pre-wrap text-gray-500">
+                          {typeof video.scenario_data.camera_movement === 'object'
+                            ? JSON.stringify(video.scenario_data.camera_movement, null, 2)
+                            : video.scenario_data.camera_movement}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => handleRegenerateStep(pendingSteps[0].step_type)}
+                disabled={!!regeneratingStep}
+                className="w-full flex items-center justify-center px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {regeneratingStep === pendingSteps[0].step_type ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                {regeneratingStep === pendingSteps[0].step_type ? 'Generating...' : 'Generate'}
+                {(customPrompts[pendingSteps[0].step_type] ||
+                  (pendingSteps[0].step_type === 'image' && editedImagePrompt) ||
+                  (pendingSteps[0].step_type === 'video' && editedVideoPrompt)) && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-200 text-yellow-800">
+                    <Edit2 className="h-3 w-3 mr-1" />
+                    Custom Prompt
+                  </span>
+                )}
+              </button>
             </div>
           )}
 

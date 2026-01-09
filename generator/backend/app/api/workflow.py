@@ -19,10 +19,22 @@ from app.schemas.workflow import (
     SelectAudioVariantRequest,
     AdaptForPlatformsRequest,
     ApprovalRequest,
-    AutoGenerateRequest
+    AutoGenerateRequest,
+    PreviewPromptRequest,
+    PreviewPromptResponse,
+    StepTypeEnum,
+    CustomPrompt
 )
 from app.services.openai_service import openai_service
 from app.services.kling_service import kling_service
+from app.services.prompt_builders import (
+    build_story_prompt,
+    build_description_prompt,
+    build_image_prompt_prompt,
+    build_scenario_prompt,
+    build_adaptation_prompt,
+    PromptData
+)
 
 router = APIRouter()
 
@@ -143,6 +155,110 @@ async def validate_and_save(
     return validation
 
 
+def get_effective_prompt(
+    video: Video,
+    step_type: str,
+    prompt_data: PromptData,
+    user_custom_prompt: CustomPrompt = None
+) -> CustomPrompt:
+    """
+    Get the effective prompt to use for generation.
+    Priority: user_custom_prompt > project.system_prompts > default
+    """
+    if user_custom_prompt:
+        # User explicitly edited the prompt - use it as-is
+        return user_custom_prompt
+
+    # Use system_prompt from project if available
+    project = video.project
+    system_prompt = prompt_data.system_prompt  # default from builder
+
+    if project and project.system_prompts:
+        project_system_prompt = project.system_prompts.get(step_type)
+        if project_system_prompt:
+            system_prompt = project_system_prompt
+
+    return CustomPrompt(
+        system_prompt=system_prompt,
+        user_prompt=prompt_data.user_prompt
+    )
+
+
+@router.post("/preview-prompt", response_model=PreviewPromptResponse)
+async def preview_prompt(
+    request: PreviewPromptRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Preview the prompt that will be sent to AI for a specific step.
+    User can view and optionally edit this before running generation.
+    """
+    video = db.query(Video).filter(Video.id == request.video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    verify_video_ownership(db, video, current_user)
+
+    context = request.context or {}
+
+    # Get system_prompt from project if available
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
+
+    # Build prompt based on step type
+    if request.step_type == StepTypeEnum.STORY:
+        prompt_data = build_story_prompt(
+            theme=context.get("theme"),
+            target_audience=context.get("target_audience"),
+            mood=context.get("mood"),
+            key_elements=context.get("key_elements"),
+            duration=context.get("duration", 5),
+            platforms=context.get("platforms"),
+            additional_notes=context.get("additional_notes"),
+            content_variables=context.get("content_variables") or video.content_variables,
+            system_prompt=project_prompts.get("story")
+        )
+    elif request.step_type == StepTypeEnum.DESCRIPTION:
+        story_data = context.get("story_data") or video.story_data
+        if not story_data:
+            raise HTTPException(status_code=400, detail="story_data required for description prompt")
+        prompt_data = build_description_prompt(story_data, system_prompt=project_prompts.get("description"))
+    elif request.step_type == StepTypeEnum.PROMPT:
+        description_data = context.get("description_data") or video.description_data
+        if not description_data:
+            raise HTTPException(status_code=400, detail="description_data required for prompt generation")
+        prompt_data = build_image_prompt_prompt(description_data, system_prompt=project_prompts.get("prompt"))
+    elif request.step_type == StepTypeEnum.SCENARIO:
+        image_url = context.get("image_url") or video.image_url
+        description_data = context.get("description_data") or video.description_data
+        if not image_url or not description_data:
+            raise HTTPException(status_code=400, detail="image_url and description_data required for scenario")
+        prompt_data = build_scenario_prompt(
+            image_url=image_url,
+            description_data=description_data,
+            story_data=video.story_data,
+            duration=video.project.duration if video.project else 5,
+            system_prompt=project_prompts.get("scenario")
+        )
+    elif request.step_type == StepTypeEnum.ADAPTATION:
+        platforms = context.get("platforms") or video.project.platforms if video.project else ["instagram"]
+        full_context = {
+            "story": video.story_data,
+            "scenario": context.get("scenario_data") or video.scenario_data
+        }
+        prompt_data = build_adaptation_prompt(full_context, platforms, system_prompt=project_prompts.get("adaptation"))
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown step type: {request.step_type}")
+
+    return PreviewPromptResponse(
+        system_prompt=prompt_data.system_prompt,
+        user_prompt=prompt_data.user_prompt,
+        step_type=request.step_type.value,
+        can_edit=True
+    )
+
+
 @router.post("/generate-story")
 async def generate_story(
     request: GenerateStoryRequest,
@@ -161,8 +277,39 @@ async def generate_story(
     # Берём content_variables из запроса или из video
     content_variables = request.content_variables or video.content_variables
 
+    # Get system_prompt from project
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
+
+    # Build original prompt for tracking (with project's system_prompt)
+    original_prompt_data = build_story_prompt(
+        theme=request.theme,
+        target_audience=request.target_audience,
+        mood=request.mood,
+        key_elements=request.key_elements,
+        duration=request.duration,
+        platforms=request.platforms,
+        additional_notes=request.additional_notes,
+        content_variables=content_variables,
+        system_prompt=project_prompts.get("story")
+    )
+
+    # Get effective prompt (user custom > project > default)
+    effective_prompt = get_effective_prompt(video, "story", original_prompt_data, request.custom_prompt)
+
+    # Save prompt tracking data
+    step.original_prompt = original_prompt_data.to_dict()
+    if request.custom_prompt:
+        step.custom_prompt = {
+            "system_prompt": request.custom_prompt.system_prompt,
+            "user_prompt": request.custom_prompt.user_prompt
+        }
+        step.prompt_manually_edited = True
+    else:
+        step.prompt_manually_edited = False
+
     try:
-        # Генерируем сюжет
+        # Генерируем сюжет (always use effective_prompt)
         story_data = await openai_service.generate_story(
             theme=request.theme,
             target_audience=request.target_audience,
@@ -171,7 +318,8 @@ async def generate_story(
             duration=request.duration,
             platforms=request.platforms,
             additional_notes=request.additional_notes,
-            content_variables=content_variables
+            content_variables=content_variables,
+            custom_prompt=effective_prompt
         )
         step.content = story_data
         video.story_data = story_data
@@ -184,6 +332,7 @@ async def generate_story(
         return {
             "step_id": step.id,
             "content": story_data,
+            "prompt_manually_edited": step.prompt_manually_edited,
             "validation": {
                 "status": validation.status.value,
                 "score": validation.score,
@@ -214,9 +363,33 @@ async def generate_description(
 
     step = get_or_create_step(db, video.id, StepType.DESCRIPTION)
 
+    # Get system_prompt from project
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
+
+    # Build original prompt for tracking
+    original_prompt_data = build_description_prompt(request.story_data, system_prompt=project_prompts.get("description"))
+
+    # Get effective prompt
+    effective_prompt = get_effective_prompt(video, "description", original_prompt_data, request.custom_prompt)
+
+    # Save prompt tracking data
+    step.original_prompt = original_prompt_data.to_dict()
+    if request.custom_prompt:
+        step.custom_prompt = {
+            "system_prompt": request.custom_prompt.system_prompt,
+            "user_prompt": request.custom_prompt.user_prompt
+        }
+        step.prompt_manually_edited = True
+    else:
+        step.prompt_manually_edited = False
+
     try:
         # Генерируем описание
-        description_data = await openai_service.generate_description(request.story_data)
+        description_data = await openai_service.generate_description(
+            request.story_data,
+            custom_prompt=effective_prompt
+        )
         step.content = description_data
         video.description_data = description_data
         video.current_step = StepType.DESCRIPTION
@@ -229,6 +402,7 @@ async def generate_description(
         return {
             "step_id": step.id,
             "content": description_data,
+            "prompt_manually_edited": step.prompt_manually_edited,
             "validation": {
                 "status": validation.status.value,
                 "score": validation.score,
@@ -258,9 +432,33 @@ async def generate_prompt(
 
     step = get_or_create_step(db, video.id, StepType.PROMPT)
 
+    # Get system_prompt from project
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
+
+    # Build original prompt for tracking
+    original_prompt_data = build_image_prompt_prompt(request.description_data, system_prompt=project_prompts.get("prompt"))
+
+    # Get effective prompt
+    effective_prompt = get_effective_prompt(video, "prompt", original_prompt_data, request.custom_prompt)
+
+    # Save prompt tracking data
+    step.original_prompt = original_prompt_data.to_dict()
+    if request.custom_prompt:
+        step.custom_prompt = {
+            "system_prompt": request.custom_prompt.system_prompt,
+            "user_prompt": request.custom_prompt.user_prompt
+        }
+        step.prompt_manually_edited = True
+    else:
+        step.prompt_manually_edited = False
+
     try:
         # Генерируем промпт (теперь возвращает dict с main_prompt, negative_prompt, etc.)
-        prompt_data = await openai_service.generate_image_prompt(request.description_data)
+        prompt_data = await openai_service.generate_image_prompt(
+            request.description_data,
+            custom_prompt=effective_prompt
+        )
         step.content = prompt_data
         video.prompt_data = prompt_data
         video.image_prompt = prompt_data.get("main_prompt", "")  # legacy field
@@ -274,6 +472,7 @@ async def generate_prompt(
         return {
             "step_id": step.id,
             "content": prompt_data,
+            "prompt_manually_edited": step.prompt_manually_edited,
             "validation": {
                 "status": validation.status.value,
                 "score": validation.score,
@@ -361,16 +560,41 @@ async def generate_scenario(
 
     step = get_or_create_step(db, video.id, StepType.SCENARIO)
 
-    try:
-        # Получаем duration из проекта
-        project = video.project
+    # Получаем duration и system_prompts из проекта
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
 
+    # Build original prompt for tracking
+    original_prompt_data = build_scenario_prompt(
+        image_url=request.image_url,
+        description_data=request.description_data,
+        story_data=video.story_data,
+        duration=project.duration,
+        system_prompt=project_prompts.get("scenario")
+    )
+
+    # Get effective prompt
+    effective_prompt = get_effective_prompt(video, "scenario", original_prompt_data, request.custom_prompt)
+
+    # Save prompt tracking data
+    step.original_prompt = original_prompt_data.to_dict()
+    if request.custom_prompt:
+        step.custom_prompt = {
+            "system_prompt": request.custom_prompt.system_prompt,
+            "user_prompt": request.custom_prompt.user_prompt
+        }
+        step.prompt_manually_edited = True
+    else:
+        step.prompt_manually_edited = False
+
+    try:
         # Генерируем сценарий с vision и полным контекстом
         scenario_data = await openai_service.generate_scenario(
             image_url=request.image_url,
             description_data=request.description_data,
             story_data=video.story_data,  # Передаем story для контекста
-            duration=project.duration  # Используем duration из проекта
+            duration=project.duration,  # Используем duration из проекта
+            custom_prompt=effective_prompt
         )
         step.content = scenario_data
         video.scenario_data = scenario_data
@@ -384,6 +608,7 @@ async def generate_scenario(
         return {
             "step_id": step.id,
             "content": scenario_data,
+            "prompt_manually_edited": step.prompt_manually_edited,
             "validation": {
                 "status": validation.status.value,
                 "score": validation.score,
@@ -462,6 +687,26 @@ async def generate_audio(
         raise HTTPException(status_code=404, detail="Video not found")
 
     verify_video_ownership(db, video, current_user)
+
+    # Check project audio_mode
+    project = video.project
+    if project and project.audio_mode == "none":
+        # Skip audio generation - use video without audio
+        step = get_or_create_step(db, video.id, StepType.AUDIO)
+        step.content = {"skipped": True, "reason": "audio_mode is none"}
+        step.status = WorkflowStatus.APPROVED
+        step.user_approved = True
+        step.completed_at = datetime.utcnow()
+        video.video_with_audio_url = video.video_url  # Use original video
+        video.current_step = StepType.AUDIO
+        db.commit()
+
+        return {
+            "step_id": step.id,
+            "content": {"skipped": True},
+            "status": "skipped",
+            "message": "Audio generation skipped (audio_mode: none)"
+        }
 
     if not video.video_task_id:
         raise HTTPException(
@@ -593,19 +838,41 @@ async def adapt_for_platforms(
 
     step = get_or_create_step(db, video.id, StepType.ADAPTATION)
 
-    try:
-        # Собираем полный контекст для адаптации
-        full_context = {
-            "story": video.story_data,
-            "scenario": request.scenario_data,
-            "image_url": video.image_url,
-            "video_url": video.video_url
-        }
+    # Get system_prompt from project
+    project = video.project
+    project_prompts = project.system_prompts if project and project.system_prompts else {}
 
+    # Собираем полный контекст для адаптации
+    full_context = {
+        "story": video.story_data,
+        "scenario": request.scenario_data,
+        "image_url": video.image_url,
+        "video_url": video.video_url
+    }
+
+    # Build original prompt for tracking
+    original_prompt_data = build_adaptation_prompt(full_context, request.platforms, system_prompt=project_prompts.get("adaptation"))
+
+    # Get effective prompt
+    effective_prompt = get_effective_prompt(video, "adaptation", original_prompt_data, request.custom_prompt)
+
+    # Save prompt tracking data
+    step.original_prompt = original_prompt_data.to_dict()
+    if request.custom_prompt:
+        step.custom_prompt = {
+            "system_prompt": request.custom_prompt.system_prompt,
+            "user_prompt": request.custom_prompt.user_prompt
+        }
+        step.prompt_manually_edited = True
+    else:
+        step.prompt_manually_edited = False
+
+    try:
         # Адаптируем контент с полным контекстом
         adaptation_data = await openai_service.adapt_for_platforms(
             full_context,
-            request.platforms
+            request.platforms,
+            custom_prompt=effective_prompt
         )
         step.content = adaptation_data
         video.adaptation_data = adaptation_data
@@ -619,6 +886,7 @@ async def adapt_for_platforms(
         return {
             "step_id": step.id,
             "content": adaptation_data,
+            "prompt_manually_edited": step.prompt_manually_edited,
             "validation": {
                 "status": validation.status.value,
                 "score": validation.score
@@ -679,34 +947,52 @@ async def approve_step(
 
         # Special handling for VIDEO step approval
         if step.step_type == StepType.VIDEO:
-            # После Video идёт Audio (генерация 4 вариантов)
-            if not video.video_task_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Video task_id not found. Cannot generate audio."
+            # Check project audio_mode
+            project = video.project
+            if project and project.audio_mode == "none":
+                # Skip audio generation - go directly to ADAPTATION
+                audio_step = WorkflowStep(
+                    video_id=video.id,
+                    step_type=StepType.AUDIO,
+                    status=WorkflowStatus.APPROVED,
+                    user_approved=True,
+                    started_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
+                    content={"skipped": True, "reason": "audio_mode is none"}
                 )
+                db.add(audio_step)
+                video.video_with_audio_url = video.video_url  # Use original video
+                video.current_step = StepType.AUDIO
+                db.commit()
+            else:
+                # После Video идёт Audio (генерация 4 вариантов)
+                if not video.video_task_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Video task_id not found. Cannot generate audio."
+                    )
 
-            audio_step = WorkflowStep(
-                video_id=video.id,
-                step_type=StepType.AUDIO,
-                status=WorkflowStatus.IN_PROGRESS,
-                started_at=datetime.utcnow()
-            )
-            db.add(audio_step)
-            db.commit()
-            db.refresh(audio_step)
+                audio_step = WorkflowStep(
+                    video_id=video.id,
+                    step_type=StepType.AUDIO,
+                    status=WorkflowStatus.IN_PROGRESS,
+                    started_at=datetime.utcnow()
+                )
+                db.add(audio_step)
+                db.commit()
+                db.refresh(audio_step)
 
-            # Генерируем 4 варианта аудио
-            audio_variants = await kling_service.add_audio_to_video(video.video_task_id)
+                # Генерируем 4 варианта аудио
+                audio_variants = await kling_service.add_audio_to_video(video.video_task_id)
 
-            audio_step.content = {"audio_variants": audio_variants}
-            audio_step.status = WorkflowStatus.AWAITING_APPROVAL
-            audio_step.completed_at = datetime.utcnow()
-            audio_step.generation_time_seconds = (datetime.utcnow() - audio_step.started_at).total_seconds()
+                audio_step.content = {"audio_variants": audio_variants}
+                audio_step.status = WorkflowStatus.AWAITING_APPROVAL
+                audio_step.completed_at = datetime.utcnow()
+                audio_step.generation_time_seconds = (datetime.utcnow() - audio_step.started_at).total_seconds()
 
-            video.audio_variants = audio_variants
-            video.current_step = StepType.AUDIO
-            db.commit()
+                video.audio_variants = audio_variants
+                video.current_step = StepType.AUDIO
+                db.commit()
         elif step.step_type == StepType.ADAPTATION:
             # После approve Adaptation - создаем Publishing step
             publishing_step = WorkflowStep(
@@ -726,182 +1012,33 @@ async def approve_step(
             video.status = WorkflowStatus.COMPLETED
             db.commit()
         else:
-            # For manual mode, auto-generate next step after approval
-            if video.workflow_mode == WorkflowMode.MANUAL:
-                # Auto-generate next step after approval
-                if step.step_type == StepType.STORY:
-                    # Generate Description
-                    desc_step = WorkflowStep(
+            # For MANUAL mode: create next step as PENDING (user will click Generate)
+            # For other modes: just update current_step marker
+            next_step_map = {
+                StepType.STORY: StepType.DESCRIPTION,
+                StepType.DESCRIPTION: StepType.PROMPT,
+                StepType.PROMPT: StepType.IMAGE,
+                StepType.IMAGE: StepType.SCENARIO,
+                StepType.SCENARIO: StepType.VIDEO,
+                StepType.AUDIO: StepType.ADAPTATION,
+                StepType.ADAPTATION: StepType.PUBLISHING,
+            }
+
+            if step.step_type in next_step_map:
+                next_step_type = next_step_map[step.step_type]
+
+                if video.workflow_mode == WorkflowMode.MANUAL:
+                    # Create next step as PENDING - user will trigger generation manually
+                    next_step = WorkflowStep(
                         video_id=video.id,
-                        step_type=StepType.DESCRIPTION,
-                        status=WorkflowStatus.IN_PROGRESS,
-                        started_at=datetime.utcnow()
+                        step_type=next_step_type,
+                        status=WorkflowStatus.PENDING,
+                        created_at=datetime.utcnow()
                     )
-                    db.add(desc_step)
-                    db.commit()
-                    db.refresh(desc_step)
+                    db.add(next_step)
 
-                    description_data = await openai_service.generate_description(video.story_data)
-                    desc_step.content = description_data
-                    desc_step.status = WorkflowStatus.AWAITING_APPROVAL
-                    desc_step.completed_at = datetime.utcnow()
-                    desc_step.generation_time_seconds = (datetime.utcnow() - desc_step.started_at).total_seconds()
-
-                    video.description_data = description_data
-                    video.current_step = StepType.DESCRIPTION
-                    db.commit()
-
-                elif step.step_type == StepType.DESCRIPTION:
-                    # Generate Prompt
-                    prompt_step = WorkflowStep(
-                        video_id=video.id,
-                        step_type=StepType.PROMPT,
-                        status=WorkflowStatus.IN_PROGRESS,
-                        started_at=datetime.utcnow()
-                    )
-                    db.add(prompt_step)
-                    db.commit()
-                    db.refresh(prompt_step)
-
-                    prompt_data = await openai_service.generate_image_prompt(video.description_data)
-                    prompt_step.content = prompt_data
-                    prompt_step.status = WorkflowStatus.AWAITING_APPROVAL
-                    prompt_step.completed_at = datetime.utcnow()
-                    prompt_step.generation_time_seconds = (datetime.utcnow() - prompt_step.started_at).total_seconds()
-
-                    video.prompt_data = prompt_data
-                    video.current_step = StepType.PROMPT
-                    db.commit()
-
-                elif step.step_type == StepType.PROMPT:
-                    # Generate Image
-                    image_step = WorkflowStep(
-                        video_id=video.id,
-                        step_type=StepType.IMAGE,
-                        status=WorkflowStatus.IN_PROGRESS,
-                        started_at=datetime.utcnow()
-                    )
-                    db.add(image_step)
-                    db.commit()
-                    db.refresh(image_step)
-
-                    # Используем style_suffix и negative_prompt из prompt_data
-                    # aspect_ratio берем из проекта
-                    project = video.project
-                    prompt_data = video.prompt_data or {}
-                    image_url = await kling_service.generate_image(
-                        prompt=prompt_data.get("main_prompt", ""),
-                        aspect_ratio=project.aspect_ratio,
-                        mode="std",
-                        negative_prompt=prompt_data.get("negative_prompt"),
-                        style_suffix=prompt_data.get("style_suffix")
-                    )
-                    image_step.content = {"image_url": image_url}
-                    image_step.status = WorkflowStatus.AWAITING_APPROVAL
-                    image_step.completed_at = datetime.utcnow()
-                    image_step.generation_time_seconds = (datetime.utcnow() - image_step.started_at).total_seconds()
-
-                    video.image_url = image_url
-                    video.current_step = StepType.IMAGE
-                    db.commit()
-
-                elif step.step_type == StepType.IMAGE:
-                    # Generate Scenario
-                    scenario_step = WorkflowStep(
-                        video_id=video.id,
-                        step_type=StepType.SCENARIO,
-                        status=WorkflowStatus.IN_PROGRESS,
-                        started_at=datetime.utcnow()
-                    )
-                    db.add(scenario_step)
-                    db.commit()
-                    db.refresh(scenario_step)
-
-                    project = video.project
-                    # Используем vision и передаем полный контекст
-                    scenario_data = await openai_service.generate_scenario(
-                        image_url=video.image_url,
-                        description_data=video.description_data,
-                        story_data=video.story_data,
-                        duration=project.duration
-                    )
-                    scenario_step.content = scenario_data
-                    scenario_step.status = WorkflowStatus.AWAITING_APPROVAL
-                    scenario_step.completed_at = datetime.utcnow()
-                    scenario_step.generation_time_seconds = (datetime.utcnow() - scenario_step.started_at).total_seconds()
-
-                    video.scenario_data = scenario_data
-                    video.current_step = StepType.SCENARIO
-                    db.commit()
-
-                elif step.step_type == StepType.SCENARIO:
-                    # Generate Video
-                    video_step = WorkflowStep(
-                        video_id=video.id,
-                        step_type=StepType.VIDEO,
-                        status=WorkflowStatus.IN_PROGRESS,
-                        started_at=datetime.utcnow()
-                    )
-                    db.add(video_step)
-                    db.commit()
-                    db.refresh(video_step)
-
-                    project = video.project
-                    # Use scenario motion_prompt for video generation
-                    video_prompt = (video.scenario_data.get("motion_prompt", "") or
-                                   video.scenario_data.get("scene_direction", "")) if video.scenario_data else ""
-
-                    # Преобразуем camera_movement в camera_control для KLING
-                    camera_control = build_camera_control(
-                        video.scenario_data.get("camera_movement") if video.scenario_data else None
-                    )
-
-                    video_url = await kling_service.generate_video(
-                        image_url=video.image_url,
-                        prompt=video_prompt,
-                        duration=project.duration,
-                        mode="standard",
-                        camera_control=camera_control
-                    )
-                    video_step.content = {"video_url": video_url}
-                    video_step.status = WorkflowStatus.AWAITING_APPROVAL
-                    video_step.completed_at = datetime.utcnow()
-                    video_step.generation_time_seconds = (datetime.utcnow() - video_step.started_at).total_seconds()
-
-                    video.video_url = video_url
-                    video.current_step = StepType.VIDEO
-                    db.commit()
-
-                elif step.step_type == StepType.ADAPTATION:
-                    # После Adaptation создаем Publishing step
-                    publishing_step = WorkflowStep(
-                        video_id=video.id,
-                        step_type=StepType.PUBLISHING,
-                        status=WorkflowStatus.AWAITING_APPROVAL,
-                        started_at=datetime.utcnow(),
-                        content={
-                            "message": "Configure publishing settings and select platforms"
-                        }
-                    )
-                    db.add(publishing_step)
-                    video.current_step = StepType.PUBLISHING
-                    db.commit()
-                elif step.step_type == StepType.PUBLISHING:
-                    # После approve Publishing - завершаем workflow
-                    video.status = WorkflowStatus.COMPLETED
-                    db.commit()
-            else:
-                # For non-template videos, just move to next step marker
-                next_step_map = {
-                    StepType.STORY: StepType.DESCRIPTION,
-                    StepType.DESCRIPTION: StepType.PROMPT,
-                    StepType.PROMPT: StepType.IMAGE,
-                    StepType.IMAGE: StepType.SCENARIO,
-                    StepType.SCENARIO: StepType.VIDEO,
-                    StepType.ADAPTATION: StepType.PUBLISHING,
-                }
-                if step.step_type in next_step_map:
-                    video.current_step = next_step_map[step.step_type]
+                video.current_step = next_step_type
+                db.commit()
     else:
         # Если reject с regenerate - возвращаем в PENDING, иначе REJECTED
         if request.regenerate:
@@ -1104,39 +1241,66 @@ async def auto_generate_to_video(
         video.current_step = StepType.AUDIO
         db.commit()
 
-        # Step 7: Audio (генерируем 4 варианта, юзер выберет)
-        audio_step = WorkflowStep(
-            video_id=video.id,
-            step_type=StepType.AUDIO,
-            status=WorkflowStatus.IN_PROGRESS,
-            started_at=datetime.utcnow()
-        )
-        db.add(audio_step)
-        db.commit()
-        db.refresh(audio_step)
+        # Step 7: Audio - check audio_mode
+        if project.audio_mode == "none":
+            # Skip audio generation
+            audio_step = WorkflowStep(
+                video_id=video.id,
+                step_type=StepType.AUDIO,
+                status=WorkflowStatus.APPROVED,
+                user_approved=True,
+                started_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                content={"skipped": True, "reason": "audio_mode is none"}
+            )
+            db.add(audio_step)
+            video.video_with_audio_url = video_url  # Use original video
+            video.status = WorkflowStatus.AWAITING_APPROVAL
+            db.commit()
 
-        # Генерируем 4 варианта аудио
-        audio_variants = await kling_service.add_audio_to_video(task_id)
+            total_time = (datetime.utcnow() - start_time).total_seconds()
 
-        audio_step.content = {"audio_variants": audio_variants}
-        audio_step.status = WorkflowStatus.AWAITING_APPROVAL
-        audio_step.completed_at = datetime.utcnow()
-        audio_step.generation_time_seconds = (datetime.utcnow() - audio_step.started_at).total_seconds()
+            return {
+                "video_id": video.id,
+                "message": "Video generated without audio (audio_mode: none).",
+                "total_time_seconds": total_time,
+                "steps_completed": 7,
+                "audio_skipped": True,
+                "next_action": "generate_adaptation"
+            }
+        else:
+            # Generate 4 audio variants
+            audio_step = WorkflowStep(
+                video_id=video.id,
+                step_type=StepType.AUDIO,
+                status=WorkflowStatus.IN_PROGRESS,
+                started_at=datetime.utcnow()
+            )
+            db.add(audio_step)
+            db.commit()
+            db.refresh(audio_step)
 
-        video.audio_variants = audio_variants
-        video.status = WorkflowStatus.AWAITING_APPROVAL
-        db.commit()
+            audio_variants = await kling_service.add_audio_to_video(task_id)
 
-        total_time = (datetime.utcnow() - start_time).total_seconds()
+            audio_step.content = {"audio_variants": audio_variants}
+            audio_step.status = WorkflowStatus.AWAITING_APPROVAL
+            audio_step.completed_at = datetime.utcnow()
+            audio_step.generation_time_seconds = (datetime.utcnow() - audio_step.started_at).total_seconds()
 
-        return {
-            "video_id": video.id,
-            "message": "Video generated. Please select audio variant to continue.",
-            "total_time_seconds": total_time,
-            "steps_completed": 7,
-            "audio_variants": audio_variants,
-            "next_action": "select_audio_variant"
-        }
+            video.audio_variants = audio_variants
+            video.status = WorkflowStatus.AWAITING_APPROVAL
+            db.commit()
+
+            total_time = (datetime.utcnow() - start_time).total_seconds()
+
+            return {
+                "video_id": video.id,
+                "message": "Video generated. Please select audio variant to continue.",
+                "total_time_seconds": total_time,
+                "steps_completed": 7,
+                "audio_variants": audio_variants,
+                "next_action": "select_audio_variant"
+            }
 
     except Exception as e:
         video.status = WorkflowStatus.FAILED

@@ -2,9 +2,9 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, FolderOpen, Settings, Film, AlertCircle, CheckCircle, Clock, Image, Eye, Heart, MessageCircle, Share2 } from 'lucide-react'
-import { projectsApi, videosApi } from '@/services/api'
+import { projectsApi, videosApi, workspacesApi } from '@/services/api'
 import ProjectForm from '@/components/ProjectForm'
-import type { Project, Video, CreateProjectDto, StepType } from '@/types'
+import type { Project, Video, CreateProjectDto, StepType, Workspace } from '@/types'
 
 type FilterTab = 'all' | 'in_progress' | 'published' | 'errors'
 
@@ -40,6 +40,12 @@ export default function Dashboard() {
   const { data: projects, isLoading: projectsLoading } = useQuery(
     'projects',
     () => projectsApi.list().then(res => res.data)
+  )
+
+  // Получить workspaces пользователя
+  const { data: workspaces } = useQuery<Workspace[]>(
+    'workspaces',
+    () => workspacesApi.list().then(res => res.data)
   )
 
   // Получить видео для всех проектов
@@ -89,19 +95,20 @@ export default function Dashboard() {
       })
     }
 
-    // Фильтр по статусу
+    // Фильтр по статусу (case-insensitive)
     switch (activeFilter) {
       case 'in_progress':
-        return videos.filter(v =>
-          v.status === 'pending' ||
-          v.status === 'in_progress' ||
-          v.status === 'awaiting_approval' ||
-          v.status === 'validating'
-        )
+        return videos.filter(v => {
+          const s = v.status?.toLowerCase() || ''
+          return s === 'pending' || s === 'in_progress' || s === 'awaiting_approval' || s === 'validating'
+        })
       case 'published':
-        return videos.filter(v => v.status === 'completed')
+        return videos.filter(v => v.status?.toLowerCase() === 'completed')
       case 'errors':
-        return videos.filter(v => v.status === 'failed' || v.status === 'validation_failed')
+        return videos.filter(v => {
+          const s = v.status?.toLowerCase() || ''
+          return s === 'failed' || s === 'validation_failed'
+        })
       default:
         return videos
     }
@@ -122,14 +129,15 @@ export default function Dashboard() {
 
     return {
       all: videos.length,
-      in_progress: videos.filter(v =>
-        v.status === 'pending' ||
-        v.status === 'in_progress' ||
-        v.status === 'awaiting_approval' ||
-        v.status === 'validating'
-      ).length,
-      published: videos.filter(v => v.status === 'completed').length,
-      errors: videos.filter(v => v.status === 'failed' || v.status === 'validation_failed').length
+      in_progress: videos.filter(v => {
+        const s = v.status?.toLowerCase() || ''
+        return s === 'pending' || s === 'in_progress' || s === 'awaiting_approval' || s === 'validating'
+      }).length,
+      published: videos.filter(v => v.status?.toLowerCase() === 'completed').length,
+      errors: videos.filter(v => {
+        const s = v.status?.toLowerCase() || ''
+        return s === 'failed' || s === 'validation_failed'
+      }).length
     }
   }, [allVideos, selectedProjectId])
 
@@ -316,14 +324,17 @@ export default function Dashboard() {
 
       {/* Modal: Create project */}
       {isCreatingProject && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
-            <h2 className="text-xl font-semibold mb-4">Создать проект</h2>
-            <ProjectForm
-              onSubmit={(data) => createMutation.mutate(data)}
-              onCancel={() => setIsCreatingProject(false)}
-              isLoading={createMutation.isLoading}
-            />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <h2 className="text-xl font-semibold p-6 pb-4 border-b">Создать проект</h2>
+            <div className="overflow-y-auto p-6 pt-4">
+              <ProjectForm
+                workspaces={workspaces}
+                onSubmit={(data) => createMutation.mutate(data)}
+                onCancel={() => setIsCreatingProject(false)}
+                isLoading={createMutation.isLoading}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -410,9 +421,10 @@ function getLatestMetrics(video: Video) {
 
 function VideoGridCard({ video, onClick, showProjectName, projectName }: VideoGridCardProps) {
   const stepIndex = getStepIndex(video.current_step)
-  const isInProgress = ['pending', 'in_progress', 'awaiting_approval', 'validating'].includes(video.status)
-  const isPublished = video.status === 'completed'
-  const isError = video.status === 'failed' || video.status === 'validation_failed'
+  const statusLower = video.status?.toLowerCase() || ''
+  const isInProgress = ['pending', 'in_progress', 'awaiting_approval', 'validating'].includes(statusLower)
+  const isPublished = statusLower === 'completed'
+  const isError = statusLower === 'failed' || statusLower === 'validation_failed'
   const metrics = getLatestMetrics(video)
 
   // Progress indicator dots
