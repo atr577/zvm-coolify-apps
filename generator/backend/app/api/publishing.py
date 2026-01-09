@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import List
 import logging
 from app.db.base import get_db
 from app.models.video import Video
 from app.models.project import PublishResult
-from app.models.user import User, SocialAccount
+from app.models.user import User, SocialAccount, WorkspaceMember
 from app.schemas.publishing import PublishRequest, PublishResponse
 from app.services.social_service import social_publisher
 from app.core.deps import get_current_user
@@ -16,9 +17,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def verify_video_ownership(video: Video, current_user: User):
-    """Helper to verify user owns the video"""
-    if video.project.user_id != current_user.id:
+def get_user_workspace_ids(db: Session, user_id: int) -> List[int]:
+    """Get all workspace IDs the user is a member of"""
+    memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
+    return [m.workspace_id for m in memberships]
+
+
+def verify_video_ownership(db: Session, video: Video, current_user: User):
+    """Helper to verify user has access to the video via workspace"""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+    if video.project.workspace_id not in workspace_ids:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
@@ -34,7 +42,7 @@ async def publish_to_instagram(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     # Get SocialAccount
     social_account = db.query(SocialAccount).filter(
@@ -120,7 +128,7 @@ async def publish_to_tiktok(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     social_account = db.query(SocialAccount).filter(
         SocialAccount.id == social_account_id,
@@ -201,7 +209,7 @@ async def publish_to_youtube(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     social_account = db.query(SocialAccount).filter(
         SocialAccount.id == social_account_id,
@@ -288,7 +296,7 @@ async def get_publish_status(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     publish_results = db.query(PublishResult).filter(
         PublishResult.video_id == video_id
@@ -326,7 +334,7 @@ async def retry_publish(
         raise HTTPException(status_code=404, detail="Publish result not found")
 
     video = publish_result.video
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     if publish_result.status != "failed":
         raise HTTPException(status_code=400, detail="Can only retry failed publications")

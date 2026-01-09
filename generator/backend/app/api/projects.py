@@ -3,11 +3,25 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.base import get_db
 from app.models import Project
-from app.models.user import User
+from app.models.user import User, WorkspaceMember
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
 from app.core.deps import get_current_user
 
 router = APIRouter()
+
+
+def get_user_workspace_ids(db: Session, user_id: int) -> List[int]:
+    """Get all workspace IDs the user is a member of"""
+    memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
+    return [m.workspace_id for m in memberships]
+
+
+def user_has_workspace_access(db: Session, user_id: int, workspace_id: int) -> bool:
+    """Check if user has access to a workspace"""
+    return db.query(WorkspaceMember).filter(
+        WorkspaceMember.user_id == user_id,
+        WorkspaceMember.workspace_id == workspace_id
+    ).first() is not None
 
 
 @router.post("/", response_model=ProjectResponse)
@@ -17,13 +31,23 @@ async def create_project(
     current_user: User = Depends(get_current_user)
 ):
     """Создать новый проект (template container)"""
+    # Get user's first workspace (for now, use first available workspace)
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+    if not workspace_ids:
+        raise HTTPException(status_code=400, detail="User has no workspace")
+
+    workspace_id = project.workspace_id if hasattr(project, 'workspace_id') and project.workspace_id else workspace_ids[0]
+
+    if workspace_id not in workspace_ids:
+        raise HTTPException(status_code=403, detail="No access to this workspace")
+
     db_project = Project(
         name=project.name,
         description=project.description,
         story_template=project.story_template,
         platforms=project.platforms,
         duration=project.duration,
-        user_id=current_user.id
+        workspace_id=workspace_id
     )
     db.add(db_project)
     db.commit()
@@ -38,9 +62,13 @@ async def list_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Получить список проектов текущего пользователя"""
+    """Получить список проектов из всех workspaces пользователя"""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+    if not workspace_ids:
+        return []
+
     projects = db.query(Project).filter(
-        Project.user_id == current_user.id
+        Project.workspace_id.in_(workspace_ids)
     ).offset(skip).limit(limit).all()
     return projects
 
@@ -52,9 +80,10 @@ async def get_project(
     current_user: User = Depends(get_current_user)
 ):
     """Получить проект по ID"""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.user_id == current_user.id
+        Project.workspace_id.in_(workspace_ids)
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -69,9 +98,10 @@ async def update_project(
     current_user: User = Depends(get_current_user)
 ):
     """Обновить проект (редактирование шаблона)"""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.user_id == current_user.id
+        Project.workspace_id.in_(workspace_ids)
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -92,9 +122,10 @@ async def delete_project(
     current_user: User = Depends(get_current_user)
 ):
     """Удалить проект (и все его видео через cascade)"""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.user_id == current_user.id
+        Project.workspace_id.in_(workspace_ids)
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

@@ -42,6 +42,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router)  # auth router already has prefix="/api/auth"
+app.include_router(auth.workspaces_router)  # workspaces router with prefix="/api/workspaces"
 app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
 app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=["social-accounts"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])

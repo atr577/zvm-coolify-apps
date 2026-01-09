@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import List
 from app.db.base import get_db
 from app.models.video import Video, WorkflowMode
 from app.models.workflow_step import WorkflowStep, WorkflowStatus, StepType
 from app.models.validation_result import ValidationResult, ValidationStatus
-from app.models.user import User
+from app.models.user import User, WorkspaceMember
 from app.core.deps import get_current_user
 from app.schemas.workflow import (
     GenerateStoryRequest,
@@ -56,9 +57,16 @@ def build_camera_control(camera_movement: dict) -> dict | None:
     }
 
 
-def verify_video_ownership(video: Video, current_user: User):
-    """Проверка владения видео через проект"""
-    if video.project.user_id != current_user.id:
+def get_user_workspace_ids(db: Session, user_id: int) -> List[int]:
+    """Get all workspace IDs the user is a member of"""
+    memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
+    return [m.workspace_id for m in memberships]
+
+
+def verify_video_ownership(db: Session, video: Video, current_user: User):
+    """Проверка доступа к видео через workspace"""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+    if video.project.workspace_id not in workspace_ids:
         raise HTTPException(status_code=403, detail="Access denied: you don't own this video")
 
 
@@ -146,7 +154,7 @@ async def generate_story(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.STORY)
 
@@ -202,7 +210,7 @@ async def generate_description(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.DESCRIPTION)
 
@@ -246,7 +254,7 @@ async def generate_prompt(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.PROMPT)
 
@@ -291,7 +299,7 @@ async def generate_image(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.IMAGE)
 
@@ -349,7 +357,7 @@ async def generate_scenario(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.SCENARIO)
 
@@ -401,7 +409,7 @@ async def generate_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.VIDEO)
 
@@ -453,7 +461,7 @@ async def generate_audio(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     if not video.video_task_id:
         raise HTTPException(
@@ -498,7 +506,7 @@ async def select_audio_variant(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     if not video.audio_variants:
         raise HTTPException(
@@ -581,7 +589,7 @@ async def adapt_for_platforms(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     step = get_or_create_step(db, video.id, StepType.ADAPTATION)
 
@@ -929,7 +937,7 @@ async def auto_generate_to_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    verify_video_ownership(video, current_user)
+    verify_video_ownership(db, video, current_user)
 
     project = video.project
     start_time = datetime.utcnow()

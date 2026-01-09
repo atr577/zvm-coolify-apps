@@ -3,11 +3,24 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.base import get_db
 from app.models import Video, Project
-from app.models.user import User
+from app.models.user import User, WorkspaceMember
 from app.schemas import VideoCreate, VideoUpdate, VideoResponse
 from app.core.deps import get_current_user
 
 router = APIRouter()
+
+
+def get_user_workspace_ids(db: Session, user_id: int) -> List[int]:
+    """Get all workspace IDs the user is a member of"""
+    memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
+    return [m.workspace_id for m in memberships]
+
+
+def verify_video_access(db: Session, video: Video, user_id: int):
+    """Verify user has access to video via workspace"""
+    workspace_ids = get_user_workspace_ids(db, user_id)
+    if video.project.workspace_id not in workspace_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
 
 
 @router.post("/", response_model=VideoResponse)
@@ -17,10 +30,11 @@ async def create_video(
     current_user: User = Depends(get_current_user)
 ):
     """Создать новое видео"""
-    # Проверить что проект существует и принадлежит пользователю
+    # Проверить что проект существует и у пользователя есть доступ
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
     project = db.query(Project).filter(
         Project.id == video.project_id,
-        Project.user_id == current_user.id
+        Project.workspace_id.in_(workspace_ids)
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -44,10 +58,11 @@ async def list_videos_by_project(
     current_user: User = Depends(get_current_user)
 ):
     """Получить все видео проекта"""
-    # Проверить что проект существует и принадлежит пользователю
+    # Проверить что проект существует и у пользователя есть доступ
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.user_id == current_user.id
+        Project.workspace_id.in_(workspace_ids)
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -67,9 +82,8 @@ async def get_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Проверить владение через проект
-    if video.project.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Проверить доступ через workspace
+    verify_video_access(db, video, current_user.id)
 
     return video
 
@@ -86,9 +100,8 @@ async def update_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Проверить владение через проект
-    if video.project.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Проверить доступ через workspace
+    verify_video_access(db, video, current_user.id)
 
     update_data = video_update.dict(exclude_unset=True)
     for field, value in update_data.items():
@@ -110,9 +123,8 @@ async def delete_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Проверить владение через проект
-    if video.project.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Проверить доступ через workspace
+    verify_video_access(db, video, current_user.id)
 
     db.delete(video)
     db.commit()

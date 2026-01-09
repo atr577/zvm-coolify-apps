@@ -18,12 +18,12 @@ class Project(Base):
     """
     Project = Template/Container for multiple videos
     Stores shared configuration and story template
-    Принадлежит пользователю и может использовать его SocialAccounts для публикации
+    Принадлежит workspace и может использовать SocialAccounts для публикации
     """
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -41,7 +41,7 @@ class Project(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    user = relationship("User", back_populates="projects")
+    workspace = relationship("Workspace", back_populates="projects")
     videos = relationship("Video", back_populates="project", cascade="all, delete-orphan")
     social_accounts = relationship(
         "SocialAccount",
@@ -50,7 +50,7 @@ class Project(Base):
     )
 
     def __repr__(self):
-        return f"<Project(id={self.id}, name='{self.name}', user_id={self.user_id})>"
+        return f"<Project(id={self.id}, name='{self.name}', workspace_id={self.workspace_id})>"
 
 
 class PublishResult(Base):

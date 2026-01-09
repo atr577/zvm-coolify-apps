@@ -13,7 +13,7 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    workspace_id: Optional[int] = None  # If not specified, uses user's first workspace
 
 
 class ProjectUpdate(BaseModel):
@@ -27,7 +27,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(ProjectBase):
     id: int
-    user_id: int
+    workspace_id: int
     created_at: datetime
     updated_at: datetime
 
