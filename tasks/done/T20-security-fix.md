@@ -1,13 +1,14 @@
 ---
 id: T20
 title: "Security Fix (Phase 0)"
-status: in_progress
+status: done
 priority: critical
 created: 2026-01-10
 updated: 2026-01-10
 tags: ['bugfix']
 depends_on: []
 estimate: "5h"
+actual: "4.5h"
 branch: fix/T20-security-fix
 ---
 
@@ -152,11 +153,11 @@ curl -X GET http://localhost:8000/api/metrics/leaderboard \
 
 ## Checklist
 
-- [ ] 20.1 Добавить auth во все metrics endpoints
-- [ ] 20.2 Фильтр leaderboard по workspace
-- [ ] 20.3 Ownership check при записи
-- [ ] Тесты пройдены
-- [ ] Code review
+- [x] 20.1 Добавить auth во все metrics endpoints
+- [x] 20.2 Фильтр leaderboard по workspace
+- [x] 20.3 Ownership check при записи
+- [x] Тесты пройдены (66 passed, 7 pre-existing failures)
+- [x] Code review (commit 005dc92)
 
 ---
 
