@@ -80,7 +80,7 @@ class VideoMetricsResponse(BaseModel):
     likes: int
     comments: int
     shares: int
-    engagement_rate: Optional[int] = None  # percentage * 100
+    engagement_rate: Optional[float] = None  # percentage (e.g., 5.5 = 5.5%)
     recorded_at: datetime
     is_manual: bool
 

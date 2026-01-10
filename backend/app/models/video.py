@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, Boolean, ForeignKey, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, JSON, Boolean, ForeignKey, DateTime, Enum as SQLEnum, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
@@ -119,7 +119,7 @@ class VideoMetrics(Base):
     shares = Column(Integer, default=0)
 
     # Calculated engagement rate (likes + comments + shares) / views * 100
-    engagement_rate = Column(Integer, nullable=True)  # stored as percentage * 100 (e.g., 5.5% = 550)
+    engagement_rate = Column(Float, nullable=True)  # stored as percentage (e.g., 5.5 = 5.5%)
 
     # When this snapshot was recorded
     recorded_at = Column(DateTime, default=datetime.utcnow)
