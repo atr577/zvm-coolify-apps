@@ -27,12 +27,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
-def calculate_engagement_rate(views: int, likes: int, comments: int, shares: int) -> Optional[int]:
-    """Calculate engagement rate as percentage * 100 (e.g., 5.5% = 550)"""
+def calculate_engagement_rate(views: int, likes: int, comments: int, shares: int) -> Optional[float]:
+    """Calculate engagement rate as percentage (e.g., 5.5 = 5.5%)"""
     if views == 0:
         return None
-    rate = ((likes + comments + shares) / views) * 100 * 100  # * 100 for percentage, * 100 for storage
-    return int(rate)
+    rate = ((likes + comments + shares) / views) * 100
+    return round(rate, 2)
 
 
 @router.post("/video/{video_id}", response_model=VideoMetricsResponse)
@@ -161,7 +161,7 @@ async def get_video_metrics_summary(
 
     avg_engagement = None
     if engagement_rates:
-        avg_engagement = sum(engagement_rates) / len(engagement_rates) / 100  # Convert back to percentage
+        avg_engagement = round(sum(engagement_rates) / len(engagement_rates), 2)
 
     return VideoMetricsSummary(
         video_id=video_id,
@@ -303,7 +303,7 @@ async def get_metrics_leaderboard(
         total_comments = sum(m.comments for m in metrics)
         total_shares = sum(m.shares for m in metrics)
         engagement_rates = [m.engagement_rate for m in metrics if m.engagement_rate]
-        avg_engagement = sum(engagement_rates) / len(engagement_rates) / 100 if engagement_rates else None
+        avg_engagement = round(sum(engagement_rates) / len(engagement_rates), 2) if engagement_rates else None
 
         summaries.append(VideoMetricsSummary(
             video_id=video.id,
