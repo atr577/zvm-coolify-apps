@@ -1,6 +1,8 @@
-<!-- PROJECT: RE | VERSION: 2.1 -->
+# CLAUDE.md
 
-# Claude Code Configuration
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+<!-- PROJECT: RE | VERSION: 2.2 -->
 
 ## Workflow (MANDATORY)
 
@@ -148,10 +150,10 @@ Claude: "Что именно не так?
 
 ## Project Overview
 
-REGGY - automated platform for creating short viral videos for Instagram Reels, TikTok, and YouTube Shorts using AI (GPT-5 + KLING v2.1 via AIMLAPI).
+REGGY - automated platform for creating short viral videos for Instagram Reels, TikTok, and YouTube Shorts using AI (GPT + KLING via PiAPI).
 
 **Core workflow:** 8-stage pipeline with AI self-validation and user checkpoints at each stage:
-Story → Description → Prompt → Image → Scenario → Video → Adaptation → Publishing
+Story → Description → Prompt → Image → Scenario → Video → Audio → Adaptation
 
 ## ⚠️ CRITICAL: Working with Shell & autoenv
 
@@ -262,26 +264,24 @@ npm run lint
 
 ### AI Service Layer (Critical)
 
-**Unified AIMLAPI Client** (`backend/app/services/aimlapi_client.py`):
-- Single client for both GPT-5.2 and KLING v2.1-master
+**PiAPI Client** (`backend/app/services/piapi_client.py`):
+- Single client for GPT + KLING via PiAPI provider
 - Implements retry logic with exponential backoff (3 attempts)
 - Handles rate limiting (429) and timeouts
 - Async polling for KLING video generation (up to 15 min)
 
 **OpenAI Service** (`backend/app/services/openai_service.py`):
-- All text generation uses `aimlapi_client.generate_json()` for structured output
+- All text generation uses `piapi_client.generate_json()` for structured output
 - Validation happens via `validate_content()` after each generation step
-- Returns JSON schemas defined in business logic (story schema, description schema, etc.)
 
 **KLING Service** (`backend/app/services/kling_service.py`):
-- `generate_image()` - actually uses text-to-video with 5s duration (KLING limitation)
+- `generate_image()` - uses text-to-video with 5s duration (KLING limitation)
 - `generate_video_from_image()` - image-to-video with motion control
-- Returns URLs to hosted media
 
 ### Workflow State Machine
 
-**Database models** (`backend/app/models/project.py`):
-- `Project` - tracks overall workflow state and generated content
+**Database models:**
+- `Video` (`backend/app/models/video.py`) - tracks workflow state and generated content
 - `WorkflowStep` - individual stage (STORY, DESCRIPTION, PROMPT, etc.)
 - `ValidationResult` - AI self-validation results for each step
 
@@ -292,25 +292,18 @@ PENDING → IN_PROGRESS → VALIDATING → AWAITING_APPROVAL → APPROVED → CO
                     VALIDATION_FAILED (retry up to 3x)
 ```
 
-**Critical pattern in workflow endpoints** (`backend/app/api/workflow.py`):
-1. Create WorkflowStep with status=IN_PROGRESS
-2. Call AI service (GPT or KLING)
-3. Call `validate_and_save()` helper - runs AI validation
-4. Set status to AWAITING_APPROVAL if validation passes
-5. User approves/rejects via `/approve-step` endpoint
-
 ### Configuration
 
-**All API keys via AIMLAPI** (`backend/.env`):
+**API keys via PiAPI** (`backend/.env`):
 ```
-AIMLAPI_KEY=<your-key>           # Single key for GPT + KLING
-GPT_MODEL=gpt-5.2
-KLING_MODEL=v2.1-master
+PIAPI_KEY=<your-key>             # Single key for GPT + KLING
+LLM_MODEL=gpt-4o-mini            # gpt-4o-mini, gpt-4o, claude-3-7-sonnet-20250219
+VIDEO_MODEL=kling-2.5            # kling-1.5, kling-2.1, kling-2.5, kling-2.6
 ```
 
 **Settings class** (`backend/app/core/config.py`):
 - Uses pydantic-settings
-- Required: `AIMLAPI_KEY`, `SECRET_KEY`
+- Required: `PIAPI_KEY`, `SECRET_KEY`
 - Optional: social media OAuth tokens (Instagram, TikTok, YouTube)
 
 ## Key Implementation Details
@@ -362,9 +355,9 @@ Endpoints exist in `backend/app/api/publishing.py` but tokens must be configured
 
 ## Common Gotchas
 
-### 1. AIMLAPI vs OpenAI SDK
-- **DO NOT** use `openai` package - it's removed from requirements.txt
-- All GPT calls go through `aimlapi_client.chat_completion()` (OpenAI-compatible endpoint)
+### 1. PiAPI vs OpenAI SDK
+- **DO NOT** use `openai` package directly
+- All GPT calls go through `piapi_client` (OpenAI-compatible endpoint)
 - Use `httpx` for HTTP requests, not `requests` in AI services
 
 ### 2. Async Everywhere
@@ -385,25 +378,29 @@ Endpoints exist in `backend/app/api/publishing.py` but tokens must be configured
 
 ### 5. File Storage
 - Currently local: `data/uploads/` and `data/generated/`
-- URLs stored in DB are from AIMLAPI (hosted)
+- URLs stored in DB are from PiAPI (hosted)
 - For production, implement S3 storage
 
-## Testing Strategy
-
-**No test suite currently exists.** When adding tests:
+## Testing
 
 ```bash
-# Backend tests
-cd backend
-pytest tests/
+# Run all backend tests
+backend/venv/bin/pytest
 
-# Run specific test
-pytest tests/test_workflow.py::test_generate_story
+# Run specific test file
+backend/venv/bin/pytest tests/test_workflow.py
 
-# Frontend tests
-cd frontend
-npm run test
+# Run specific test function
+backend/venv/bin/pytest tests/test_workflow.py::test_generate_story
+
+# Skip slow/integration tests
+backend/venv/bin/pytest -m "not slow"
+backend/venv/bin/pytest -m "not integration"
 ```
+
+Test markers defined in `backend/pytest.ini`:
+- `slow` - Long-running tests
+- `integration` - Tests requiring external services
 
 ## API Documentation
 
@@ -412,29 +409,13 @@ After starting backend, visit:
 - **ReDoc**: http://localhost:8000/redoc
 
 **Key endpoint groups:**
-- `/api/projects` - CRUD for projects
+- `/api/auth` - Registration, login, JWT tokens
+- `/api/workspaces` - Workspace management
+- `/api/projects` - Project templates (CRUD)
+- `/api/videos` - Individual video generation
 - `/api/workflow` - 8 generation stages + validation + approval
 - `/api/publish` - Social media publishing (requires OAuth)
-
-
-
-## Future Development Areas
-
-1. **WebSocket support** - Real-time progress updates during generation
-2. **S3 integration** - Replace local file storage
-3. **OAuth flows** - Complete social media authentication
-4. **Cost tracking** - Track AIMLAPI spend per project
-5. **Batch processing** - Queue multiple videos
-6. **Analytics** - Track viral performance post-publish
-7. **DALL-E integration** - For true static image generation
-
-## Session Context
-
-See `session-2026-01-07-001.md` for detailed development history including:
-- Why AIMLAPI was chosen over other providers
-- Evolution of story input from free-text to structured form
-- Technical decisions and trade-offs
-- Known limitations and workarounds
+- `/api/metrics` - Analytics and performance tracking
 
 ---
 
@@ -447,4 +428,4 @@ See `session-2026-01-07-001.md` for detailed development history including:
 
 ---
 
-**Updated:** 2026-01-10 | **Version:** 2.1
+**Updated:** 2026-01-10 | **Version:** 2.2
