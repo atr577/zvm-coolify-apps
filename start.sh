@@ -57,6 +57,14 @@ else
     echo -e "${GREEN}✓ Зависимости Frontend уже установлены${NC}"
 fi
 
+# Освобождаем порт 3000 если занят
+FRONTEND_PORT=3000
+if lsof -i :$FRONTEND_PORT -t > /dev/null 2>&1; then
+    echo -e "${YELLOW}Порт $FRONTEND_PORT занят, освобождаем...${NC}"
+    lsof -i :$FRONTEND_PORT -t | xargs kill -9 2>/dev/null
+    sleep 1
+fi
+
 # Запускаем Frontend в фоне
 echo -e "${YELLOW}Запуск Frontend сервера...${NC}"
 npm run dev > frontend.log 2>&1 &
@@ -66,13 +74,23 @@ echo -e "${GREEN}✓ Frontend запущен (PID: $FRONTEND_PID)${NC}"
 
 # ============ ГОТОВО ============
 echo -e "\n${GREEN}✅ Все сервисы запущены!${NC}\n"
+
+# Ждём немного чтобы Vite записал порт в лог
+sleep 2
+
+# Парсим реальный порт из логов (fallback если 3000 всё ещё занят)
+ACTUAL_PORT=$(grep -oE 'localhost:[0-9]+' "$FRONTEND_DIR/frontend.log" | head -1 | cut -d: -f2)
+if [ -z "$ACTUAL_PORT" ]; then
+    ACTUAL_PORT=$FRONTEND_PORT
+fi
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║${NC}  🌐 Backend API:                      ${BLUE}║${NC}"
 echo -e "${BLUE}║${NC}     ${GREEN}http://localhost:8000${NC}              ${BLUE}║${NC}"
 echo -e "${BLUE}║${NC}     ${GREEN}http://localhost:8000/docs${NC}        ${BLUE}║${NC}"
 echo -e "${BLUE}║${NC}                                        ${BLUE}║${NC}"
 echo -e "${BLUE}║${NC}  🎨 Frontend App:                     ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}     ${GREEN}http://localhost:3000${NC}              ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}     ${GREEN}http://localhost:${ACTUAL_PORT}${NC}              ${BLUE}║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}\n"
 
 echo -e "${YELLOW}📝 Логи:${NC}"
@@ -80,8 +98,8 @@ echo -e "   Backend:  tail -f $BACKEND_DIR/backend.log"
 echo -e "   Frontend: tail -f $FRONTEND_DIR/frontend.log"
 echo -e "\n${YELLOW}🛑 Остановка:${NC} ./stop.sh\n"
 
-# Ждем немного, чтобы серверы запустились
-sleep 3
+# Даём ещё секунду на стабилизацию
+sleep 1
 
 # Проверяем, что серверы работают
 if kill -0 $BACKEND_PID 2>/dev/null && kill -0 $FRONTEND_PID 2>/dev/null; then
