@@ -501,7 +501,8 @@ class WorkflowOrchestrator:
             ).first()
             if step:
                 step.status = WorkflowStatus.APPROVED
-            self.video.current_step = StepType.SCENARIO
+            # Remix skips scenario, goes directly to video
+            self.video.current_step = StepType.VIDEO if self.is_remix else StepType.SCENARIO
 
         self.db.commit()
         return result

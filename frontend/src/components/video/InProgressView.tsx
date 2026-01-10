@@ -67,16 +67,24 @@ export default function InProgressView({
 
   return (
     <div className="space-y-6">
-      {/* First step - Story generation for new MANUAL videos */}
+      {/* First step - Story for Discover, Image for Remix */}
       {video.workflow_mode === 'MANUAL' && steps.length === 0 && (
-        <ManualStartCard
-          video={video}
-          videoId={videoId}
-          regeneratingStep={regeneratingStep}
-          customPrompts={customPrompts}
-          onPromptChange={handlePromptChange}
-          onGenerate={() => handleRegenerateStep('story')}
-        />
+        video.project?.project_type === 'remix' ? (
+          <RemixStartCard
+            video={video}
+            regeneratingStep={regeneratingStep}
+            onGenerate={() => handleRegenerateStep('image')}
+          />
+        ) : (
+          <ManualStartCard
+            video={video}
+            videoId={videoId}
+            regeneratingStep={regeneratingStep}
+            customPrompts={customPrompts}
+            onPromptChange={handlePromptChange}
+            onGenerate={() => handleRegenerateStep('story')}
+          />
+        )
       )}
 
       {/* Publishing Settings */}
@@ -212,6 +220,51 @@ function ManualStartCard({
               Custom
             </span>
           )}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Remix Start Card (starts at Image, not Story)
+function RemixStartCard({
+  video,
+  regeneratingStep,
+  onGenerate
+}: {
+  video: Video
+  regeneratingStep: string | null
+  onGenerate: () => void
+}) {
+  return (
+    <div className="bg-white rounded-xl shadow-lg border-2 border-purple-200 overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b">
+        <div className="flex items-center space-x-3">
+          <Play className="h-6 w-6 text-purple-600" />
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Step 1: Image</h2>
+            <p className="text-sm text-gray-600">Generate image from template</p>
+          </div>
+        </div>
+      </div>
+      <div className="p-6 space-y-4">
+        {video.image_prompt && (
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">Image Prompt:</p>
+            <p className="text-sm text-gray-600">{video.image_prompt}</p>
+          </div>
+        )}
+        <button
+          onClick={onGenerate}
+          disabled={!!regeneratingStep}
+          className="w-full flex items-center justify-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+        >
+          {regeneratingStep === 'image' ? (
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+          ) : (
+            <Play className="h-5 w-5 mr-2" />
+          )}
+          {regeneratingStep === 'image' ? 'Generating...' : 'Generate Image'}
         </button>
       </div>
     </div>

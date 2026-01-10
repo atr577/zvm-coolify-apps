@@ -13,16 +13,27 @@ from app.models.workflow_step import WorkflowStep, WorkflowStatus, StepType
 from app.services.kling_service import kling_service
 
 
-# Map current step to next step
-NEXT_STEP_MAP = {
+# Map current step to next step (Discover mode)
+DISCOVER_NEXT_STEP = {
     StepType.STORY: StepType.DESCRIPTION,
     StepType.DESCRIPTION: StepType.PROMPT,
     StepType.PROMPT: StepType.IMAGE,
     StepType.IMAGE: StepType.SCENARIO,
     StepType.SCENARIO: StepType.VIDEO,
+    StepType.VIDEO: StepType.AUDIO,
     StepType.AUDIO: StepType.ADAPTATION,
     StepType.ADAPTATION: StepType.PUBLISHING,
 }
+
+# Remix mode: IMAGE → VIDEO → AUDIO (no text steps, no scenario, no adaptation)
+REMIX_NEXT_STEP = {
+    StepType.IMAGE: StepType.VIDEO,
+    StepType.VIDEO: StepType.AUDIO,
+    # AUDIO is final for Remix
+}
+
+# Legacy alias
+NEXT_STEP_MAP = DISCOVER_NEXT_STEP
 
 
 class ApprovalHandler:
@@ -162,7 +173,9 @@ class ApprovalHandler:
     def _handle_image_approval(self) -> Dict[str, Any] | None:
         """Handle IMAGE approval - special case for AUTO mode."""
         if self.video.workflow_mode == WorkflowMode.AUTO:
-            self.video.current_step = StepType.SCENARIO
+            # Remix skips scenario, goes directly to video
+            is_remix = self.video.project and self.video.project.project_type == "remix"
+            self.video.current_step = StepType.VIDEO if is_remix else StepType.SCENARIO
             self.video.status = WorkflowStatus.IN_PROGRESS
             self.db.commit()
             self.db.refresh(self.step)
@@ -176,10 +189,15 @@ class ApprovalHandler:
 
     def _handle_default_approval(self) -> Dict[str, Any] | None:
         """Default handler for steps with standard next-step transition."""
-        if self.step.step_type not in NEXT_STEP_MAP:
+        # Use correct step map based on project type
+        is_remix = self.video.project and self.video.project.project_type == "remix"
+        step_map = REMIX_NEXT_STEP if is_remix else DISCOVER_NEXT_STEP
+
+        if self.step.step_type not in step_map:
+            # Final step for this workflow type
             return None
 
-        next_step_type = NEXT_STEP_MAP[self.step.step_type]
+        next_step_type = step_map[self.step.step_type]
 
         if self.video.workflow_mode == WorkflowMode.MANUAL:
             next_step = WorkflowStep(
