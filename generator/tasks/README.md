@@ -26,37 +26,60 @@ tasks/
     ├── 16-prompt-preview-edit.md   # TODO
     ├── REFACTORING.md              # Meta-план
     │
-    │── [Workflow Migration - NEW]
+    │── [Workflow Migration Phase 1]
     ├── 20-security-fix.md          # P0 CRITICAL - 5h
-    ├── 21-fix-broken-features.md   # P1 HIGH - 6h
+    ├── 21-fix-broken-features.md   # P1 HIGH - 5h
     ├── 22-data-model-variants.md   # P1 HIGH - 8h
-    ├── 23-breakpoints-system.md    # P1 HIGH - 6h
+    ├── 23-breakpoints-system.md    # P1 HIGH - 7h
     ├── 24-api-unification.md       # P2 MEDIUM - 14h
     ├── 25-publishing-rollback.md   # P2 MEDIUM - 5.5h
-    └── 26-cleanup.md               # P3 LOW - 5.5h
+    ├── 26-cleanup.md               # P3 LOW - 5.5h
+    │
+    │── [Workflow Migration Phase 2 - Full TARGET Coverage]
+    ├── 27-remix-workflow.md        # P1 HIGH - 18h
+    ├── 28-concurrency-protection.md # P2 MEDIUM - 4h
+    ├── 29-error-retry-policy.md    # P2 MEDIUM - 6h
+    ├── 30-frontend-polling.md      # P2 MEDIUM - 8h
+    ├── 31-state-machine.md         # P3 LOW - 3h
+    └── 32-api-reject-endpoint.md   # P3 LOW - 2h
 ```
 
 ---
 
-## Workflow Migration (Tasks 20-26)
+## Workflow Migration (Tasks 20-32)
 
-> **Источник:** [IMPLEMENTATION_PLAN.md](../docs/IMPLEMENTATION_PLAN.md)
+> **Источник:** [IMPLEMENTATION_PLAN.md](../docs/IMPLEMENTATION_PLAN.md), [TARGET_WORKFLOW.md](../docs/TARGET_WORKFLOW.md)
 
-Миграция на новую архитектуру workflow из TARGET_WORKFLOW.md.
+Миграция на новую архитектуру workflow.
 
-### Приоритеты
+### Phase 1: Core Migration (Tasks 20-26)
 
 | Phase | Task | Описание | Effort | Зависимости |
 |-------|------|----------|--------|-------------|
 | **0** | 20-security-fix | Metrics auth fix | 5h | - |
-| **1** | 21-fix-broken-features | Engagement rate, generate_meta | 6h | Phase 0 |
+| **1** | 21-fix-broken-features | Engagement rate, generate_meta | 5h | Phase 0 |
 | **2** | 22-data-model-variants | StepAttempt → Variant hierarchy | 8h | Phase 1 |
-| **3** | 23-breakpoints-system | workflow_mode работает | 6h | Phase 2 |
+| **3** | 23-breakpoints-system | workflow_mode работает | 7h | Phase 2 |
 | **4** | 24-api-unification | Unified API pattern | 14h | Phase 2,3 |
 | **5** | 25-publishing-rollback | is_published, auto-retry | 5.5h | Phase 4 |
 | **6** | 26-cleanup | Remove deprecated code | 5.5h | Phase 5 |
 
-**Total:** ~50h
+**Subtotal Phase 1:** ~50h
+
+### Phase 2: Full TARGET Coverage (Tasks 27-32)
+
+| Task | Описание | Effort | Зависимости |
+|------|----------|--------|-------------|
+| 27-remix-workflow | Remix templates, PREPARE phase | 18h | 22, 23 |
+| 28-concurrency-protection | Race condition locks, 409 Conflict | 4h | 24 |
+| 29-error-retry-policy | Retry с backoff, timeout detection | 6h | 24 |
+| 30-frontend-polling | Polling hooks, lifecycle | 8h | 24, 22 |
+| 31-state-machine | Formal transitions, validation | 3h | 24 |
+| 32-api-reject-endpoint | POST /reject for analytics | 2h | 24 |
+
+**Subtotal Phase 2:** ~41h
+
+**Total for 100% TARGET:** ~91h
 
 ### Порядок выполнения
 
