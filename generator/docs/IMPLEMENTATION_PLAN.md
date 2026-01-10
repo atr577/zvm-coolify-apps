@@ -227,7 +227,7 @@ async def run_step(self, step_type: StepType):
 | 4.4 | Endpoint: regenerate | `workflow_v2.py` | 1h |
 | 4.5 | Endpoint: variants (GET) | `workflow_v2.py` | 1h |
 | 4.6 | Endpoint: rollback-to | `workflow_v2.py` | 2h |
-| 4.7 | Обновить frontend | `frontend/src/api/workflow.ts` | 4h |
+| 4.7 | Обновить frontend | `frontend/src/services/api.ts` | 4h |
 | 4.8 | Deprecate старые endpoints | `workflow.py` | 30m |
 
 **API Pattern:**

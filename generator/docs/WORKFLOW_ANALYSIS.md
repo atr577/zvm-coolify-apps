@@ -77,24 +77,6 @@ const { data: leaderboard } = useQuery(
 
 ---
 
-### 1.3 Variant generation endpoint не существует
-
-**Файл:** `frontend/src/pages/CreateVideo.tsx:26`
-
-**Проблема:** Frontend вызывает несуществующий endpoint.
-
-```typescript
-// CreateVideo.tsx:24-42
-const generateVariants = async (id: number) => {
-  const response = await aiApi.generateVariants(id)  // Endpoint НЕ существует в backend
-  // ...
-}
-```
-
-**Импакт:** Flow создания видео полностью сломан — пользователь видит бесконечный loading.
-
----
-
 ## 2. High Priority Issues
 
 ### 2.1 Engagement rate умножается на 100 дважды
@@ -253,23 +235,7 @@ self.step.content = content_with_meta
 
 ## 4. UX проблемы
 
-### 4.1 CreateVideo зависает на loading
-
-**Причина:** `generateVariants()` вызывает несуществующий endpoint.
-
-**Симптом:** Бесконечный spinner, нет error message.
-
----
-
-### 4.2 Нет видимого UI для approve/reject
-
-**Файл:** `frontend/src/pages/VideoDetail.tsx`
-
-**Проблема:** MANUAL workflow mode предполагает approve каждого шага, но UI для этого не очевиден.
-
----
-
-### 4.3 N+1 queries в Analytics
+### 4.1 N+1 queries в Analytics
 
 **Файл:** `frontend/src/pages/Analytics.tsx:42-48`
 
@@ -284,7 +250,7 @@ for (const item of leaderboard) {
 
 ---
 
-### 4.4 Inconsistent refetch intervals
+### 4.2 Inconsistent refetch intervals
 
 | Компонент | Интервал |
 |-----------|----------|
@@ -438,16 +404,18 @@ for (const item of leaderboard) {
 |----------|-------|----------|
 | CRITICAL | Metrics endpoints без auth | `metrics.py:36-89` |
 | CRITICAL | Leaderboard показывает все видео | `Analytics.tsx:30` |
-| CRITICAL | Variant generation не существует | `CreateVideo.tsx:26` |
 | HIGH | Engagement rate ×100 дважды | `metrics.py:32` |
 | HIGH | Дубликат generate_meta | `workflow.py:265,288` |
 | HIGH | Audio до approve video | `workflow.py` |
 | HIGH | workflow_mode не работает | `orchestrator.py` |
+| HIGH | Missing Remix fields в Project | `project.py` |
 | MEDIUM | Путаница статусов | `video.py:72-74` |
 | MEDIUM | Deprecated поля | `video.py:60-70` |
 | MEDIUM | Нумерация шагов | `workflow.py` comments |
 | MEDIUM | N+1 queries | `Analytics.tsx:42-48` |
 | MEDIUM | Metrics scheduling timing | `publishing.py:88` |
+| MEDIUM | WorkflowModeSelector скрыт для Remix | `CreateVideo.tsx:105` |
+| MEDIUM | require_image_approval checkbox | `ProjectForm.tsx:248-262` |
 | LOW | Rating default bug | `Analytics.tsx:341` |
 | LOW | Preview prompt не используется | `workflow.py:40` |
 | LOW | Inconsistent refetch | Frontend |

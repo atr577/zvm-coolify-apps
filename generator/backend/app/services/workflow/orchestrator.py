@@ -4,11 +4,14 @@ WorkflowOrchestrator - Coordinates workflow execution.
 Encapsulates the logic for running Discover and Remix workflows,
 using step classes instead of direct service calls.
 """
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.models.video import Video, StepType, WorkflowStatus
 from app.models.workflow_step import WorkflowStep
