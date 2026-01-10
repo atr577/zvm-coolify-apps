@@ -1,7 +1,7 @@
 # Task 23: Breakpoints System (Phase 3)
 
 **Приоритет:** P1 (HIGH)
-**Оценка:** 6h
+**Оценка:** 7h
 **Зависимости:** Task 22 (Data Model)
 **Блокирует:** Phase 4
 
@@ -153,6 +153,87 @@ async def run_remix_workflow(self) -> WorkflowResult:
 
 ---
 
+### 23.2.5 Resume workflow after approval (1h)
+
+**Критично:** После паузы workflow должен продолжиться с правильного места.
+
+**Файл:** `backend/app/services/workflow/orchestrator.py`
+
+```python
+async def resume_workflow(self) -> WorkflowResult:
+    """Resume workflow from current step after approval."""
+    current_step = self.video.current_step
+
+    if not current_step:
+        raise ValueError("No current step to resume from")
+
+    if self.video.status != WorkflowStatus.AWAITING_APPROVAL:
+        raise ValueError("Workflow not awaiting approval")
+
+    # Mark as in progress
+    self.video.status = WorkflowStatus.IN_PROGRESS
+    self.db.commit()
+
+    # Get step order and find position
+    step_order = list(StepType)
+    current_index = step_order.index(current_step)
+
+    if self.is_remix:
+        return await self._run_remix_from(current_index + 1)
+    else:
+        return await self._run_discover_from(current_index + 1)
+
+async def _run_discover_from(self, start_index: int) -> WorkflowResult:
+    """Run discover workflow starting from given step index."""
+    steps = [
+        (StepType.STORY, self._generate_story),
+        (StepType.DESCRIPTION, self._generate_description),
+        (StepType.PROMPT, self._generate_prompt),
+        (StepType.IMAGE, self._generate_image),
+        (StepType.SCENARIO, self._generate_scenario),
+        (StepType.VIDEO, self._generate_video),
+        (StepType.AUDIO, self._generate_audio),
+    ]
+
+    for i, (step_type, handler) in enumerate(steps):
+        if i < start_index:
+            continue  # Skip already completed steps
+
+        await handler()
+        self.steps_completed += 1
+
+        if self._should_pause(step_type):
+            return self._pause_result(f"{step_type.value} generated", step_type)
+
+    return self._complete_workflow()
+```
+
+**Файл:** `backend/app/api/workflow.py`
+
+```python
+@router.post("/{video_id}/{step_type}/approve")
+async def approve_and_continue(
+    video_id: int,
+    step_type: StepType,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Approve step and continue workflow."""
+    video = get_video_with_ownership(db, video_id, current_user)
+
+    # Verify step matches current step
+    if video.current_step != step_type:
+        raise HTTPException(400, f"Expected step {video.current_step}, got {step_type}")
+
+    # Create orchestrator and resume
+    orchestrator = WorkflowOrchestrator(db, video)
+    result = await orchestrator.resume_workflow()
+
+    return result
+```
+
+---
+
 ### 23.3 Удалить require_image_approval (1h)
 
 **Шаг 1: Backend model**
@@ -294,6 +375,7 @@ async def test_remix_manual_breakpoints():
 
 - [ ] 23.1 `_should_pause()` method added
 - [ ] 23.2 Breakpoint checks in workflow loops
+- [ ] 23.2.5 `resume_workflow()` and approve endpoint
 - [ ] 23.3 require_image_approval removed (model, schema, migration)
 - [ ] 23.4 Mode selector shown for Remix
 - [ ] Feature flag works

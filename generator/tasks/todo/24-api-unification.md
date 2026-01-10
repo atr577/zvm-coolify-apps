@@ -330,6 +330,42 @@ async def approve_step_deprecated(...):
 
 ---
 
+## HTTP Error Codes
+
+Каждый endpoint должен возвращать стандартные коды:
+
+| Endpoint | Success | Errors |
+|----------|---------|--------|
+| `POST /{video_id}/{step}/select-variant` | 200 | 400 (invalid variant), 404 (video/step not found), 403 (not owner) |
+| `POST /{video_id}/{step}/approve` | 200 | 400 (not awaiting approval), 404, 403 |
+| `POST /{video_id}/{step}/regenerate` | 202 | 400 (step not started), 404, 403, 429 (rate limit) |
+| `GET /{video_id}/{step}/variants` | 200 | 404, 403 |
+| `POST /{video_id}/rollback-to/{step}` | 200 | 400 (published), 404, 403 |
+
+**Пример curl запросов:**
+
+```bash
+# Select variant
+curl -X POST http://localhost:8000/api/workflow/1/image/select-variant \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"variant_id": 5}'
+
+# Approve step
+curl -X POST http://localhost:8000/api/workflow/1/image/approve \
+  -H "Authorization: Bearer $TOKEN"
+
+# Get variants
+curl http://localhost:8000/api/workflow/1/story/variants \
+  -H "Authorization: Bearer $TOKEN"
+
+# Rollback
+curl -X POST http://localhost:8000/api/workflow/1/rollback-to/prompt \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
 ## Feature Flag
 
 ```python

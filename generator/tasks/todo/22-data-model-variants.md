@@ -248,6 +248,70 @@ if __name__ == "__main__":
 
 ---
 
+### 22.8 Frontend TypeScript types (30m)
+
+**Файл:** `frontend/src/types/workflow.ts`
+
+```typescript
+export interface StepAttempt {
+  id: number;
+  step_id: number;
+  attempt_number: number;
+  status: 'pending' | 'success' | 'failed';
+  feedback?: string;
+  started_at: string;
+  completed_at?: string;
+  variants: Variant[];
+}
+
+export interface Variant {
+  id: number;
+  attempt_id: number;
+  variant_number: number;
+  content: Record<string, any>;
+  is_selected: boolean;
+}
+
+export interface WorkflowStepWithVariants extends WorkflowStep {
+  attempts: StepAttempt[];
+  selected_variant_id?: number;
+  selected_variant?: Variant;
+}
+```
+
+---
+
+### 22.9 API Response Example
+
+**GET /api/workflow/{video_id}/story/variants**
+
+```json
+{
+  "step_type": "story",
+  "total_attempts": 2,
+  "variants": [
+    {
+      "id": 1,
+      "attempt_number": 1,
+      "variant_number": 1,
+      "content": {"story": "First version..."},
+      "is_selected": false,
+      "feedback": null
+    },
+    {
+      "id": 2,
+      "attempt_number": 2,
+      "variant_number": 1,
+      "content": {"story": "Improved version..."},
+      "is_selected": true,
+      "feedback": "Make it more dramatic"
+    }
+  ]
+}
+```
+
+---
+
 ## Acceptance Criteria
 
 - [ ] Модели StepAttempt и Variant созданы
