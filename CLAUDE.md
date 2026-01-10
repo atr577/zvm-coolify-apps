@@ -1,4 +1,4 @@
-<!-- PROJECT: generator | VERSION: 2.0 -->
+<!-- PROJECT: RE | VERSION: 2.1 -->
 
 # Claude Code Configuration
 
@@ -124,11 +124,10 @@ Claude: "Что именно не так?
 ## Project Structure
 
 ```
-generator/
+.
 ├── .claude/agents/     # Agent definitions
 ├── tasks/              # Task management
 │   ├── todo/           # status: todo
-│   ├── [root]          # status: in_progress
 │   └── done/           # status: done
 ├── docs/
 │   ├── specs/          # SPEC-*.md (technical specs)
@@ -444,9 +443,8 @@ See `session-2026-01-07-001.md` for detailed development history including:
 | Document | Purpose |
 |----------|---------|
 | `docs/TARGET_WORKFLOW.md` | Master spec for workflow architecture |
-| `tasks/README.md` | Task overview and roadmap |
 | `docs/ARCHITECTURE.md` | System architecture overview |
 
 ---
 
-**Updated:** 2026-01-10 | **Version:** 2.0
+**Updated:** 2026-01-10 | **Version:** 2.1
