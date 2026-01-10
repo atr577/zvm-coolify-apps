@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from app.db.base import get_db
 from app.models import Video, Project
+from app.models.video import StepType
 from app.models.user import User, WorkspaceMember
 from app.schemas import VideoCreate, VideoUpdate, VideoResponse
 from app.schemas.pagination import PaginatedResponse
@@ -40,11 +41,15 @@ async def create_video(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Remix starts at IMAGE, Discover starts at STORY
+    initial_step = StepType.IMAGE if project.project_type == "remix" else StepType.STORY
+
     db_video = Video(
         project_id=video.project_id,
         title=video.title,
         workflow_mode=video.workflow_mode,
-        content_variables=video.content_variables
+        content_variables=video.content_variables,
+        current_step=initial_step
     )
     db.add(db_video)
     db.commit()

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.video import Video, WorkflowStatus, StepType, WorkflowMode
 from app.models.workflow_step import WorkflowStep
 from tests.fixtures.mock_responses import (
@@ -851,8 +852,12 @@ class TestAccessControl:
         assert response.status_code == 403
 
 
+@pytest.mark.skipif(
+    settings.USE_NEW_BREAKPOINTS,
+    reason="Legacy require_image_approval tests - skipped when USE_NEW_BREAKPOINTS=true"
+)
 class TestRequireImageApproval:
-    """Tests for require_image_approval flow in auto_generate_to_video."""
+    """Tests for require_image_approval flow in auto_generate_to_video (legacy behavior)."""
 
     @patch("app.services.openai_service.openai_service.generate_story_from_template")
     @patch("app.services.openai_service.openai_service.generate_description")

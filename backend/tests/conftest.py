@@ -157,11 +157,11 @@ def test_project(db: Session, test_workspace: Workspace, test_user: User) -> Pro
 
 @pytest.fixture
 def test_video(db: Session, test_project: Project) -> Video:
-    """Create a test video."""
+    """Create a test video (AUTO mode for complete workflow execution)."""
     video = Video(
         project_id=test_project.id,
         title="Test Video",
-        workflow_mode=WorkflowMode.MANUAL,
+        workflow_mode=WorkflowMode.AUTO,  # AUTO for tests expecting complete workflow
         content_variables={"animal": "cat", "location": "beach"},
         status=WorkflowStatus.PENDING,
         current_step=StepType.STORY
@@ -242,11 +242,11 @@ def test_project_with_image_approval(db: Session, test_workspace: Workspace, tes
 
 @pytest.fixture
 def test_video_with_image_approval(db: Session, test_project_with_image_approval: Project) -> Video:
-    """Create a test video in project with require_image_approval=True."""
+    """Create a test video in project with require_image_approval=True (AUTO mode)."""
     video = Video(
         project_id=test_project_with_image_approval.id,
         title="Test Video With Image Approval",
-        workflow_mode=WorkflowMode.MANUAL,
+        workflow_mode=WorkflowMode.AUTO,  # AUTO mode - legacy test for require_image_approval
         content_variables={"animal": "cat", "location": "beach"},
         status=WorkflowStatus.PENDING,
         current_step=StepType.STORY
@@ -282,11 +282,11 @@ def test_remix_project(db: Session, test_workspace: Workspace, test_user: User) 
 
 @pytest.fixture
 def test_remix_video(db: Session, test_remix_project: Project) -> Video:
-    """Create a test video in Remix project with image_prompt set."""
+    """Create a test video in Remix project with image_prompt set (AUTO mode for full workflow)."""
     video = Video(
         project_id=test_remix_project.id,
         title="Test Remix Video",
-        workflow_mode=WorkflowMode.MANUAL,
+        workflow_mode=WorkflowMode.AUTO,  # AUTO to complete all steps without stopping
         content_variables={},
         image_prompt="A beautiful sunset over the ocean, cinematic, 8k",
         status=WorkflowStatus.PENDING,

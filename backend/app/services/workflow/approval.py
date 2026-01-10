@@ -2,6 +2,7 @@
 Step approval logic for workflow management.
 Extracted from workflow.py API endpoint.
 """
+import inspect
 from datetime import datetime
 from typing import Dict, Any
 from sqlalchemy.orm import Session
@@ -66,7 +67,11 @@ class ApprovalHandler:
 
         handler = self._get_step_handler()
         if handler:
-            result = await handler()
+            # Handle both sync and async handlers
+            if inspect.iscoroutinefunction(handler):
+                result = await handler()
+            else:
+                result = handler()
             if result:
                 return result
 
