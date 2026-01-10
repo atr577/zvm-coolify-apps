@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-<!-- PROJECT: RE | VERSION: 2.2 -->
+<!-- PROJECT: RE | VERSION: 2.3 -->
 
 ## Workflow (MANDATORY)
 
@@ -10,9 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Feature Flow
 ```
-IDEA → TASK → [SPEC] → REVIEW → CODE → TEST → COMMIT → DONE
-         ↓       ↓        ↓
-      summary summary  FINAL OK
+IDEA → TASK → [SPEC] → REVIEW → CODE → TEST → COMMIT → MERGE → DONE
+         ↓       ↓        ↓                              ↓
+      summary summary  FINAL OK                       User OK
        + OK    + OK
 ```
 
@@ -26,13 +26,14 @@ IDEA → TASK → [SPEC] → REVIEW → CODE → TEST → COMMIT → DONE
 | 6. CODE | Implementation | manual | — |
 | 7. TEST | `pytest` + `npm run build` | manual | — |
 | 8. COMMIT | Git commit | manual | — |
-| 9. DONE | Move task to done/ | `task-manager` | — |
+| 9. MERGE | Merge to main | manual | **User OK** |
+| 10. DONE | Move task to done/ | `task-manager` | — |
 
 ### Bug Flow
 ```
-BUG → RCA → TASK → [SPEC] → REVIEW → FIX → TEST → COMMIT → DONE
-        ↓      ↓       ↓        ↓
-     summary summary summary  FINAL OK
+BUG → RCA → TASK → [SPEC] → REVIEW → FIX → TEST → COMMIT → MERGE → DONE
+        ↓      ↓       ↓        ↓                            ↓
+     summary summary summary  FINAL OK                    User OK
       + OK    + OK    + OK
 ```
 
@@ -140,6 +141,7 @@ Claude: "Что именно не так?
 - Fix bugs without RCA (use `rca-manager`)
 - Skip Summary + OK at any stage
 - Start CODE without REVIEW approval
+- **Merge to main without explicit user approval** (always ask "Мержить?")
 - Merge to main without tests passing
 - Commit secrets or .env files
 
