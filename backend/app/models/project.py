@@ -43,6 +43,12 @@ class Project(Base):
     # Project type: discover (full workflow) or remix (skip to image generation)
     project_type = Column(String(20), nullable=False, default="discover")
 
+    # Remix-specific fields
+    source_video_ids = Column(JSON, nullable=True)  # List[int] - Discover videos used as basis
+    scenario_template = Column(JSON, nullable=True)  # Template with {placeholders} for video motion
+    placeholders = Column(JSON, nullable=True)  # List[str] - ["dress_color", "car_model"]
+    placeholder_suggestions = Column(JSON, nullable=True)  # {dress_color: ["red", "blue"], ...}
+
     # Workflow control: pause after image generation for approval (saves tokens during dev)
     require_image_approval = Column(Integer, nullable=False, default=0)  # 0=False, 1=True (SQLite boolean)
 

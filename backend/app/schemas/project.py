@@ -29,6 +29,12 @@ class ProjectBase(BaseModel):
     require_image_approval: bool = False  # Pause after image for approval
     system_prompts: Optional[Dict[str, str]] = None
 
+    # Remix-specific fields (optional for discover projects)
+    source_video_ids: Optional[List[int]] = None  # Discover videos used as basis
+    scenario_template: Optional[Dict[str, str]] = None  # Template for video motion
+    placeholders: Optional[List[str]] = None  # ["dress_color", "car_model"]
+    placeholder_suggestions: Optional[Dict[str, List[str]]] = None  # {dress_color: ["red", "blue"]}
+
 
 class ProjectCreate(ProjectBase):
     workspace_id: Optional[int] = None  # If not specified, uses user's first workspace
@@ -45,6 +51,12 @@ class ProjectUpdate(BaseModel):
     project_type: Optional[ProjectType] = None
     require_image_approval: Optional[bool] = None
     system_prompts: Optional[Dict[str, str]] = None
+
+    # Remix-specific fields
+    source_video_ids: Optional[List[int]] = None
+    scenario_template: Optional[Dict[str, str]] = None
+    placeholders: Optional[List[str]] = None
+    placeholder_suggestions: Optional[Dict[str, List[str]]] = None
 
 
 class ProjectResponse(ProjectBase):

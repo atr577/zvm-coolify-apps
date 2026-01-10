@@ -246,27 +246,28 @@ class WorkflowOrchestrator:
     async def run_remix_workflow(self) -> WorkflowResult:
         """
         Run Remix workflow:
-        Template → Image → Video → Audio
+        PREPARE → Image → Video → Audio
 
         In MANUAL mode, pauses after Image, Video, Audio.
         In AUTO mode, runs all steps without pausing.
         """
-        # Fill template
-        filled_prompt = self._fill_template()
-        self.video.story_data = {"filled_template": filled_prompt}
-        self.video.image_prompt = filled_prompt
+        from app.services.workflow.remix_prepare import prepare_remix
+
+        # PREPARE phase: fill templates with content variables
+        prepare_remix(self.project, self.video)
         self.video.current_step = StepType.IMAGE  # Remix starts at IMAGE
         self.video.status = WorkflowStatus.IN_PROGRESS
         self.db.commit()
 
-        # Step 1: Image
-        await self._generate_image(prompt=filled_prompt)
+        # Step 1: Image (using filled prompt from prepare_remix)
+        await self._generate_image(prompt=self.video.image_prompt)
         self.steps_completed += 1
         if self._should_pause(StepType.IMAGE):
             return self._pause_result("Image generated", StepType.IMAGE)
 
-        # Step 2: Video
-        await self._generate_video(motion_prompt="Subtle natural movement, cinematic atmosphere")
+        # Step 2: Video (using scenario_data if available, else default motion)
+        motion_prompt = self._get_remix_motion_prompt()
+        await self._generate_video(motion_prompt=motion_prompt)
         self.steps_completed += 1
         if self._should_pause(StepType.VIDEO):
             return self._pause_result("Video generated", StepType.VIDEO)
@@ -279,6 +280,17 @@ class WorkflowOrchestrator:
 
         # Complete
         return self._complete_workflow(audio_result)
+
+    def _get_remix_motion_prompt(self) -> str:
+        """Get motion prompt for remix video generation."""
+        # Use scenario_data if filled by prepare_remix
+        if self.video.scenario_data:
+            return (
+                self.video.scenario_data.get("motion_prompt") or
+                self.video.scenario_data.get("scene_direction") or
+                "Subtle natural movement, cinematic atmosphere"
+            )
+        return "Subtle natural movement, cinematic atmosphere"
 
     def _complete_workflow(self, audio_result: Dict[str, Any]) -> WorkflowResult:
         """Create completion result based on audio status."""

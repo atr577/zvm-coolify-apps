@@ -43,6 +43,21 @@ async def create_project(
     if workspace_id not in workspace_ids:
         raise HTTPException(status_code=403, detail="No access to this workspace")
 
+    # Validate remix project fields
+    if project.project_type == "remix":
+        placeholders = project.placeholders or []
+        suggestions = project.placeholder_suggestions or {}
+
+        # Check all placeholders have suggestions
+        missing = set(placeholders) - set(suggestions.keys())
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing suggestions for placeholders: {missing}")
+
+        # Check no empty suggestions
+        empty = [p for p in placeholders if not suggestions.get(p)]
+        if empty:
+            raise HTTPException(status_code=400, detail=f"Empty suggestions for placeholders: {empty}")
+
     # Merge user-provided system_prompts with defaults
     system_prompts = {**DEFAULT_SYSTEM_PROMPTS}
     if project.system_prompts:
@@ -58,9 +73,15 @@ async def create_project(
         duration=project.duration,
         aspect_ratio=project.aspect_ratio,
         audio_mode=project.audio_mode,
+        project_type=project.project_type,
         system_prompts=system_prompts,
         workspace_id=workspace_id,
-        user_id=current_user.id
+        user_id=current_user.id,
+        # Remix-specific fields
+        source_video_ids=project.source_video_ids,
+        scenario_template=project.scenario_template,
+        placeholders=project.placeholders,
+        placeholder_suggestions=project.placeholder_suggestions,
     )
     db.add(db_project)
     db.commit()

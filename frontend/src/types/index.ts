@@ -85,6 +85,11 @@ export interface Project {
   project_type: ProjectType
   require_image_approval: boolean
   system_prompts: SystemPrompts | null
+  // Remix-specific fields
+  source_video_ids: number[] | null
+  scenario_template: Record<string, string> | null
+  placeholders: string[] | null
+  placeholder_suggestions: Record<string, string[]> | null
   created_at: string
   updated_at: string
 }
@@ -101,6 +106,11 @@ export interface CreateProjectDto {
   require_image_approval?: boolean
   system_prompts?: SystemPrompts
   workspace_id?: number
+  // Remix-specific fields
+  source_video_ids?: number[]
+  scenario_template?: Record<string, string>
+  placeholders?: string[]
+  placeholder_suggestions?: Record<string, string[]>
 }
 
 export interface UpdateProjectDto {
@@ -114,6 +124,11 @@ export interface UpdateProjectDto {
   project_type?: ProjectType
   require_image_approval?: boolean
   system_prompts?: SystemPrompts
+  // Remix-specific fields
+  source_video_ids?: number[]
+  scenario_template?: Record<string, string>
+  placeholders?: string[]
+  placeholder_suggestions?: Record<string, string[]>
 }
 
 export type WorkflowMode = 'MANUAL' | 'AUTO'
