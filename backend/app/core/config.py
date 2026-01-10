@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     MOCK_MODE: bool = False
     USE_VARIANT_MODEL: bool = False  # Feature flag: use StepAttempt/Variant hierarchy
+    USE_NEW_BREAKPOINTS: bool = False  # Feature flag: new breakpoints system (AUTO/MANUAL modes)
     CACHE_API_RESPONSES: bool = True  # Сохранять ответы API для будущих моков
     API_CACHE_DIR: str = "data/api_cache"
 

@@ -13,9 +13,27 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-from app.models.video import Video, StepType, WorkflowStatus
+from app.models.video import Video, StepType, WorkflowStatus, WorkflowMode
 from app.models.workflow_step import WorkflowStep
 from app.models.project import Project
+from app.core.config import settings
+
+# Breakpoints for each project type (MANUAL mode stops after each)
+DISCOVER_BREAKPOINTS = [
+    StepType.STORY,
+    StepType.DESCRIPTION,
+    StepType.PROMPT,
+    StepType.IMAGE,
+    StepType.SCENARIO,
+    StepType.VIDEO,
+    StepType.AUDIO,
+]
+
+REMIX_BREAKPOINTS = [
+    StepType.IMAGE,
+    StepType.VIDEO,
+    StepType.AUDIO,
+]
 from app.services.openai_service import openai_service
 from app.services.kling_service import kling_service
 from app.services.workflow.steps.image import ImageStep
@@ -119,6 +137,37 @@ class WorkflowOrchestrator:
         self.services = services or ServiceContainer()
         self.start_time = datetime.utcnow()
         self.steps_completed = 0
+        self.is_remix = self.project.project_type == "remix"
+
+    def _should_pause(self, step_type: StepType) -> bool:
+        """Check if workflow should pause at this step."""
+        if not settings.USE_NEW_BREAKPOINTS:
+            # Old behavior: only pause at image if require_image_approval
+            return (step_type == StepType.IMAGE and
+                    getattr(self.project, 'require_image_approval', False))
+
+        # New behavior: breakpoints system
+        if self.video.workflow_mode == WorkflowMode.AUTO:
+            return False  # AUTO never pauses
+
+        breakpoints = REMIX_BREAKPOINTS if self.is_remix else DISCOVER_BREAKPOINTS
+        return step_type in breakpoints
+
+    def _pause_result(self, message: str, current_step: StepType) -> WorkflowResult:
+        """Create a pause result for MANUAL mode."""
+        self.video.status = WorkflowStatus.AWAITING_APPROVAL
+        self.video.current_step = current_step
+        self.db.commit()
+
+        return WorkflowResult(
+            video_id=self.video.id,
+            steps_completed=self.steps_completed,
+            message=message,
+            mode="remix" if self.is_remix else "discover",
+            total_time_seconds=self._elapsed_time(),
+            paused_for_approval=True,
+            next_action=f"approve_{current_step.value.lower()}"
+        )
 
     async def run(self) -> WorkflowResult:
         """
@@ -129,15 +178,14 @@ class WorkflowOrchestrator:
         - Remix mode
         - Discover mode
         """
-        is_remix = self.project.project_type == "remix"
         resume_from_image = (
             self.video.image_url and
             self.video.current_step in [StepType.SCENARIO, StepType.VIDEO]
         )
 
         if resume_from_image:
-            return await self.resume_after_image_approval(is_remix)
-        elif is_remix:
+            return await self.resume_after_image_approval(self.is_remix)
+        elif self.is_remix:
             return await self.run_remix_workflow()
         else:
             return await self.run_discover_workflow()
@@ -146,42 +194,62 @@ class WorkflowOrchestrator:
         """
         Run full Discover workflow:
         Story → Description → Prompt → Image → Scenario → Video → Audio
+
+        In MANUAL mode, pauses after each step for approval.
+        In AUTO mode, runs all steps without pausing.
         """
         # Step 1: Story
         await self._generate_story()
         self.steps_completed += 1
+        if self._should_pause(StepType.STORY):
+            return self._pause_result("Story generated", StepType.STORY)
 
         # Step 2: Description
         await self._generate_description()
         self.steps_completed += 1
+        if self._should_pause(StepType.DESCRIPTION):
+            return self._pause_result("Description generated", StepType.DESCRIPTION)
 
         # Step 3: Prompt
         await self._generate_prompt()
         self.steps_completed += 1
+        if self._should_pause(StepType.PROMPT):
+            return self._pause_result("Prompt generated", StepType.PROMPT)
 
         # Step 4: Image
-        image_result = await self._generate_image()
+        await self._generate_image()
         self.steps_completed += 1
+        if self._should_pause(StepType.IMAGE):
+            return self._pause_result("Image generated", StepType.IMAGE)
 
-        # Check for image approval pause
-        if self.project.require_image_approval:
-            return WorkflowResult(
-                video_id=self.video.id,
-                steps_completed=self.steps_completed,
-                message="Image generated. Approve to continue.",
-                mode="discover",
-                total_time_seconds=self._elapsed_time(),
-                paused_for_approval=True,
-                next_action="approve_image"
-            )
+        # Step 5: Scenario
+        await self._generate_scenario()
+        self.steps_completed += 1
+        if self._should_pause(StepType.SCENARIO):
+            return self._pause_result("Scenario generated", StepType.SCENARIO)
 
-        # Continue with remaining steps
-        return await self._complete_video_generation(mode="discover")
+        # Step 6: Video
+        await self._generate_video()
+        self.steps_completed += 1
+        if self._should_pause(StepType.VIDEO):
+            return self._pause_result("Video generated", StepType.VIDEO)
+
+        # Step 7: Audio
+        audio_result = await self._generate_audio()
+        self.steps_completed += 1
+        if self._should_pause(StepType.AUDIO):
+            return self._pause_result("Audio generated", StepType.AUDIO)
+
+        # Complete
+        return self._complete_workflow(audio_result)
 
     async def run_remix_workflow(self) -> WorkflowResult:
         """
         Run Remix workflow:
         Template → Image → Video → Audio
+
+        In MANUAL mode, pauses after Image, Video, Audio.
+        In AUTO mode, runs all steps without pausing.
         """
         # Fill template
         filled_prompt = self._fill_template()
@@ -194,9 +262,135 @@ class WorkflowOrchestrator:
         # Step 1: Image
         await self._generate_image(prompt=filled_prompt)
         self.steps_completed += 1
+        if self._should_pause(StepType.IMAGE):
+            return self._pause_result("Image generated", StepType.IMAGE)
 
-        # Check for image approval pause
-        if self.project.require_image_approval:
+        # Step 2: Video
+        await self._generate_video(motion_prompt="Subtle natural movement, cinematic atmosphere")
+        self.steps_completed += 1
+        if self._should_pause(StepType.VIDEO):
+            return self._pause_result("Video generated", StepType.VIDEO)
+
+        # Step 3: Audio
+        audio_result = await self._generate_audio()
+        self.steps_completed += 1
+        if self._should_pause(StepType.AUDIO):
+            return self._pause_result("Audio generated", StepType.AUDIO)
+
+        # Complete
+        return self._complete_workflow(audio_result)
+
+    def _complete_workflow(self, audio_result: Dict[str, Any]) -> WorkflowResult:
+        """Create completion result based on audio status."""
+        if audio_result.get("status") == "skipped":
+            return WorkflowResult(
+                video_id=self.video.id,
+                steps_completed=self.steps_completed,
+                message="Video completed. Audio skipped. Generate meta manually.",
+                mode="remix" if self.is_remix else "discover",
+                total_time_seconds=self._elapsed_time(),
+                audio_skipped=True,
+                next_action="generate_meta"
+            )
+        else:
+            return WorkflowResult(
+                video_id=self.video.id,
+                steps_completed=self.steps_completed,
+                message="Video generated. Select audio variant.",
+                mode="remix" if self.is_remix else "discover",
+                total_time_seconds=self._elapsed_time(),
+                audio_variants=audio_result.get("content", {}).get("audio_variants", []),
+                next_action="select_audio_variant"
+            )
+
+    async def resume_workflow(self) -> WorkflowResult:
+        """
+        Resume workflow from current step after approval.
+
+        Used when workflow is paused at a breakpoint in MANUAL mode.
+        """
+        current_step = self.video.current_step
+
+        if not current_step:
+            raise ValueError("No current step to resume from")
+
+        if self.video.status != WorkflowStatus.AWAITING_APPROVAL:
+            raise ValueError("Workflow not awaiting approval")
+
+        # Mark as in progress
+        self.video.status = WorkflowStatus.IN_PROGRESS
+        self.db.commit()
+
+        # Define step handlers
+        discover_steps = [
+            (StepType.STORY, self._generate_story),
+            (StepType.DESCRIPTION, self._generate_description),
+            (StepType.PROMPT, self._generate_prompt),
+            (StepType.IMAGE, self._generate_image),
+            (StepType.SCENARIO, self._generate_scenario),
+            (StepType.VIDEO, self._generate_video),
+            (StepType.AUDIO, self._generate_audio),
+        ]
+
+        remix_steps = [
+            (StepType.IMAGE, lambda: self._generate_image(prompt=self.video.image_prompt)),
+            (StepType.VIDEO, lambda: self._generate_video(motion_prompt="Subtle natural movement, cinematic atmosphere")),
+            (StepType.AUDIO, self._generate_audio),
+        ]
+
+        steps = remix_steps if self.is_remix else discover_steps
+
+        # Find current step index
+        step_types = [s[0] for s in steps]
+        try:
+            current_index = step_types.index(current_step)
+        except ValueError:
+            raise ValueError(f"Current step {current_step} not in workflow")
+
+        # Run from next step
+        audio_result = None
+        for i, (step_type, handler) in enumerate(steps):
+            if i <= current_index:
+                continue  # Skip already completed steps
+
+            result = await handler()
+            self.steps_completed += 1
+
+            if step_type == StepType.AUDIO:
+                audio_result = result
+
+            if self._should_pause(step_type):
+                return self._pause_result(f"{step_type.value.capitalize()} generated", step_type)
+
+        # Complete workflow
+        if audio_result:
+            return self._complete_workflow(audio_result)
+        else:
+            # No audio step ran (shouldn't happen normally)
+            return WorkflowResult(
+                video_id=self.video.id,
+                steps_completed=self.steps_completed,
+                message="Workflow resumed and completed",
+                mode="remix" if self.is_remix else "discover",
+                total_time_seconds=self._elapsed_time()
+            )
+
+    # Legacy method for old require_image_approval flow
+    async def run_remix_workflow_legacy(self) -> WorkflowResult:
+        """
+        Legacy Remix workflow (kept for backwards compatibility).
+        """
+        filled_prompt = self._fill_template()
+        self.video.story_data = {"filled_template": filled_prompt}
+        self.video.image_prompt = filled_prompt
+        self.video.current_step = StepType.IMAGE
+        self.video.status = WorkflowStatus.IN_PROGRESS
+        self.db.commit()
+
+        await self._generate_image(prompt=filled_prompt)
+        self.steps_completed += 1
+
+        if getattr(self.project, 'require_image_approval', False):
             return WorkflowResult(
                 video_id=self.video.id,
                 steps_completed=self.steps_completed,

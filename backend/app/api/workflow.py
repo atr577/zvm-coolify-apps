@@ -405,3 +405,77 @@ async def auto_generate_to_video(
         video.status = WorkflowStatus.FAILED
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# -----------------------------------------------------------------------------
+# Approve and Continue (New Breakpoints System)
+# -----------------------------------------------------------------------------
+
+@router.post("/{video_id}/{step_type}/approve-and-continue")
+async def approve_and_continue(
+    video_id: int,
+    step_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Approve current step and continue workflow to next step.
+
+    Used with new breakpoints system (USE_NEW_BREAKPOINTS=true).
+    In MANUAL mode, workflow pauses after each step for user approval.
+    This endpoint approves the current step and continues execution.
+    """
+    from app.services.workflow.orchestrator import WorkflowOrchestrator, WorkflowResult
+
+    video = get_video_with_auth(db, video_id, current_user)
+
+    # Validate step type
+    try:
+        expected_step = StepType(step_type.upper())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid step type: {step_type}")
+
+    # Verify step matches current step
+    if video.current_step != expected_step:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected step {video.current_step.value}, got {step_type}"
+        )
+
+    # Verify workflow is awaiting approval
+    if video.status != WorkflowStatus.AWAITING_APPROVAL:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workflow not awaiting approval (status: {video.status.value})"
+        )
+
+    try:
+        orchestrator = WorkflowOrchestrator(db, video)
+        result: WorkflowResult = await orchestrator.resume_workflow()
+
+        response = {
+            "video_id": result.video_id,
+            "message": result.message,
+            "total_time_seconds": result.total_time_seconds,
+            "steps_completed": result.steps_completed,
+            "mode": result.mode
+        }
+
+        if result.paused_for_approval:
+            response["paused_for_approval"] = True
+        if result.next_action:
+            response["next_action"] = result.next_action
+        if result.audio_variants:
+            response["audio_variants"] = result.audio_variants
+        if result.audio_skipped:
+            response["audio_skipped"] = True
+
+        return response
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error resuming workflow: {e}")
+        video.status = WorkflowStatus.FAILED
+        db.commit()
+        raise HTTPException(status_code=500, detail=str(e))
