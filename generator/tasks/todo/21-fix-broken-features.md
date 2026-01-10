@@ -1,7 +1,7 @@
 # Task 21: Fix Broken Features (Phase 1)
 
 **Приоритет:** P1 (HIGH)
-**Оценка:** 6h
+**Оценка:** 5h (было 6h, 21.4 перенесён в Task 23)
 **Зависимости:** Task 20 (Security)
 **Блокирует:** Phase 2+
 
@@ -54,64 +54,52 @@ def calculate_engagement_rate(views: int, likes: int, comments: int, shares: int
 ### 21.3 Дубликат generate_meta (30m)
 
 **Проблема:** `generate_publishing_meta` вызывается в 3 местах:
-1. `workflow.py:265-269` — в select_audio_variant
-2. `workflow.py:289-312` — отдельный endpoint
-3. `orchestrator.py:432-436` — в orchestrator
+1. `workflow.py:265` — в select_audio_variant ✅ (оставить)
+2. `workflow.py:289-312` — отдельный endpoint ✅ (оставить для ручной регенерации)
+3. `orchestrator.py:399` → `_generate_publishing_meta()` — когда audio_skipped ❌ (дубликат)
 
 **Решение:**
-1. Оставить вызов ТОЛЬКО в `select_audio_variant` (при выборе аудио)
-2. Удалить дубликат из orchestrator (line 432-436)
-3. Endpoint `/generate-meta` оставить для ручной регенерации
+1. Оставить вызов в `select_audio_variant` (основной путь)
+2. Оставить endpoint `/generate-meta` для ручной регенерации
+3. Удалить вызов из orchestrator (line 399) — meta должна генериться только при выборе audio
 
-**Изменения в orchestrator.py:**
+**Изменения в orchestrator.py (line 396-408):**
 ```python
-# УДАЛИТЬ блок 432-440:
-# try:
-#     meta = await openai_service.generate_publishing_meta(...)
-#     self.video.publishing_meta = meta
-# except Exception as e:
-#     logger.warning(...)
-#     self.video.publishing_meta = {}
+# БЫЛО:
+if audio_result.get("status") == "skipped":
+    await self._generate_publishing_meta()  # УДАЛИТЬ эту строку
+    return WorkflowResult(...)
+
+# СТАНЕТ:
+if audio_result.get("status") == "skipped":
+    # Meta will be generated manually via /generate-meta endpoint
+    return WorkflowResult(
+        video_id=self.video.id,
+        steps_completed=self.steps_completed,
+        message=f"Video completed. Audio skipped. Generate meta manually.",
+        mode=mode,
+        total_time_seconds=self._elapsed_time(),
+        audio_skipped=True,
+        next_action="generate_meta"  # Указываем что нужно сгенерить meta
+    )
 ```
+
+**Также удалить метод `_generate_publishing_meta` (lines 420-450) если он больше не используется.**
 
 ---
 
-### 21.4 Audio до approve video (1h)
+### 21.4 Audio до approve video (SKIP → Task 23)
 
-**Файл:** `backend/app/services/workflow/orchestrator.py`
+**Статус:** ПЕРЕНЕСЕНО в Task 23 (Breakpoints System)
 
-**Проблема:** В `_complete_video_generation()` audio генерируется сразу после video без проверки workflow_mode:
-```python
-await self._generate_video(motion_prompt=motion_prompt)  # Line 388
-await self._generate_audio()  # Line 390 - сразу, без паузы!
-```
+**Причина:** Task 23 реализует полную систему breakpoints, которая включает:
+- `_should_pause()` метод для всех step types
+- Pause перед VIDEO и AUDIO в MANUAL режиме
+- `resume_workflow()` для продолжения после approve
 
-**Исправление:**
-```python
-async def _complete_video_generation(self, mode: str, ...):
-    # ... generate video ...
-    await self._generate_video(motion_prompt=motion_prompt)
-    self.steps_completed += 1
+Делать частичный fix здесь создаст конфликт с Task 23.
 
-    # Check if should pause for video approval in MANUAL mode
-    if self.video.workflow_mode == WorkflowMode.MANUAL:
-        self.video.status = WorkflowStatus.AWAITING_APPROVAL
-        self.video.current_step = StepType.VIDEO
-        self.db.commit()
-        return WorkflowResult(
-            video_id=self.video.id,
-            steps_completed=self.steps_completed,
-            message="Video generated, awaiting approval",
-            mode=mode,
-            total_time_seconds=self._elapsed_time(),
-            paused_for_approval=True,
-            next_action="approve_video"
-        )
-
-    # AUTO mode: continue to audio
-    audio_result = await self._generate_audio()
-    # ...
-```
+**Действие:** Пропустить, реализовать в рамках Task 23
 
 ---
 
@@ -119,7 +107,7 @@ async def _complete_video_generation(self, mode: str, ...):
 
 - [ ] Engagement rate показывает корректные проценты (5.5%, не 550%)
 - [ ] publishing_meta генерится один раз (при select_audio_variant)
-- [ ] В MANUAL mode audio НЕ генерится до approve VIDEO
+- [ ] ~~В MANUAL mode audio НЕ генерится до approve VIDEO~~ → Task 23
 
 ---
 
@@ -154,7 +142,7 @@ Git revert отдельных commits если нужно.
 - [ ] ~~21.1 Variant endpoint~~ (SKIP - false positive)
 - [ ] 21.2 Fix engagement rate calculation
 - [ ] 21.3 Remove duplicate generate_meta from orchestrator
-- [ ] 21.4 Gate audio generation by video approval in MANUAL mode
+- [ ] ~~21.4 Gate audio~~ (SKIP → Task 23)
 - [ ] Тесты пройдены
 - [ ] Code review
 

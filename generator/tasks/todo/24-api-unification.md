@@ -106,15 +106,21 @@ async def select_variant(
 
 ### 24.3 Endpoint: approve (1h)
 
+> **Note:** Заменяет временный `/approve-and-continue` из Task 23
+
 ```python
+class ApproveRequest(BaseModel):
+    continue_workflow: bool = False  # If True, auto-continue to next step
+
 @router.post("/{video_id}/{step_type}/approve")
 async def approve_step(
     video_id: int,
     step_type: StepType,
+    body: ApproveRequest = ApproveRequest(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Approve current step and copy selected variant content to Video."""
+    """Approve current step and optionally continue workflow."""
     video, step = get_video_and_step(video_id, step_type, db, current_user)
 
     if step.status != StepStatus.AWAITING_APPROVAL:
@@ -129,11 +135,22 @@ async def approve_step(
     step.status = StepStatus.APPROVED
     db.commit()
 
+    # Optionally continue workflow
+    if body.continue_workflow:
+        orchestrator = WorkflowOrchestrator(db, video)
+        return await orchestrator.resume_workflow()
+
     return {
         "status": "approved",
         "step_type": step_type.value,
         "next_action": "call /auto-generate-to-video to continue"
     }
+```
+
+**Удалить временный endpoint из Task 23:**
+```python
+# УДАЛИТЬ после внедрения Task 24:
+# @router.post("/{video_id}/{step_type}/approve-and-continue")
 ```
 
 ---

@@ -208,10 +208,10 @@ async def _run_discover_from(self, start_index: int) -> WorkflowResult:
     return self._complete_workflow()
 ```
 
-**Файл:** `backend/app/api/workflow.py`
+**Файл:** `backend/app/api/workflow.py` (временный, до Task 24)
 
 ```python
-@router.post("/{video_id}/{step_type}/approve")
+@router.post("/{video_id}/{step_type}/approve-and-continue")
 async def approve_and_continue(
     video_id: int,
     step_type: StepType,
@@ -231,6 +231,10 @@ async def approve_and_continue(
 
     return result
 ```
+
+> **Note:** Endpoint `/approve-and-continue` временный. В Task 24 он будет заменён на:
+> - `POST /{video_id}/{step_type}/approve` — только approve
+> - Продолжение через `POST /auto-generate-to-video`
 
 ---
 
