@@ -41,9 +41,14 @@ class WorkflowStep(Base):
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Variant support
+    selected_variant_id = Column(Integer, ForeignKey("variants.id", use_alter=True), nullable=True)
+
     # Relationships
     video = relationship("Video", back_populates="workflow_steps")
     validations = relationship("ValidationResult", back_populates="step", cascade="all, delete-orphan")
+    attempts = relationship("StepAttempt", back_populates="step", cascade="all, delete-orphan")
+    selected_variant = relationship("Variant", foreign_keys=[selected_variant_id], post_update=True)
 
     def __repr__(self):
         return f"<WorkflowStep(id={self.id}, video_id={self.video_id}, step_type={self.step_type}, status={self.status})>"

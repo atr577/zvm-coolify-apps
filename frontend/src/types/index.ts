@@ -139,6 +139,7 @@ export interface Video {
   current_step: StepType
   status: WorkflowStatus
   author_rating: number | null
+  is_published: boolean
   created_at: string
   updated_at: string
   workflow_steps?: WorkflowStep[]
@@ -371,6 +372,37 @@ export interface AdaptationData {
   tiktok?: PlatformAdaptation
   youtube?: PlatformAdaptation
   [platform: string]: PlatformAdaptation | undefined
+}
+
+// --- Variant System Types ---
+
+export type AttemptStatus = 'pending' | 'success' | 'failed'
+
+export interface Variant {
+  id: number
+  attempt_id: number
+  variant_number: number
+  content: Record<string, any>
+  is_selected: boolean
+}
+
+export interface StepAttempt {
+  id: number
+  step_id: number
+  attempt_number: number
+  status: AttemptStatus
+  parent_variant_id: number | null
+  feedback: string | null
+  started_at: string
+  completed_at: string | null
+  error_message: string | null
+  variants: Variant[]
+}
+
+export interface WorkflowStepWithVariants extends WorkflowStep {
+  attempts: StepAttempt[]
+  selected_variant_id: number | null
+  selected_variant: Variant | null
 }
 
 // --- API Error Type ---

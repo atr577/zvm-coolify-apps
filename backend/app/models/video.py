@@ -76,6 +76,9 @@ class Video(Base):
     # Author's subjective rating before posting (1-5)
     author_rating = Column(Integer, nullable=True)  # 1=низкий потенциал, 5=вирусный хит
 
+    # Publishing status
+    is_published = Column(Boolean, default=False, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
