@@ -1,179 +1,86 @@
-# План реализации: Проект как шаблон + множественные ролики
+# Tasks: Проект как шаблон + множественные ролики
 
-Эта папка содержит детальный план работ по переходу от модели "1 проект = 1 ролик" к модели "1 проект = N роликов".
+Эта папка содержит задачи по разработке системы генерации видео.
 
-## Структура задач
-
-### [00-PLAN.md](./00-PLAN.md) - Общий план
-Высокоуровневое описание концепции, архитектуры и workflow.
-
-**Основная идея:**
-- **Проект** = Шаблон концепции (Story Template + настройки)
-- **Video** = Контентная вариация (конкретные параметры)
-- **Template Video** = первый ролик с полным контролем всех этапов
-- **Обычные ролики** = автогенерация до видео, ревью только финального результата
-
----
-
-### [01-backend-models.md](./01-backend-models.md) - Backend: Database Models
-**Phase 1** • **Оценка:** 2-3 часа
-
-- Drop существующих таблиц (начинаем с чистого листа)
-- Новые модели: Project, Video, WorkflowStep, ValidationResult
-- Alembic миграции
-- Pydantic схемы
-
-**Зависимости:** Нет
-
----
-
-### [02-backend-api.md](./02-backend-api.md) - Backend: API Endpoints
-**Phase 2** • **Оценка:** 4-6 часов
-
-- Projects CRUD API
-- Videos CRUD API
-- AI Content Generation API (генерация 10 вариантов)
-- Workflow API (переписать для работы с video_id)
-- OpenAI Service (новые методы)
-
-**Зависимости:** Task 01
-
----
-
-### [03-frontend-components.md](./03-frontend-components.md) - Frontend: Components
-**Phase 3** • **Оценка:** 4-5 часов
-
-- ProjectCard (раскрываемая карточка проекта)
-- VideoCard (карточка ролика)
-- ProjectForm (создание/редактирование проекта)
-- VideoVariantSelector (выбор из 10 вариантов)
-- VideoWorkflowView (просмотр этапов с деталями)
-- TypeScript типы
-
-**Зависимости:** Task 02
-
----
-
-### [04-frontend-pages.md](./04-frontend-pages.md) - Frontend: Pages
-**Phase 4** • **Оценка:** 3-4 часа
-
-- Dashboard (новый, с раскрываемыми проектами)
-- ProjectEdit (редактирование шаблона)
-- CreateVideo (выбор варианта контента)
-- VideoDetail (просмотр/редактирование ролика)
-- API клиент (обновленный)
-- Роутинг
-
-**Зависимости:** Task 03
-
----
-
-### [05-integration-testing.md](./05-integration-testing.md) - Integration & Testing
-**Phase 5** • **Оценка:** 2-3 часа
-
-- Автогенерация для обычных роликов
-- Логика Approve → Adaptation → Publishing
-- Полное тестирование всех flow
-- Cleanup и оптимизация
-- Обновление документации
-
-**Зависимости:** Task 01, 02, 03, 04
-
----
-
-## Общая оценка времени
-
-**Итого:** ~15-21 час чистой разработки
-
-- Phase 1 (Backend Models): 2-3 часа
-- Phase 2 (Backend API): 4-6 часов
-- Phase 3 (Frontend Components): 4-5 часов
-- Phase 4 (Frontend Pages): 3-4 часа
-- Phase 5 (Integration): 2-3 часа
-
-## Порядок выполнения
-
-1. ✅ Обсудили концепцию
-2. ✅ Создали план и задачи
-3. ⏳ **Начать с Task 01** (Backend Models)
-4. ⏳ Task 02 (Backend API)
-5. ⏳ Task 03 (Frontend Components)
-6. ⏳ Task 04 (Frontend Pages)
-7. ⏳ Task 05 (Integration)
-
-## Ключевые решения
-
-### UI Flow
+## Структура
 
 ```
-Dashboard
-  ├─ [+ Создать проект]
-  │    └─ Форма создания → Сразу редирект на CreateVideo
-  │
-  └─ Раскрываемые карточки проектов
-       ├─ Preview последних роликов
-       ├─ [+ Новый ролик] → CreateVideo
-       └─ [⚙️ Настройки] → ProjectEdit
-
-CreateVideo
-  ├─ AI генерирует 10 вариантов (текстом)
-  ├─ Пользователь выбирает 1
-  └─ Редирект на VideoDetail
-
-VideoDetail
-  ├─ Template Video → полный workflow (8 этапов с checkpoints)
-  └─ Обычный ролик → автогенерация до видео → approve/reject/edit
-```
-
-### Database Schema
-
-```
-Project (шаблон)
-  ├─ id, name, description
-  ├─ story_template
-  └─ platforms, duration
-
-Video (ролик)
-  ├─ id, project_id, title
-  ├─ is_template (bool)
-  ├─ content_variables (JSON)
-  └─ story_data, description_data, image_prompt,
-      image_url, scenario_data, video_url, adaptation_data
-
-WorkflowStep
-  ├─ id, video_id (FK -> Video)
-  ├─ step_type, status, content
-  └─ prompt_used, generation_time_seconds
-```
-
-### Template Video vs Обычный ролик
-
-| | Template Video | Обычный ролик |
-|---|---|---|
-| **is_template** | true | false |
-| **Workflow** | Все 8 этапов с checkpoints | Автогенерация 1-6, ревью на 6 |
-| **Когда создается** | Первый в проекте (автоматически) | Все последующие |
-| **Можно сделать template** | Да (изначально) | Да (через настройки) |
-| **Количество** | Может быть несколько (A/B тест) | Любое количество |
-
----
-
-## Начало работы
-
-```bash
-# 1. Перейти к Task 01
-cd tasks
-cat 01-backend-models.md
-
-# 2. Удалить старую БД
-rm backend/data/app.db
-
-# 3. Начать реализацию
-cd backend
-# ... следовать инструкциям в Task 01
+tasks/
+├── 00-PLAN.md          # Общий план (архив)
+├── README.md           # Этот файл
+├── done/               # Завершённые задачи
+│   ├── 01-backend-models.md
+│   ├── 03-frontend-components.md
+│   └── 04-frontend-pages.md
+└── todo/               # Задачи в работе и ожидающие
+    ├── 02-backend-api.md         # IN_PROGRESS
+    ├── 05-integration-testing.md # IN_PROGRESS
+    ├── 10-refactor-workflow.md   # TODO
+    ├── 11-add-tests.md           # TODO
+    ├── 12-async-celery.md        # TODO (blocked by 11)
+    ├── 13-error-handling.md      # TODO
+    ├── 14-data-deduplication.md  # TODO (blocked by 11)
+    ├── 15-vps-deployment.md      # TODO
+    ├── 16-prompt-preview-edit.md # TODO
+    └── REFACTORING.md            # Meta-план рефакторинга
 ```
 
 ---
 
-**Дата создания:** 2026-01-08
-**Статус:** В разработке
+## Статус задач
+
+### Done (3)
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 01 | Backend Models | Project, Video, WorkflowStep, ValidationResult models |
+| 03 | Frontend Components | ProjectCard, VideoCard, ProjectForm, VideoVariantSelector |
+| 04 | Frontend Pages | Dashboard, ProjectEdit, CreateVideo, VideoDetail |
+
+### In Progress (2)
+
+| # | Задача | Что осталось |
+|---|--------|--------------|
+| 02 | Backend API | Template vs non-template logic, auto-generate endpoint |
+| 05 | Integration Testing | Test cases execution, cleanup |
+
+### Todo (7)
+
+| # | Задача | Приоритет | Блокеры |
+|---|--------|-----------|---------|
+| 10 | Refactor workflow.py | P1 | - |
+| 11 | Add Tests | P1 | - |
+| 12 | Async Celery | P2 | Task 11 |
+| 13 | Error Handling | P2 | - |
+| 14 | Data Deduplication | P2 | Task 11 |
+| 15 | VPS Deployment | P3 | - |
+| 16 | Prompt Preview/Edit | P3 | - |
+
+---
+
+## Связанные документы
+
+Новая документация по workflow находится в `docs/`:
+
+- [TARGET_WORKFLOW.md](../docs/TARGET_WORKFLOW.md) — целевая архитектура workflow
+- [WORKFLOW_ANALYSIS.md](../docs/WORKFLOW_ANALYSIS.md) — анализ текущего состояния + баги
+- [IMPLEMENTATION_PLAN.md](../docs/IMPLEMENTATION_PLAN.md) — план миграции на новый workflow
+- [AUDIT_REPORT_2026_01_10.md](../docs/AUDIT_REPORT_2026_01_10.md) — аудит документации vs код
+
+---
+
+## Приоритеты (актуальные)
+
+**Из IMPLEMENTATION_PLAN.md:**
+
+1. **Phase 0: Security** — Fix metrics auth (CRITICAL)
+2. **Phase 1: Broken Features** — Engagement rate, generate_meta duplicate
+3. **Phase 2: Data Model** — StepAttempt/Variant hierarchy
+4. **Phase 3: Breakpoints** — workflow_mode fix
+5. **Phase 4: API Unification** — Unified endpoint pattern
+6. **Phase 5: Publishing** — is_published, auto-retry
+7. **Phase 6: Cleanup** — Remove deprecated code
+
+---
+
+**Обновлено:** 2026-01-10
