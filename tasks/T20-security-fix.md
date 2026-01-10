@@ -1,14 +1,14 @@
 ---
 id: T20
 title: "Security Fix (Phase 0)"
-status: todo
+status: in_progress
 priority: critical
 created: 2026-01-10
 updated: 2026-01-10
 tags: ['bugfix']
 depends_on: []
 estimate: "5h"
-branch: ""
+branch: fix/T20-security-fix
 ---
 
 # Task 20: Security Fix (Phase 0)

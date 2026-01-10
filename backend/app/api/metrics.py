@@ -9,9 +9,11 @@ from datetime import datetime, timedelta
 import logging
 
 from app.db.base import get_db
+from app.core.deps import get_current_user
 from app.models.video import Video, VideoMetrics, MetricsPeriod
-from app.models.project import PublishResult
-from app.models.user import SocialAccount
+from app.models.project import PublishResult, Project
+from app.models.user import User, SocialAccount, WorkspaceMember
+from app.api.workflow_helpers import verify_video_ownership, get_user_workspace_ids
 from app.schemas.video import (
     VideoMetricsCreate,
     VideoMetricsUpdate,
@@ -37,16 +39,18 @@ def calculate_engagement_rate(views: int, likes: int, comments: int, shares: int
 async def create_metrics(
     video_id: int,
     metrics: VideoMetricsCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Add metrics snapshot for a video at a specific time period.
     If metrics for this video/platform/period already exist, they will be updated.
     """
-    # Verify video exists
+    # Verify video exists and user has access
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
 
     # Check if metrics already exist for this combination
     existing = db.query(VideoMetrics).filter(
@@ -94,9 +98,16 @@ async def get_video_metrics(
     video_id: int,
     platform: Optional[str] = None,
     period: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Get all metrics for a video, optionally filtered by platform and/or period"""
+    # Verify user has access to video
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
+
     query = db.query(VideoMetrics).filter(VideoMetrics.video_id == video_id)
 
     if platform:
@@ -110,12 +121,14 @@ async def get_video_metrics(
 @router.get("/video/{video_id}/summary", response_model=VideoMetricsSummary)
 async def get_video_metrics_summary(
     video_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Get aggregated metrics summary for a video"""
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
 
     metrics = db.query(VideoMetrics).filter(VideoMetrics.video_id == video_id).all()
 
@@ -168,9 +181,16 @@ async def update_metrics(
     platform: str,
     period: str,
     metrics: VideoMetricsUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Update specific metrics entry"""
+    # Verify user has access to video
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
+
     db_metrics = db.query(VideoMetrics).filter(
         VideoMetrics.video_id == video_id,
         VideoMetrics.platform == platform,
@@ -205,9 +225,16 @@ async def delete_metrics(
     video_id: int,
     platform: str,
     period: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Delete specific metrics entry"""
+    # Verify user has access to video
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
+
     db_metrics = db.query(VideoMetrics).filter(
         VideoMetrics.video_id == video_id,
         VideoMetrics.platform == platform,
@@ -226,7 +253,8 @@ async def delete_metrics(
 async def set_author_rating(
     video_id: int,
     rating: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Set author's subjective rating for a video (1-5)"""
     if rating < 1 or rating > 5:
@@ -235,6 +263,7 @@ async def set_author_rating(
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
 
     video.author_rating = rating
     db.commit()
@@ -247,12 +276,19 @@ async def get_metrics_leaderboard(
     period: str = "7d",
     sort_by: str = "views",  # views, likes, comments, shares, engagement_rate
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Get top performing videos by metrics"""
-    # Get all videos with metrics for specified period
-    videos_with_metrics = db.query(Video).join(VideoMetrics).filter(
-        VideoMetrics.period == MetricsPeriod(period)
+    """Get top performing videos by metrics (filtered by user's workspaces)"""
+    # Get user's workspace IDs
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+
+    # Get videos with metrics for specified period, filtered by user's workspaces
+    videos_with_metrics = db.query(Video).join(VideoMetrics).join(
+        Project, Video.project_id == Project.id
+    ).filter(
+        VideoMetrics.period == MetricsPeriod(period),
+        Project.workspace_id.in_(workspace_ids)
     ).distinct().all()
 
     summaries = []
@@ -381,7 +417,8 @@ async def fetch_and_store_metrics(
 async def fetch_video_metrics(
     video_id: int,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Fetch metrics from all platforms where video was published.
@@ -390,6 +427,7 @@ async def fetch_video_metrics(
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    verify_video_ownership(db, video, current_user)
 
     # Get all publish results for this video
     publish_results = db.query(PublishResult).filter(
@@ -440,16 +478,25 @@ async def fetch_video_metrics(
 @router.post("/fetch-all")
 async def fetch_all_published_metrics(
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Fetch metrics for ALL published videos.
+    Fetch metrics for all published videos in user's workspaces.
     Use this for periodic batch updates.
     """
-    # Get all published videos
-    published_results = db.query(PublishResult).filter(
+    # Get user's workspace IDs
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+
+    # Get all published videos in user's workspaces
+    published_results = db.query(PublishResult).join(
+        Video, PublishResult.video_id == Video.id
+    ).join(
+        Project, Video.project_id == Project.id
+    ).filter(
         PublishResult.status == "published",
-        PublishResult.post_id.isnot(None)
+        PublishResult.post_id.isnot(None),
+        Project.workspace_id.in_(workspace_ids)
     ).all()
 
     total_scheduled = 0
