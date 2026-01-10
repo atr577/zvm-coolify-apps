@@ -1,8 +1,12 @@
 # Session Summary: TARGET_WORKFLOW.md Finalization
 
 **Date:** 2026-01-10
-**Document:** TARGET_WORKFLOW.md
 **Status:** Ready for implementation
+
+**Документы:**
+- [TARGET_WORKFLOW.md](./TARGET_WORKFLOW.md) — целевая архитектура
+- [WORKFLOW_ANALYSIS.md](./WORKFLOW_ANALYSIS.md) — текущее состояние + баги
+- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) — план миграции
 
 ---
 

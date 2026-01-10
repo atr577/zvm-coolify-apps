@@ -6,7 +6,7 @@
 
 **Связанные документы:**
 - [TARGET_WORKFLOW.md](./TARGET_WORKFLOW.md) — **каноническое описание целевого workflow**
-- [WORKFLOW_CURRENT_VS_TARGET.md](./WORKFLOW_CURRENT_VS_TARGET.md) — сравнение текущего и целевого
+- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) — план миграции
 - [PLAN_BREAKPOINTS_SYSTEM.md](./PLAN_BREAKPOINTS_SYSTEM.md) — план исправления workflow_mode
 
 ---
@@ -159,7 +159,7 @@ async def run_discover_workflow(self):
 - Единственная пауза — hardcoded `require_image_approval`
 - Remix не имеет выбора режима вообще
 
-**Детали:** См. [WORKFLOW_CURRENT_VS_TARGET.md](./WORKFLOW_CURRENT_VS_TARGET.md) секция 8
+**Детали:** См. [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) Phase 3
 **План исправления:** См. [PLAN_BREAKPOINTS_SYSTEM.md](./PLAN_BREAKPOINTS_SYSTEM.md)
 
 ---

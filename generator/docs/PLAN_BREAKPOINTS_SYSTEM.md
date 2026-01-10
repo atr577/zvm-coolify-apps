@@ -3,7 +3,7 @@
 **Связанные документы:**
 - [TARGET_WORKFLOW.md](./TARGET_WORKFLOW.md) — **каноническое описание целевого workflow**
 - [WORKFLOW_ANALYSIS.md](./WORKFLOW_ANALYSIS.md) — полный список issues (Issue #2.4)
-- [WORKFLOW_CURRENT_VS_TARGET.md](./WORKFLOW_CURRENT_VS_TARGET.md) — детали текущей реализации (секция 8)
+- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) — план миграции (Phase 3: Breakpoints)
 
 ---
 
