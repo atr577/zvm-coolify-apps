@@ -423,8 +423,8 @@ After starting backend, visit:
 
 | Document | Purpose |
 |----------|---------|
-| `docs/TARGET_WORKFLOW.md` | Master spec for workflow architecture |
-| `docs/ARCHITECTURE.md` | System architecture overview |
+| `docs/specs/TARGET_WORKFLOW.md` | Master spec for workflow architecture |
+| `docs/specs/ARCHITECTURE.md` | System architecture overview |
 
 ---
 
