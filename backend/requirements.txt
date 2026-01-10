@@ -21,7 +21,7 @@ apscheduler==3.10.4
 httpx==0.26.0  # Used by AIMLAPI client
 
 # Image/Video processing
-pillow==10.2.0
+pillow>=10.2.0
 opencv-python==4.9.0.80
 
 # OAuth & Social Media

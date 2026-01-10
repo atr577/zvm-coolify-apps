@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
@@ -49,41 +51,7 @@ class WorkflowStepResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class VideoResponse(BaseModel):
-    id: int
-    project_id: int
-    title: str
-    workflow_mode: str
-
-    content_variables: Optional[Dict[str, Any]] = None
-    story_data: Optional[Dict[str, Any]] = None
-    description_data: Optional[Dict[str, Any]] = None
-    prompt_data: Optional[Dict[str, Any]] = None
-    image_prompt: Optional[str] = None
-    image_url: Optional[str] = None
-    scenario_data: Optional[Dict[str, Any]] = None
-    video_url: Optional[str] = None
-    video_task_id: Optional[str] = None
-    audio_variants: Optional[List[str]] = None
-    video_with_audio_url: Optional[str] = None
-    adaptation_data: Optional[Dict[str, Any]] = None
-    publishing_meta: Optional[Dict[str, Any]] = None
-
-    current_step: str
-    status: str
-    author_rating: Optional[int] = None
-
-    created_at: datetime
-    updated_at: datetime
-
-    workflow_steps: List[WorkflowStepResponse] = []
-    project: Optional[ProjectBrief] = None
-    metrics: List["VideoMetricsResponse"] = []
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# --- Metrics Schemas ---
+# --- Metrics Schemas (must be before VideoResponse due to forward reference) ---
 
 class VideoMetricsCreate(BaseModel):
     """Create metrics for a specific period"""
@@ -132,3 +100,39 @@ class VideoMetricsSummary(BaseModel):
     total_comments: int = 0
     total_shares: int = 0
     avg_engagement_rate: Optional[float] = None
+
+
+# --- Video Response (uses VideoMetricsResponse) ---
+
+class VideoResponse(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    workflow_mode: str
+
+    content_variables: Optional[Dict[str, Any]] = None
+    story_data: Optional[Dict[str, Any]] = None
+    description_data: Optional[Dict[str, Any]] = None
+    prompt_data: Optional[Dict[str, Any]] = None
+    image_prompt: Optional[str] = None
+    image_url: Optional[str] = None
+    scenario_data: Optional[Dict[str, Any]] = None
+    video_url: Optional[str] = None
+    video_task_id: Optional[str] = None
+    audio_variants: Optional[List[str]] = None
+    video_with_audio_url: Optional[str] = None
+    adaptation_data: Optional[Dict[str, Any]] = None
+    publishing_meta: Optional[Dict[str, Any]] = None
+
+    current_step: str
+    status: str
+    author_rating: Optional[int] = None
+
+    created_at: datetime
+    updated_at: datetime
+
+    workflow_steps: List[WorkflowStepResponse] = []
+    project: Optional[ProjectBrief] = None
+    metrics: List[VideoMetricsResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
