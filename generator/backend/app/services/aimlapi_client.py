@@ -8,6 +8,7 @@ import asyncio
 import json
 from typing import Dict, Any, Optional, List
 from app.core.config import settings
+from app.core.models_config import VIDEO_MODEL_CONFIGS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ class AIMLAPIClient:
         Chat completion using GPT models
         Compatible with OpenAI API format
         """
-        model = model or settings.GPT_MODEL
+        model = model or settings.LLM_MODEL or settings.GPT_MODEL  # Legacy fallback
 
         payload = {
             "model": model,
@@ -198,6 +199,24 @@ class AIMLAPIClient:
 
     # ============ KLING Methods ============
 
+    def _get_video_model_config(self) -> dict:
+        """Get video model config from VIDEO_MODEL_CONFIGS."""
+        model_name = settings.VIDEO_MODEL or settings.KLING_MODEL  # Legacy fallback
+
+        # Handle legacy format: convert "2.5" to "kling-2.5"
+        if model_name and not model_name.startswith("kling-"):
+            model_name = f"kling-{model_name}"
+
+        config = VIDEO_MODEL_CONFIGS.get(model_name)
+        if not config:
+            # Default fallback
+            config = VIDEO_MODEL_CONFIGS.get("kling-2.5", {
+                "provider": "kling",
+                "version": "2.5",
+                "max_duration": 10
+            })
+        return config
+
     async def create_video_task(
         self,
         task_type: str,
@@ -213,11 +232,13 @@ class AIMLAPIClient:
         Create KLING video generation task
         Returns task_id for polling
         """
-        model = model or settings.KLING_MODEL
+        # Get model version from config
+        video_config = self._get_video_model_config()
+        version = model or video_config.get("version", "2.5")
 
         # Build request based on AIMLAPI KLING format
         payload = {
-            "model": f"kling/{model}/{task_type}",
+            "model": f"kling/{version}/{task_type}",
             "prompt": prompt or "",
             "aspect_ratio": aspect_ratio,
             "duration": duration,

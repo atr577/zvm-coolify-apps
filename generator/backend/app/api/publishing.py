@@ -204,7 +204,7 @@ async def publish_to_youtube(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Publish to YouTube Shorts"""
+    """Publish to YouTube Shorts (or update if already published)"""
     video = db.query(Video).filter(Video.id == request.video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -222,63 +222,110 @@ async def publish_to_youtube(
     if not social_account.is_active:
         raise HTTPException(status_code=400, detail="YouTube account is inactive")
 
-    publish_record = PublishResult(
-        video_id=video.id,
-        platform="youtube",
-        title=request.title,
-        description=request.description,
-        hashtags=request.hashtags.split() if request.hashtags else None,
-        status="publishing"
-    )
-    db.add(publish_record)
-    db.commit()
-    db.refresh(publish_record)
+    # Check if already published to YouTube
+    existing_publish = db.query(PublishResult).filter(
+        PublishResult.video_id == video.id,
+        PublishResult.platform == "youtube",
+        PublishResult.status == "published",
+        PublishResult.post_id.isnot(None)
+    ).first()
+
+    # Prepare description with hashtags
+    description = request.description or ""
+    if request.hashtags:
+        description = f"{description}\n\n{request.hashtags}"
 
     try:
-        # Append hashtags to description for YouTube
-        description = request.description or ""
-        if request.hashtags:
-            description = f"{description}\n\n{request.hashtags}"
+        if existing_publish:
+            # UPDATE existing video on YouTube
+            result = await social_publisher.update(
+                platform="youtube",
+                post_id=existing_publish.post_id,
+                title=request.title,
+                description=description,
+                access_token=social_account.access_token,
+                refresh_token=social_account.refresh_token,
+                tags=[],
+                thumbnail_url=video.image_url
+            )
 
-        result = await social_publisher.publish(
-            platform="youtube",
-            video_url=request.video_url,
-            title=request.title,
-            description=description,
-            access_token=social_account.access_token,
-            refresh_token=social_account.refresh_token,
-            tags=[],  # Tags via API often don't show, using description instead
-            privacy_status=request.privacy_status or "public"
-        )
+            # Update existing record
+            existing_publish.title = request.title
+            existing_publish.description = request.description
+            existing_publish.hashtags = request.hashtags.split() if request.hashtags else None
+            existing_publish.updated_at = datetime.utcnow()
+            db.commit()
 
-        publish_record.status = "published"
-        publish_record.post_id = result.get("post_id")
-        publish_record.post_url = result.get("post_url")
-        publish_record.published_at = datetime.utcnow()
-        db.commit()
+            return PublishResponse(
+                success=True,
+                platform="youtube",
+                post_id=existing_publish.post_id,
+                post_url=existing_publish.post_url,
+                status="updated"
+            )
 
-        # Schedule metrics fetch jobs
-        if publish_record.post_id:
-            schedule_metrics_for_video(
+        else:
+            # CREATE new video on YouTube
+            publish_record = PublishResult(
                 video_id=video.id,
                 platform="youtube",
-                post_id=publish_record.post_id,
-                published_at=publish_record.published_at
+                title=request.title,
+                description=request.description,
+                hashtags=request.hashtags.split() if request.hashtags else None,
+                status="publishing"
             )
-            logger.info(f"Scheduled metrics jobs for video {video.id} on YouTube")
+            db.add(publish_record)
+            db.commit()
+            db.refresh(publish_record)
 
-        return PublishResponse(
-            success=True,
-            platform="youtube",
-            post_id=result.get("post_id"),
-            post_url=result.get("post_url"),
-            status="published"
-        )
+            result = await social_publisher.publish(
+                platform="youtube",
+                video_url=request.video_url,
+                title=request.title,
+                description=description,
+                access_token=social_account.access_token,
+                refresh_token=social_account.refresh_token,
+                tags=[],
+                privacy_status=request.privacy_status or "public",
+                thumbnail_url=video.image_url
+            )
+
+            publish_record.status = "published"
+            publish_record.post_id = result.get("post_id")
+            publish_record.post_url = result.get("post_url")
+            publish_record.published_at = datetime.utcnow()
+            db.commit()
+
+            # Schedule metrics fetch jobs
+            if publish_record.post_id:
+                schedule_metrics_for_video(
+                    video_id=video.id,
+                    platform="youtube",
+                    post_id=publish_record.post_id,
+                    published_at=publish_record.published_at
+                )
+                logger.info(f"Scheduled metrics jobs for video {video.id} on YouTube")
+
+            return PublishResponse(
+                success=True,
+                platform="youtube",
+                post_id=result.get("post_id"),
+                post_url=result.get("post_url"),
+                status="published"
+            )
 
     except Exception as e:
-        publish_record.status = "failed"
-        publish_record.error_message = str(e)
-        db.commit()
+        if not existing_publish:
+            # Only update status for new publish attempts
+            publish_record = db.query(PublishResult).filter(
+                PublishResult.video_id == video.id,
+                PublishResult.platform == "youtube",
+                PublishResult.status == "publishing"
+            ).first()
+            if publish_record:
+                publish_record.status = "failed"
+                publish_record.error_message = str(e)
+                db.commit()
 
         return PublishResponse(
             success=False,

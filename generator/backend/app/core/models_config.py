@@ -28,14 +28,16 @@ IMAGE_MODEL_CONFIGS = {
     },
 }
 
-# Video generation models configuration (KLING)
+# Video generation models configuration (provider-agnostic)
 VIDEO_MODEL_CONFIGS = {
-    "1.5": {"version": "1.5", "max_duration": 5},
-    "1.6": {"version": "1.6", "max_duration": 5},
-    "2.1": {"version": "2.1", "max_duration": 10},
-    "2.1-master": {"version": "2.1-master", "max_duration": 10},
-    "2.5": {"version": "2.5", "max_duration": 10},
-    "2.6": {"version": "2.6", "max_duration": 10},
+    # KLING models
+    "kling-1.5": {"provider": "kling", "version": "1.5", "max_duration": 5},
+    "kling-1.6": {"provider": "kling", "version": "1.6", "max_duration": 5},
+    "kling-2.1": {"provider": "kling", "version": "2.1", "max_duration": 10},
+    "kling-2.1-master": {"provider": "kling", "version": "2.1-master", "max_duration": 10},
+    "kling-2.5": {"provider": "kling", "version": "2.5", "max_duration": 10},
+    "kling-2.6": {"provider": "kling", "version": "2.6", "max_duration": 10},
+    # Future: add other providers like runway, pika, etc.
 }
 
 # LLM models configuration

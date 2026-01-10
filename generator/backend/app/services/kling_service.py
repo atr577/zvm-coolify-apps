@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class KlingService:
-    """Service for KLING video generation via AIMLAPI"""
+    """Service for video generation via PiAPI (legacy wrapper)"""
 
     def __init__(self):
         self.client = piapi_client
-        self.model = settings.KLING_MODEL
         self.mock_mode = settings.MOCK_MODE
+        # Model is now handled by VIDEO_MODEL in piapi_client
 
     async def generate_image(
         self,

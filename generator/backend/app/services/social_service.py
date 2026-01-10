@@ -142,14 +142,14 @@ class YouTubeService:
         self.client_id = settings.YOUTUBE_CLIENT_ID
         self.client_secret = settings.YOUTUBE_CLIENT_SECRET
 
-    async def download_video(self, video_url: str) -> str:
-        """Download video from URL to temp file"""
+    async def download_file(self, url: str, suffix: str = ".mp4") -> str:
+        """Download file from URL to temp file"""
         async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.get(video_url)
+            response = await client.get(url)
             response.raise_for_status()
 
             # Create temp file
-            fd, temp_path = tempfile.mkstemp(suffix=".mp4")
+            fd, temp_path = tempfile.mkstemp(suffix=suffix)
             try:
                 with os.fdopen(fd, 'wb') as f:
                     f.write(response.content)
@@ -157,6 +157,24 @@ class YouTubeService:
             except:
                 os.unlink(temp_path)
                 raise
+
+    async def download_video(self, video_url: str) -> str:
+        """Download video from URL to temp file"""
+        return await self.download_file(video_url, suffix=".mp4")
+
+    async def set_thumbnail(self, youtube, video_id: str, thumbnail_url: str) -> bool:
+        """
+        Upload custom thumbnail for a YouTube video.
+        Requires verified YouTube account.
+        """
+        thumbnail_path = await self.download_file(thumbnail_url, suffix=".jpg")
+        try:
+            media = MediaFileUpload(thumbnail_path, mimetype="image/jpeg")
+            youtube.thumbnails().set(videoId=video_id, media_body=media).execute()
+            return True
+        finally:
+            if os.path.exists(thumbnail_path):
+                os.unlink(thumbnail_path)
 
     async def publish_short(
         self,
@@ -166,7 +184,8 @@ class YouTubeService:
         title: str,
         description: str,
         tags: List[str] = None,
-        privacy_status: str = "private"
+        privacy_status: str = "private",
+        thumbnail_url: str = None
     ) -> Dict[str, Any]:
         """
         Publish Short to YouTube
@@ -221,16 +240,88 @@ class YouTubeService:
 
             video_id = response.get("id")
 
+            # Set custom thumbnail if provided
+            thumbnail_set = False
+            if thumbnail_url and video_id:
+                try:
+                    thumbnail_set = await self.set_thumbnail(youtube, video_id, thumbnail_url)
+                except Exception as e:
+                    # Log but don't fail the whole upload
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to set thumbnail: {e}")
+
             return {
                 "success": True,
                 "post_id": video_id,
                 "post_url": f"https://youtube.com/shorts/{video_id}",
-                "status": "published"
+                "status": "published",
+                "thumbnail_set": thumbnail_set
             }
         finally:
             # Cleanup temp file
             if os.path.exists(video_file_path):
                 os.unlink(video_file_path)
+
+    async def update_short(
+        self,
+        access_token: str,
+        refresh_token: str,
+        video_id: str,
+        title: str,
+        description: str,
+        tags: List[str] = None,
+        thumbnail_url: str = None
+    ) -> Dict[str, Any]:
+        """
+        Update existing YouTube video metadata (title, description, thumbnail).
+        Does NOT replace the video file itself.
+        """
+        # Ensure #Shorts in description
+        if "#Shorts" not in description and "#shorts" not in description:
+            description += " #Shorts"
+
+        credentials = Credentials(
+            token=access_token,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=self.client_id,
+            client_secret=self.client_secret
+        )
+
+        youtube = build("youtube", "v3", credentials=credentials)
+
+        # Update video metadata
+        body = {
+            "id": video_id,
+            "snippet": {
+                "title": title[:100],
+                "description": description[:5000],
+                "tags": tags or [],
+                "categoryId": "22"
+            }
+        }
+
+        youtube.videos().update(
+            part="snippet",
+            body=body
+        ).execute()
+
+        # Update thumbnail if provided
+        thumbnail_set = False
+        if thumbnail_url:
+            try:
+                thumbnail_set = await self.set_thumbnail(youtube, video_id, thumbnail_url)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to update thumbnail: {e}")
+
+        return {
+            "success": True,
+            "post_id": video_id,
+            "post_url": f"https://youtube.com/shorts/{video_id}",
+            "status": "updated",
+            "thumbnail_set": thumbnail_set
+        }
 
 
 class SocialMediaPublisher:
@@ -288,11 +379,56 @@ class SocialMediaPublisher:
                     title=title,
                     description=description,
                     tags=kwargs.get("tags", []),
-                    privacy_status=kwargs.get("privacy_status", "public")
+                    privacy_status=kwargs.get("privacy_status", "public"),
+                    thumbnail_url=kwargs.get("thumbnail_url")
                 )
 
             else:
                 raise ValueError(f"Unsupported platform: {platform}")
+
+            return {
+                "platform": platform,
+                **result
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "platform": platform,
+                "error_message": str(e),
+                "status": "failed"
+            }
+
+    async def update(
+        self,
+        platform: str,
+        post_id: str,
+        title: str,
+        description: str,
+        access_token: str = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Update existing post on platform (metadata only, not the video file).
+        Currently only YouTube supports this.
+        """
+        try:
+            if platform == "youtube":
+                refresh_token = kwargs.get("refresh_token")
+                if not access_token:
+                    raise ValueError("YouTube requires access_token")
+
+                result = await self.youtube.update_short(
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    video_id=post_id,
+                    title=title,
+                    description=description,
+                    tags=kwargs.get("tags", []),
+                    thumbnail_url=kwargs.get("thumbnail_url")
+                )
+            else:
+                raise ValueError(f"Update not supported for platform: {platform}")
 
             return {
                 "platform": platform,

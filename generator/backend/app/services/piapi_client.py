@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from app.core.config import settings
-from app.core.models_config import IMAGE_MODEL_CONFIGS
+from app.core.models_config import IMAGE_MODEL_CONFIGS, VIDEO_MODEL_CONFIGS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ class PiAPIClient:
         max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
         """Chat completion using LLM models"""
-        model = model or settings.GPT_MODEL
+        model = model or settings.LLM_MODEL or settings.GPT_MODEL  # Legacy fallback
 
         payload = {
             "model": model,
@@ -267,7 +267,23 @@ class PiAPIClient:
         content = response["choices"][0]["message"]["content"]
         return json.loads(content)
 
-    # ============ KLING Methods ============
+    # ============ Video Generation Methods ============
+
+    def _get_video_model_config(self) -> dict:
+        """Get video model config from VIDEO_MODEL_CONFIGS."""
+        model_name = settings.VIDEO_MODEL or settings.KLING_MODEL  # Legacy fallback
+        if model_name and not model_name.startswith("kling-"):
+            # Legacy format: convert "2.5" to "kling-2.5"
+            model_name = f"kling-{model_name}"
+
+        config = VIDEO_MODEL_CONFIGS.get(model_name)
+        if not config:
+            config = VIDEO_MODEL_CONFIGS.get("kling-2.5", {
+                "provider": "kling",
+                "version": "2.5",
+                "max_duration": 10
+            })
+        return config
 
     async def create_video_task(
         self,
@@ -282,13 +298,15 @@ class PiAPIClient:
         **kwargs
     ) -> str:
         """
-        Create KLING video generation task
+        Create video generation task (provider from VIDEO_MODEL setting)
         Returns task_id for polling
         """
-        version = version or settings.KLING_MODEL
+        config = self._get_video_model_config()
+        version = version or config.get("version", "2.5")
+        provider = config.get("provider", "kling")
 
         payload = {
-            "model": "kling",
+            "model": provider,
             "task_type": "video_generation",
             "input": {
                 "prompt": prompt,
@@ -310,7 +328,7 @@ class PiAPIClient:
         if "camera_control" in kwargs:
             payload["input"]["camera_control"] = kwargs["camera_control"]
 
-        logger.info(f"Creating KLING video task: version={version}, duration={duration}s")
+        logger.info(f"Creating {provider} video task: version={version}, duration={duration}s")
 
         response = await self._make_request(
             "POST",
@@ -559,13 +577,10 @@ class PiAPIClient:
         config = IMAGE_MODEL_CONFIGS.get(model_name)
 
         if not config:
-            # Fallback for unknown models - use basic format
-            config = {
-                "model": model_name,
-                "task_type": settings.IMAGE_TASK_TYPE,
-                "use_dimensions": False,
-                "defaults": {}
-            }
+            raise ValueError(
+                f"Unknown image model: {model_name}. "
+                f"Add it to IMAGE_MODEL_CONFIGS in models_config.py"
+            )
 
         input_data = {"prompt": prompt}
 

@@ -17,8 +17,8 @@ class KlingVideoService(VideoServiceProtocol):
 
     def __init__(self):
         self.client = piapi_client
-        self.model = settings.KLING_MODEL
         self.mock_mode = settings.MOCK_MODE
+        # Model is now handled by VIDEO_MODEL in piapi_client
 
     async def generate(
         self,

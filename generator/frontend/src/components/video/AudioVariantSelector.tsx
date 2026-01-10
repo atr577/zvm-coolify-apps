@@ -4,7 +4,7 @@ interface AudioVariantSelectorProps {
   variants: string[]
   selectedIndex: number | null
   onSelect: (index: number) => void
-  onConfirm: () => void
+  onConfirm: (index: number) => void
   isLoading: boolean
 }
 
@@ -15,57 +15,63 @@ export default function AudioVariantSelector({
   onConfirm,
   isLoading,
 }: AudioVariantSelectorProps) {
+  const currentIndex = selectedIndex ?? 0
+
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Select your preferred audio variant:
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        {variants.map((url, idx) => (
+    <div className="mb-6">
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 mb-4">
+        {variants.map((_, index) => (
           <button
-            key={idx}
-            onClick={() => onSelect(idx)}
-            className={`relative p-4 rounded-lg border-2 transition ${
-              selectedIndex === idx
-                ? 'border-purple-500 bg-purple-50'
-                : 'border-gray-200 hover:border-purple-300'
+            key={index}
+            onClick={() => onSelect(index)}
+            className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
+              currentIndex === index
+                ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
-            <div className="flex items-center space-x-3">
-              <div className={`p-2 rounded-full ${
-                selectedIndex === idx ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-600'
-              }`}>
-                <Volume2 className="h-4 w-4" />
-              </div>
-              <div className="text-left">
-                <div className="font-medium">Variant {idx + 1}</div>
-                <div className="text-xs text-gray-500">Click to preview</div>
-              </div>
-            </div>
-            {selectedIndex === idx && (
-              <CheckCircle className="absolute top-2 right-2 h-5 w-5 text-purple-500" />
-            )}
-            <audio src={url} className="mt-2 w-full" controls />
+            <Volume2 className="h-4 w-4 inline mr-1" />
+            Вариант {index + 1}
           </button>
         ))}
       </div>
 
-      {selectedIndex !== null && (
+      {/* Video Player */}
+      <div className="flex justify-center mb-4">
+        <div className="w-full max-w-sm">
+          <div className="aspect-[9/16] bg-black rounded-lg overflow-hidden">
+            <video
+              key={currentIndex}
+              src={variants[currentIndex]}
+              controls
+              autoPlay
+              className="w-full h-full object-contain"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Select Button */}
+      <div className="flex justify-center">
         <button
-          onClick={onConfirm}
+          onClick={() => onConfirm(currentIndex)}
           disabled={isLoading}
-          className="w-full py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+          className="px-8 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition disabled:opacity-50 flex items-center"
         >
           {isLoading ? (
-            <span className="flex items-center justify-center">
+            <>
               <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Selecting...
-            </span>
+              Сохранение...
+            </>
           ) : (
-            `Use Variant ${selectedIndex + 1}`
+            <>
+              <CheckCircle className="h-5 w-5 mr-2" />
+              Выбрать вариант {currentIndex + 1}
+            </>
           )}
         </button>
-      )}
+      </div>
     </div>
   )
 }
