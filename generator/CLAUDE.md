@@ -1,6 +1,151 @@
-# CLAUDE.md
+<!-- PROJECT: generator | VERSION: 2.0 -->
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# Claude Code Configuration
+
+## Workflow (MANDATORY)
+
+**Ключевой принцип:** Каждый этап заканчивается Summary + OK от пользователя.
+
+### Feature Flow
+```
+IDEA → TASK → [SPEC] → REVIEW → CODE → TEST → COMMIT → DONE
+         ↓       ↓        ↓
+      summary summary  FINAL OK
+       + OK    + OK
+```
+
+| Step | Action | Agent | Output |
+|------|--------|-------|--------|
+| 1. IDEA | User describes feature | — | — |
+| 2. TASK | Create task file | `task-manager` | Summary → OK |
+| 3. SPEC | Create technical spec (if needed) | `spec-writer` | Summary → OK |
+| 4. validate | Check task/spec quality | `task-validator` / `spec-validator` | Pass/Fail |
+| 5. REVIEW | Final summary before code | `review` | **Final OK** |
+| 6. CODE | Implementation | manual | — |
+| 7. TEST | `pytest` + `npm run build` | manual | — |
+| 8. COMMIT | Git commit | manual | — |
+| 9. DONE | Move task to done/ | `task-manager` | — |
+
+### Bug Flow
+```
+BUG → RCA → TASK → [SPEC] → REVIEW → FIX → TEST → COMMIT → DONE
+        ↓      ↓       ↓        ↓
+     summary summary summary  FINAL OK
+      + OK    + OK    + OK
+```
+
+### Agents
+
+| Agent | Purpose |
+|-------|---------|
+| `task-manager` | Create and manage task files |
+| `task-validator` | Validate task file quality |
+| `spec-writer` | Create technical specifications |
+| `spec-validator` | Validate spec quality |
+| `review` | Final summary and approval before CODE |
+| `rca-manager` | Root cause analysis for bugs |
+
+**Agents location:** `.claude/agents/`
+
+**NEVER skip Summary + OK. NEVER start CODE without REVIEW approval.**
+
+---
+
+### Skip Evaluation
+
+SPEC опционален. Claude оценивает и предлагает:
+
+**SPEC нужен если:**
+- Новые структуры данных
+- API изменения
+- Сложная логика (>50 строк)
+- 3+ файлов затронуто
+
+**SPEC не нужен если:**
+- Локальное изменение (1-2 файла)
+- Понятный scope
+- Нет архитектурных решений
+
+---
+
+### На "НЕТ" — Итерация
+
+```
+User: "Нет, не так"
+Claude: "Что именно не так?
+- [вопрос 1]?
+- [вопрос 2]?"
+→ обсуждение
+→ обновление документа
+→ новый Summary
+→ OK?
+```
+
+Цикл повторяется пока не получен OK.
+
+---
+
+### Validator Fail Protocol
+
+При ошибке валидации — стоп и обсуждение:
+
+```
+❌ Validation failed
+
+Проблемы:
+1. [проблема] — исправление: [как]
+2. [проблема] — исправление: [как]
+
+Вопросы для автоисправления:
+- [вопрос]?
+
+Исправить автоматически? (да / нет / обсудить)
+```
+
+---
+
+## Hard Stops
+
+**NEVER:**
+- Write code without task file in `tasks/`
+- Fix bugs without RCA (use `rca-manager`)
+- Skip Summary + OK at any stage
+- Start CODE without REVIEW approval
+- Merge to main without tests passing
+- Commit secrets or .env files
+
+**Build verification:**
+- Backend: `cd backend && venv/bin/pytest`
+- Frontend: `cd frontend && npm run build`
+- Max 1 retry on failure, then stop and report
+
+---
+
+## Project Structure
+
+```
+generator/
+├── .claude/agents/     # Agent definitions
+├── tasks/              # Task management
+│   ├── todo/           # status: todo
+│   ├── [root]          # status: in_progress
+│   └── done/           # status: done
+├── docs/
+│   ├── specs/          # SPEC-*.md (technical specs)
+│   └── rca/            # RCA-*.md (root cause analysis)
+├── backend/            # FastAPI application
+└── frontend/           # React application
+```
+
+---
+
+## Git
+
+- Feature: `feature/T<id>-<slug>`
+- Bug fix: `fix/T<id>-<slug>`
+- Base: `main`
+
+---
 
 ## Project Overview
 
@@ -291,3 +436,17 @@ See `session-2026-01-07-001.md` for detailed development history including:
 - Evolution of story input from free-text to structured form
 - Technical decisions and trade-offs
 - Known limitations and workarounds
+
+---
+
+## Key Documents
+
+| Document | Purpose |
+|----------|---------|
+| `docs/TARGET_WORKFLOW.md` | Master spec for workflow architecture |
+| `tasks/README.md` | Task overview and roadmap |
+| `docs/ARCHITECTURE.md` | System architecture overview |
+
+---
+
+**Updated:** 2026-01-10 | **Version:** 2.0
