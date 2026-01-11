@@ -1,6 +1,6 @@
 # T6: Workflow Consolidation - Полный рефакторинг
 
-**Status:** todo
+**Status:** done
 **Priority:** P0
 **Created:** 2026-01-11
 **Updated:** 2026-01-11
@@ -11,10 +11,10 @@
 
 | # | Задача | Estimate | Depends on | Status |
 |---|--------|----------|------------|--------|
-| T6.1 | [DB Migration](T6.1-db-migration.md) | 2ч | — | todo |
-| T6.2 | [Backend Services](T6.2-backend-services.md) | 4ч | T6.1 | todo |
-| T6.3 | [Backend API](T6.3-backend-api.md) | 3ч | T6.2 | todo |
-| T6.4 | [Frontend](T6.4-frontend.md) | 4ч | T6.3 | todo |
+| T6.1 | [DB Migration](T6.1-db-migration.md) | 2ч | — | done |
+| T6.2 | [Backend Services](T6.2-backend-services.md) | 4ч | T6.1 | done |
+| T6.3 | [Backend API](T6.3-backend-api.md) | 3ч | T6.2 | done |
+| T6.4 | [Frontend](T6.4-frontend.md) | 4ч | T6.3 | done |
 
 ```
 T6.1 (БД) → T6.2 (Services) → T6.3 (API) → T6.4 (Frontend)

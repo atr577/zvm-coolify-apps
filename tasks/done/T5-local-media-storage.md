@@ -1,7 +1,7 @@
 ---
 id: T5
 title: Local Media Storage - Download & Serve Generated Files
-status: todo
+status: done
 priority: high
 created: 2026-01-11
 updated: 2026-01-11
