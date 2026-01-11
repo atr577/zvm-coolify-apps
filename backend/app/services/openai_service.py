@@ -118,16 +118,23 @@ class OpenAIService:
     async def generate_image_prompt(
         self,
         description_data: Dict[str, Any],
-        custom_prompt: Optional[CustomPrompt] = None
+        custom_prompt: Optional[CustomPrompt] = None,
+        scenario_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Create structured prompt for image generation."""
+        """Create structured prompt for image generation.
+
+        Args:
+            description_data: Visual description of the scene
+            custom_prompt: Optional custom prompt override
+            scenario_data: Optional scenario data to make image animation-ready
+        """
         if self.mock_mode:
             logger.info("MOCK MODE: Returning mock prompt data")
             from app.services.mock_data import MOCK_PROMPT
             await asyncio.sleep(1)
             return MOCK_PROMPT
 
-        prompt = build_image_prompt_prompt(description_data)
+        prompt = build_image_prompt_prompt(description_data, scenario_data)
 
         try:
             if custom_prompt:
@@ -182,6 +189,45 @@ class OpenAIService:
             return result
         except PiAPIError as e:
             logger.error(f"Failed to generate scenario: {e}")
+            raise
+
+    async def generate_scenario_from_description(
+        self,
+        description_data: Dict[str, Any],
+        story_data: Dict[str, Any] = None,
+        duration: int = 5,
+        custom_prompt: Optional[CustomPrompt] = None
+    ) -> Dict[str, Any]:
+        """Create motion scenario from description only (no image required).
+
+        This is used when scenario is generated BEFORE the image,
+        allowing the image prompt to be tailored for the planned animation.
+        """
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock scenario data")
+            from app.services.mock_data import MOCK_SCENARIO
+            await asyncio.sleep(1)
+            return MOCK_SCENARIO
+
+        prompt = build_scenario_prompt(description_data, story_data, duration)
+
+        try:
+            if custom_prompt:
+                result = await self.client.generate_json(
+                    prompt=custom_prompt.user_prompt,
+                    system_prompt=custom_prompt.system_prompt,
+                    temperature=0.7
+                )
+            else:
+                result = await self.client.generate_json(
+                    prompt=prompt,
+                    system_prompt=SCENARIO_SYSTEM_PROMPT,
+                    temperature=0.7
+                )
+            logger.info("Scenario from description generated successfully")
+            return result
+        except PiAPIError as e:
+            logger.error(f"Failed to generate scenario from description: {e}")
             raise
 
     async def validate_content(

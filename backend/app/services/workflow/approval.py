@@ -209,8 +209,15 @@ class ApprovalHandler:
             self.db.add(next_step)
 
         self.video.current_step = next_step_type
+        self.video.status = WorkflowStatus.IN_PROGRESS
         self.db.commit()
-        return None
+        self.db.refresh(self.step)
+        return {
+            "step_id": self.step.id,
+            "status": self.step.status.value,
+            "message": f"Step approved. Next: {next_step_type.value}",
+            "continue_workflow": True
+        }
 
     def _process_rejection(self, regenerate: bool) -> Dict[str, Any]:
         """Handle step rejection."""

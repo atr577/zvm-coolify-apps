@@ -16,10 +16,6 @@ const STEP_LABELS: Record<StepType, string> = {
   publishing: 'Publishing'
 }
 
-function getStepIndex(step: StepType): number {
-  return STEP_ORDER.indexOf(step)
-}
-
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
   const datePart = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
@@ -66,10 +62,19 @@ interface VideoGridCardProps {
 }
 
 export default function VideoGridCard({ video, onClick, showProjectName, projectName }: VideoGridCardProps) {
-  const stepIndex = getStepIndex(video.current_step)
+  // Filter steps based on project type and audio_mode
+  const isRemix = video.project?.project_type === 'remix'
+  const includeAudio = video.project?.audio_mode !== 'none'
+  const baseSteps = isRemix
+    ? ['image', 'video', 'audio'] as StepType[]
+    : STEP_ORDER.filter(s => !['adaptation', 'publishing'].includes(s))
+  const activeSteps = includeAudio ? baseSteps : baseSteps.filter(s => s !== 'audio')
+
+  const stepIndex = activeSteps.indexOf(video.current_step)
   const statusLower = video.status?.toLowerCase() || ''
   const isInProgress = ['pending', 'in_progress', 'awaiting_approval', 'validating'].includes(statusLower)
-  const isPublished = statusLower === 'completed'
+  const isCompleted = statusLower === 'completed'
+  const isPublished = video.is_published === true
   const isError = statusLower === 'failed' || statusLower === 'validation_failed'
   const metrics = getLatestMetrics(video)
 
@@ -93,6 +98,11 @@ export default function VideoGridCard({ video, onClick, showProjectName, project
           {isPublished && (
             <span className="px-2 py-1 bg-green-500 text-white text-xs font-medium rounded-full flex items-center">
               <CheckCircle className="h-3 w-3 mr-1" /> Published
+            </span>
+          )}
+          {isCompleted && !isPublished && (
+            <span className="px-2 py-1 bg-blue-500 text-white text-xs font-medium rounded-full flex items-center">
+              <CheckCircle className="h-3 w-3 mr-1" /> Ready
             </span>
           )}
           {isError && (
@@ -126,7 +136,7 @@ export default function VideoGridCard({ video, onClick, showProjectName, project
         {/* Progress indicator for in-progress videos */}
         {isInProgress && (
           <div className="flex items-center gap-1 mb-2">
-            {STEP_ORDER.map((_, i) => (
+            {activeSteps.map((_, i) => (
               <span
                 key={i}
                 className={`w-2 h-2 rounded-full ${
@@ -142,11 +152,12 @@ export default function VideoGridCard({ video, onClick, showProjectName, project
         {/* Key dates */}
         <div className="text-xs text-gray-400 space-y-0.5">
           <p>Created: {formatDate(video.created_at)}</p>
-          {video.updated_at !== video.created_at && <p>Updated: {formatDate(video.updated_at)}</p>}
-          {isPublished && <p className="text-green-600">Published: {formatDate(video.updated_at)}</p>}
+          {video.updated_at !== video.created_at && !isCompleted && <p>Updated: {formatDate(video.updated_at)}</p>}
+          {isCompleted && !isPublished && <p className="text-blue-600">Completed: {formatDate(video.updated_at)}</p>}
+          {isPublished && video.published_at && <p className="text-green-600">Published: {formatDate(video.published_at)}</p>}
         </div>
 
-        {/* Platform icons (if completed) */}
+        {/* Platform icons (if published) */}
         {isPublished && video.project?.platforms && (
           <div className="flex items-center gap-2 mt-2">
             {video.project.platforms.includes('instagram') && <InstagramIcon className="w-4 h-4 text-pink-500" />}

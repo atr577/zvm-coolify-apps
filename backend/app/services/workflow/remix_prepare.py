@@ -49,9 +49,12 @@ def prepare_remix(
         video.image_prompt = fill_template(project.story_template, variables)
         video.prompt_data = {"main_prompt": video.image_prompt}
 
-    # Fill scenario template if provided
+    # Fill scenario template or use default
     if project.scenario_template:
         video.scenario_data = fill_template(project.scenario_template, variables)
+    else:
+        # Default motion for remix without explicit scenario
+        video.scenario_data = {"motion_prompt": "Subtle natural movement, cinematic atmosphere"}
 
     # Store filled template in story_data for reference
     video.story_data = {"filled_template": video.image_prompt}

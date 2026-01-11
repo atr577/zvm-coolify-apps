@@ -1,12 +1,15 @@
 """Image prompt generation prompts."""
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 IMAGE_PROMPT_SYSTEM_PROMPT = "Ты эксперт по промптам для AI-генерации изображений. Создавай детальные, конкретные промпты на английском."
 
 
-def build_image_prompt_prompt(description_data: Dict[str, Any]) -> str:
-    """Build image prompt generation prompt from description data."""
+def build_image_prompt_prompt(
+    description_data: Dict[str, Any],
+    scenario_data: Optional[Dict[str, Any]] = None
+) -> str:
+    """Build image prompt generation prompt from description data and optional scenario."""
     filled_template = description_data.get("filled_template", "") if isinstance(description_data, dict) else ""
 
     template_section = ""
@@ -17,9 +20,29 @@ def build_image_prompt_prompt(description_data: Dict[str, Any]) -> str:
 
 """
 
+    # Добавляем контекст сценария если есть
+    scenario_section = ""
+    if scenario_data:
+        motion_prompt = scenario_data.get("motion_prompt", "")
+        camera_movement = scenario_data.get("camera_movement", {})
+        subject_action = scenario_data.get("subject_action", "")
+
+        scenario_section = f"""
+СЦЕНАРИЙ АНИМАЦИИ (учти при создании картинки!):
+- Движение: {motion_prompt}
+- Камера: {camera_movement.get('type', 'static')} ({camera_movement.get('description', '')})
+- Действие субъекта: {subject_action}
+
+ВАЖНО: Создай изображение, которое будет хорошо анимироваться по этому сценарию!
+- Если камера будет отъезжать — оставь пространство вокруг субъекта
+- Если субъект будет двигаться — покажи начальную позу движения
+- Если планируется zoom — обеспечь детализацию в центре
+
+"""
+
     return f"""
 На основе визуального описания сцены создай промпт для генерации изображения.
-{template_section}
+{template_section}{scenario_section}
 ОПИСАНИЕ СЦЕНЫ:
 {description_data}
 

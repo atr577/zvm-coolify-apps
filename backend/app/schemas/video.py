@@ -124,9 +124,11 @@ class VideoResponse(BaseModel):
     adaptation_data: Optional[Dict[str, Any]] = None
     publishing_meta: Optional[Dict[str, Any]] = None
 
-    current_step: str
+    current_step: Optional[str] = None
     status: str
     author_rating: Optional[int] = None
+    is_published: bool = False
+    published_at: Optional[datetime] = None
 
     created_at: datetime
     updated_at: datetime

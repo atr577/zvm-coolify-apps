@@ -78,6 +78,7 @@ class Video(Base):
 
     # Publishing status
     is_published = Column(Boolean, default=False, index=True)
+    published_at = Column(DateTime, nullable=True)  # When first published
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -88,6 +89,7 @@ class Video(Base):
     workflow_steps = relationship("WorkflowStep", back_populates="video", cascade="all, delete-orphan")
     publish_results = relationship("PublishResult", back_populates="video", cascade="all, delete-orphan")
     metrics = relationship("VideoMetrics", back_populates="video", cascade="all, delete-orphan")
+    step_history = relationship("StepHistory", back_populates="video", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Video(id={self.id}, title='{self.title}', workflow_mode={self.workflow_mode})>"

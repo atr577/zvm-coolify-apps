@@ -168,6 +168,31 @@ export const workflowApi = {
 
   autoGenerateToVideo: (videoId: number) =>
     api.post('/api/workflow/auto-generate-to-video', { video_id: videoId }),
+
+  // New v2 API endpoints (per CONTRACTS.md)
+  startWorkflow: (videoId: number) =>
+    api.post(`/api/workflow/${videoId}/start`),
+
+  getVariants: (videoId: number, stepType: string) =>
+    api.get(`/api/workflow/${videoId}/${stepType}/variants`),
+
+  selectVariant: (videoId: number, stepType: string, variantId: number) =>
+    api.post(`/api/workflow/${videoId}/${stepType}/select`, { variant_id: variantId }),
+
+  approveStepV2: (videoId: number, stepType: string) =>
+    api.post(`/api/workflow/${videoId}/${stepType}/approve`),
+
+  rejectStep: (videoId: number, stepType: string, reason?: string) =>
+    api.post(`/api/workflow/${videoId}/${stepType}/reject`, { reason }),
+
+  regenerateStep: (videoId: number, stepType: string, variantId: number, feedback?: string) =>
+    api.post(`/api/workflow/${videoId}/${stepType}/regenerate`, { variant_id: variantId, feedback }),
+
+  retryStep: (videoId: number, stepType: string) =>
+    api.post(`/api/workflow/${videoId}/${stepType}/retry`),
+
+  rollbackToStep: (videoId: number, targetStep: string) =>
+    api.post(`/api/workflow/${videoId}/rollback/${targetStep}`),
 }
 
 export interface SocialAccount {

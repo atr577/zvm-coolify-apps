@@ -1,27 +1,30 @@
-import { useEffect } from 'react'
+/**
+ * VideoDetail - Main video page using Workflow V3
+ */
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from 'react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Trash2, ArrowLeft, Settings, CheckCircle } from 'lucide-react'
 import { videosApi, metricsApi } from '@/services/api'
-import { useVideoWorkflow } from '@/hooks/useVideoWorkflow'
-import {
-  VideoHeader,
-  CompletedVideoView,
-  InProgressView
-} from '@/components/video'
+import { WorkflowRunner } from '@/components/workflow'
+import { CompletedVideoView } from '@/components/video'
+import type { Video } from '@/types'
 
 export default function VideoDetail() {
   const { id } = useParams<{ id: string }>()
   const videoId = parseInt(id || '0')
   const navigate = useNavigate()
 
+  // Fetch video with polling during generation
   const { data: video, isLoading } = useQuery(
     ['video', videoId],
     () => videosApi.get(videoId).then(res => res.data),
-    { refetchInterval: 5000 }
+    {
+      refetchInterval: (data) => {
+        const status = data?.status?.toLowerCase()
+        return status === 'in_progress' || status === 'pending' ? 2000 : false
+      }
+    }
   )
-
-  const workflow = useVideoWorkflow(videoId, video)
 
   // Fetch metrics for completed videos
   const { data: metricsSummary, refetch: refetchMetrics } = useQuery(
@@ -39,22 +42,27 @@ export default function VideoDetail() {
     { onSuccess: () => refetchMetrics() }
   )
 
-  // Auto-start generation (only for AUTO mode)
-  const hasNoWorkflow = !video?.workflow_steps || video?.workflow_steps.length === 0
-  const shouldAutoStart = video?.status === 'pending' && hasNoWorkflow && video?.workflow_mode !== 'MANUAL'
-
-  useEffect(() => {
-    if (shouldAutoStart && !workflow.autoGenerateMutation.isLoading) {
-      workflow.autoGenerateMutation.mutate()
+  // Delete mutation
+  const deleteMutation = useMutation(
+    () => videosApi.delete(videoId),
+    {
+      onSuccess: () => {
+        navigate(video?.project_id ? `/?project=${video.project_id}` : '/')
+      }
     }
-  }, [shouldAutoStart])
+  )
 
-  // Handle navigation after delete
-  useEffect(() => {
-    if (workflow.deleteMutation.isSuccess) {
-      navigate(video?.project_id ? `/?project=${video.project_id}` : '/')
+  // Toggle workflow mode mutation
+  const toggleModeMutation = useMutation(
+    () => videosApi.update(videoId, {
+      workflow_mode: video?.workflow_mode === 'MANUAL' ? 'AUTO' : 'MANUAL'
+    }),
+    {
+      onSuccess: () => {
+        // Invalidate will be handled by react-query
+      }
     }
-  }, [workflow.deleteMutation.isSuccess])
+  )
 
   if (isLoading || !video) {
     return (
@@ -64,47 +72,31 @@ export default function VideoDetail() {
     )
   }
 
-  // Current step data
-  const steps = video.workflow_steps || []
-  const currentStep = steps.find(s => {
-    const st = s.status?.toLowerCase()
-    return st === 'awaiting_approval' || st === 'in_progress'
-  })
-  const pendingSteps = steps.filter(s => s.status?.toLowerCase() === 'pending')
-  const failedStep = steps.find(s => {
-    if (s.status?.toLowerCase() !== 'failed') return false
-    const hasPendingOfSameType = pendingSteps.some(p => p.step_type === s.step_type)
-    return !hasPendingOfSameType
-  })
-  const completedSteps = steps.filter(s => {
-    const st = s.status?.toLowerCase()
-    return st === 'approved' || st === 'completed'
-  })
-
   const isRemix = video.project?.project_type === 'remix'
-  const totalSteps = isRemix ? 3 : 9
-  const completedCount = completedSteps.length
+  const includeAudio = video.project?.audio_mode !== 'none'
+  const totalSteps = isRemix ? (includeAudio ? 3 : 2) : (includeAudio ? 7 : 6)
+  const completedCount = getCompletedCount(video, isRemix, includeAudio)
   const isCompleted = video.status?.toLowerCase() === 'completed'
-  const isPublishing = video.current_step?.toLowerCase() === 'publishing'
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Header */}
       <VideoHeader
-        title={video.title}
+        video={video}
         completedCount={completedCount}
         totalSteps={totalSteps}
         isCompleted={isCompleted}
-        workflowMode={video.workflow_mode}
-        isRemix={isRemix}
-        onToggleMode={() => workflow.toggleWorkflowModeMutation.mutate()}
-        onDelete={() => confirm('Delete video?') && workflow.deleteMutation.mutate()}
+        onToggleMode={() => toggleModeMutation.mutate()}
+        onDelete={() => confirm('Delete video?') && deleteMutation.mutate()}
+        onBack={() => navigate(video.project_id ? `/?project=${video.project_id}` : '/')}
       />
 
+      {/* Content */}
       {isCompleted ? (
         <CompletedVideoView
           video={video}
           videoId={videoId}
-          steps={steps}
+          steps={video.workflow_steps || []}
           completedCount={completedCount}
           totalSteps={totalSteps}
           metricsSummary={metricsSummary}
@@ -112,19 +104,123 @@ export default function VideoDetail() {
           onSetRating={(rating) => setRatingMutation.mutate(rating)}
         />
       ) : (
-        <InProgressView
-          video={video}
-          videoId={videoId}
-          steps={steps}
-          currentStep={currentStep}
-          pendingSteps={pendingSteps}
-          failedStep={failedStep}
-          completedCount={completedCount}
-          totalSteps={totalSteps}
-          isPublishing={isPublishing}
-          workflow={workflow}
-        />
+        <WorkflowRunner video={video} videoId={videoId} />
       )}
     </div>
   )
+}
+
+// Header component
+interface VideoHeaderProps {
+  video: Video
+  completedCount: number
+  totalSteps: number
+  isCompleted: boolean
+  onToggleMode: () => void
+  onDelete: () => void
+  onBack: () => void
+}
+
+function VideoHeader({
+  video,
+  completedCount,
+  totalSteps,
+  isCompleted,
+  onToggleMode,
+  onDelete,
+  onBack,
+}: VideoHeaderProps) {
+  const isRemix = video.project?.project_type === 'remix'
+
+  return (
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center space-x-4">
+        <button
+          onClick={onBack}
+          className="p-2 hover:bg-gray-100 rounded-lg transition"
+        >
+          <ArrowLeft className="h-5 w-5 text-gray-600" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 line-clamp-1">{video.title}</h1>
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            {isCompleted ? (
+              <span className="flex items-center text-green-600">
+                <CheckCircle className="h-4 w-4 mr-1" />
+                Completed
+              </span>
+            ) : (
+              <span>Step {completedCount + 1} of {totalSteps}</span>
+            )}
+            {video.workflow_mode === 'MANUAL' && (
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Manual</span>
+            )}
+            {isRemix && (
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Remix</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={onToggleMode}
+          className="p-2 hover:bg-gray-100 rounded-lg transition"
+          title={video.workflow_mode === 'MANUAL' ? 'Switch to Auto mode' : 'Switch to Manual mode'}
+        >
+          <Settings className="h-5 w-5 text-gray-500" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-2 hover:bg-red-50 rounded-lg transition"
+        >
+          <Trash2 className="h-5 w-5 text-red-500" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Helper: Count completed steps from video data
+function getCompletedCount(video: Video, isRemix: boolean, includeAudio: boolean = true): number {
+  // scenario before prompt for better image-animation alignment
+  let steps = isRemix
+    ? ['image', 'video', 'audio']
+    : ['story', 'description', 'scenario', 'prompt', 'image', 'video', 'audio']
+
+  if (!includeAudio) {
+    steps = steps.filter(s => s !== 'audio')
+  }
+
+  let count = 0
+  for (const step of steps) {
+    if (hasStepData(video, step)) {
+      count++
+    } else {
+      break
+    }
+  }
+  return count
+}
+
+// Helper: Check if step has data
+function hasStepData(video: Video, step: string): boolean {
+  switch (step) {
+    case 'story':
+      return !!video.story_data
+    case 'description':
+      return !!video.description_data
+    case 'prompt':
+      return !!video.prompt_data
+    case 'image':
+      return !!video.image_url
+    case 'scenario':
+      return !!video.scenario_data
+    case 'video':
+      return !!video.video_url
+    case 'audio':
+      return !!video.video_with_audio_url
+    default:
+      return false
+  }
 }

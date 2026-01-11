@@ -155,6 +155,7 @@ export interface Video {
   status: WorkflowStatus
   author_rating: number | null
   is_published: boolean
+  published_at: string | null
   created_at: string
   updated_at: string
   workflow_steps?: WorkflowStep[]

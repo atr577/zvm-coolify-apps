@@ -27,12 +27,12 @@ export function useVideoWorkflow(videoId: number, video: Video | undefined) {
     setCustomPrompts(prev => ({ ...prev, [stepType]: customPrompt }))
   }
 
-  // Auto-generate mutation
+  // Start workflow mutation (new v2 API)
   const autoGenerateMutation = useMutation(
-    () => workflowApi.autoGenerateToVideo(videoId),
+    () => workflowApi.startWorkflow(videoId),
     {
       onSuccess: () => queryClient.invalidateQueries(['video', videoId]),
-      onError: (error) => console.error('Auto-generation failed:', error)
+      onError: (error) => console.error('Workflow start failed:', error)
     }
   )
 
@@ -141,12 +141,17 @@ export function useVideoWorkflow(videoId: number, video: Video | undefined) {
         }
         case 'video': {
           const imageUrl = video.image_url
+          const isRemix = video.project?.project_type === 'remix'
           const originalScenarioData = video.scenario_data || getStepContent('scenario')
           const scenarioData = editedVideoPrompt ? {
             ...originalScenarioData,
             motion_prompt: editedVideoPrompt.motion_prompt
           } : originalScenarioData
-          if (imageUrl && scenarioData) await workflowApi.generateVideo(videoId, imageUrl, scenarioData)
+
+          // Remix can generate video without scenario_data (uses default motion)
+          if (imageUrl && (scenarioData || isRemix)) {
+            await workflowApi.generateVideo(videoId, imageUrl, scenarioData || {})
+          }
           setEditedVideoPrompt(null)
           break
         }
