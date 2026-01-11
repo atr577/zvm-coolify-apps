@@ -29,8 +29,9 @@ class Project(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
 
-    # Template
-    story_template = Column(Text, nullable=False)
+    # Templates
+    story_template = Column(Text, nullable=False)  # Image prompt template with {placeholders}
+    motion_template = Column(Text, nullable=True)  # Motion prompt template with {placeholders} (for remix)
 
     # Settings
     platforms = Column(JSON, nullable=False)  # ["instagram", "tiktok", "youtube"]

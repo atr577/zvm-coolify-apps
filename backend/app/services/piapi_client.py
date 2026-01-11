@@ -192,10 +192,14 @@ class PiAPIClient:
         prompt: str,
         model: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None
     ) -> str:
         """Simple text generation"""
-        messages = [{"role": "user", "content": prompt}]
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         response = await self.chat_completion(
             messages=messages,
             model=model,

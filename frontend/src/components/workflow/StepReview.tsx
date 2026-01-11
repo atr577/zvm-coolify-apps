@@ -13,24 +13,23 @@ import {
   History,
   ChevronRight,
   Loader2,
-  Play,
   Image as ImageIcon,
   Video,
   Volume2,
   FileText,
+  Edit2,
+  Save,
+  X,
 } from 'lucide-react'
-import { useWorkflowV3 } from '@/hooks/useWorkflowV3'
+import { useWorkflowV3, StepType } from '@/hooks/useWorkflowV3'
 import type { Video as VideoType } from '@/types'
 
 interface StepReviewProps {
   video: VideoType
   videoId: number
-  currentStep: string
-  steps: string[]
+  currentStep: StepType
+  steps: StepType[]
   completedSteps: string[]
-  onGenerate: () => void
-  onRegenerate: () => void
-  isGenerating: boolean
 }
 
 // Step labels
@@ -50,60 +49,119 @@ export default function StepReview({
   currentStep,
   steps,
   completedSteps,
-  onGenerate,
-  onRegenerate,
-  isGenerating,
 }: StepReviewProps) {
+  // completedSteps is available for future use (e.g., showing progress)
+  void completedSteps
+
   const [showHistory, setShowHistory] = useState(false)
+  const [isApproving, setIsApproving] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedContent, setEditedContent] = useState<string>('')
+  const [feedback, setFeedback] = useState('')
   const isRemix = video.project?.project_type === 'remix'
-  const workflow = useWorkflowV3(videoId, isRemix)
+  const includeAudio = video.project?.audio_mode !== 'none'
+  const workflow = useWorkflowV3(videoId, isRemix, includeAudio)
+
+  // Use workflow's isGenerating state (not from props)
+  const isGenerating = workflow.generatingStep === currentStep
 
   // Get variants for current step
   const { data: variantsData } = workflow.useVariants(currentStep)
   const variants = variantsData?.variants || []
+  const currentVariant = variants.find(v => v.is_selected) || variants[0]
 
-  // Check if current step is completed (has data)
-  const isStepCompleted = completedSteps.includes(currentStep)
-  const stepContent = getStepContent(video, currentStep)
+  // Use content from selected variant, fallback to video data
+  const stepContent = currentVariant?.content
+    ? getContentForDisplay(currentStep, currentVariant.content)
+    : getStepContent(video, currentStep)
   const stepIndex = steps.indexOf(currentStep)
   const isLastStep = stepIndex === steps.length - 1
 
-  // If step has no content yet, show generate button
-  if (!isStepCompleted && !isGenerating) {
-    return (
-      <div className="bg-white rounded-xl shadow-lg border-2 border-purple-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b">
-          <div className="flex items-center space-x-3">
-            {getStepIcon(currentStep)}
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                Step {stepIndex + 1}: {STEP_LABELS[currentStep]}
-              </h2>
-              <p className="text-sm text-gray-600">Ready to generate</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-6">
-          <button
-            onClick={onGenerate}
-            disabled={isGenerating}
-            className="w-full flex items-center justify-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
-          >
-            {isGenerating ? (
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-            ) : (
-              <Play className="h-5 w-5 mr-2" />
-            )}
-            {isGenerating ? 'Generating...' : `Generate ${STEP_LABELS[currentStep]}`}
-          </button>
-        </div>
-      </div>
-    )
+  // Check if step content is editable (text-based steps)
+  const isEditableStep = ['scenario'].includes(currentStep)
+
+  // Handle approve (move to next step)
+  const handleApprove = async () => {
+    if (!currentVariant) return
+    setIsApproving(true)
+    try {
+      workflow.approveVariant(currentVariant.id)
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  // Handle edit mode
+  const handleStartEdit = () => {
+    setEditedContent(JSON.stringify(stepContent, null, 2))
+    setIsEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditedContent('')
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      const parsed = JSON.parse(editedContent)
+      workflow.updateContent(currentStep, parsed)
+      setIsEditing(false)
+    } catch (e) {
+      alert('Invalid JSON format')
+    }
+  }
+
+  // Handle regenerate with feedback
+  const handleRegenerate = () => {
+    workflow.generateStep(currentStep, feedback || undefined)
+    setFeedback('')
+  }
+
+  // Check if a step has data (is completed)
+  const hasStepData = (step: string) => completedSteps.includes(step) || step === currentStep
+
+  // Handle step click (navigate back)
+  const handleStepClick = (step: string) => {
+    if (step !== currentStep && hasStepData(step)) {
+      workflow.gotoStep(step as typeof steps[number])
+    }
   }
 
   // Show content with approve/regenerate
   return (
     <div className="bg-white rounded-xl shadow-lg border-2 border-purple-200 overflow-hidden">
+      {/* Step Navigation */}
+      <div className="flex items-center justify-center py-3 px-4 bg-gray-50 border-b">
+        {steps.map((step, idx) => {
+          const isCompleted = completedSteps.includes(step)
+          const isCurrent = step === currentStep
+          const isClickable = isCompleted && !isCurrent
+
+          return (
+            <div key={step} className="flex items-center">
+              <button
+                onClick={() => handleStepClick(step)}
+                disabled={!isClickable}
+                className={`flex items-center px-3 py-1 rounded-full text-sm font-medium transition ${
+                  isCurrent
+                    ? 'bg-purple-600 text-white'
+                    : isCompleted
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                <span className="mr-1">{idx + 1}</span>
+                {STEP_LABELS[step]}
+              </button>
+              {idx < steps.length - 1 && (
+                <ChevronRight className="h-4 w-4 text-gray-300 mx-1" />
+              )}
+            </div>
+          )
+        })}
+      </div>
+
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b">
         <div className="flex items-center justify-between">
@@ -139,9 +197,49 @@ export default function StepReview({
           </div>
         ) : (
           <>
-            {/* Step content */}
+            {/* Step content with edit option */}
             <div className="mb-6">
-              <StepContentDisplay step={currentStep} content={stepContent} />
+              {isEditing ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Edit Content</span>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleSaveEdit}
+                        className="flex items-center px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
+                      >
+                        <Save className="h-4 w-4 mr-1" />
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="flex items-center px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    className="w-full h-64 px-3 py-2 font-mono text-sm border rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              ) : (
+                <div className="relative">
+                  {isEditableStep && (
+                    <button
+                      onClick={handleStartEdit}
+                      className="absolute top-2 right-2 flex items-center px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 z-10"
+                    >
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      Edit
+                    </button>
+                  )}
+                  <StepContentDisplay step={currentStep} content={stepContent} />
+                </div>
+              )}
             </div>
 
             {/* History panel */}
@@ -151,10 +249,10 @@ export default function StepReview({
                   <span className="text-sm font-medium text-gray-700">Variant History</span>
                 </div>
                 <div className="max-h-48 overflow-y-auto">
-                  {variants.map((variant: { id: number; is_selected: boolean; created_at: string }, i: number) => (
+                  {variants.map((variant: { id: number; is_selected: boolean; created_at: string; feedback?: string }, i: number) => (
                     <button
                       key={variant.id}
-                      onClick={() => workflow.selectVariant(variant.id)}
+                      onClick={() => workflow.switchVariant(variant.id)}
                       className={`w-full text-left px-4 py-2 border-b last:border-0 hover:bg-gray-50 ${
                         variant.is_selected ? 'bg-purple-50' : ''
                       }`}
@@ -170,26 +268,49 @@ export default function StepReview({
                           {new Date(variant.created_at).toLocaleTimeString()}
                         </span>
                       </div>
+                      {variant.feedback && (
+                        <p className="text-xs text-gray-500 mt-1 truncate">
+                          💬 {variant.feedback}
+                        </p>
+                      )}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Feedback input for regeneration */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Feedback (optional)
+              </label>
+              <textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Describe what to change..."
+                className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
+                rows={2}
+              />
+            </div>
+
             {/* Actions */}
             <div className="flex space-x-3">
               <button
-                onClick={() => workflow.generateStep(steps[stepIndex + 1] || currentStep)}
-                disabled={isLastStep}
+                onClick={handleApprove}
+                disabled={isApproving || !currentVariant || isEditing}
                 className="flex-1 flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition disabled:opacity-50"
               >
-                <CheckCircle className="h-5 w-5 mr-2" />
+                {isApproving ? (
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                )}
                 {isLastStep ? 'Complete' : 'Approve & Continue'}
-                {!isLastStep && <ChevronRight className="h-4 w-4 ml-1" />}
+                {!isLastStep && !isApproving && <ChevronRight className="h-4 w-4 ml-1" />}
               </button>
               <button
-                onClick={onRegenerate}
-                disabled={isGenerating}
+                onClick={handleRegenerate}
+                disabled={isGenerating || isApproving || isEditing}
                 className="flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
               >
                 <RefreshCw className="h-5 w-5 mr-2" />
@@ -201,6 +322,22 @@ export default function StepReview({
       </div>
     </div>
   )
+}
+
+// Helper: Extract display content from variant content
+function getContentForDisplay(step: string, content: Record<string, unknown>): unknown {
+  switch (step) {
+    case 'image':
+      return content.image_url
+    case 'video':
+      return content.video_url
+    case 'audio':
+      return content.audio_url || content.video_with_audio_url
+    case 'scenario':
+      return content  // Return full scenario object
+    default:
+      return content
+  }
 }
 
 // Helper: Get step content from video

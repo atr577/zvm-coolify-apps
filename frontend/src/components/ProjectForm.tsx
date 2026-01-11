@@ -42,6 +42,7 @@ export default function ProjectForm({
     name: initialData?.name || '',
     description: initialData?.description || '',
     story_template: initialData?.story_template || '',
+    motion_template: initialData?.motion_template || '',
     platforms: initialData?.platforms || [],
     duration: initialData?.duration || 5,
     aspect_ratio: initialData?.aspect_ratio || '9:16',
@@ -201,20 +202,45 @@ export default function ProjectForm({
       {/* Story Template */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Story Template (концепция ролика) *
+          {formData.project_type === 'remix' ? 'Image Prompt Template *' : 'Story Template (концепция ролика) *'}
         </label>
         <textarea
           value={formData.story_template}
           onChange={(e) => setFormData({ ...formData, story_template: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
           rows={6}
-          placeholder="Элегантная девушка в стильном наряде выходит из роскошного автомобиля премиум класса на фоне узнаваемой локации мирового города..."
+          placeholder={formData.project_type === 'remix'
+            ? "A {hair_color} woman in {outfit} sitting in {car_model}..."
+            : "Элегантная девушка в стильном наряде выходит из роскошного автомобиля..."
+          }
           required
         />
         <p className="mt-1 text-xs text-gray-500">
-          Опишите общую концепцию ролика. AI сгенерирует множество конкретных вариантов на основе этого шаблона.
+          {formData.project_type === 'remix'
+            ? 'Промпт для генерации изображения. Используйте {переменные} для подстановки.'
+            : 'Опишите общую концепцию ролика. AI сгенерирует сценарий на основе этого шаблона.'
+          }
         </p>
       </div>
+
+      {/* Motion Template (only for remix) */}
+      {formData.project_type === 'remix' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Motion Prompt Template *
+          </label>
+          <textarea
+            value={formData.motion_template || ''}
+            onChange={(e) => setFormData({ ...formData, motion_template: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            rows={3}
+            placeholder="Woman with {expression} slowly turns toward camera, {hair_style} hair moves gently..."
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Промпт для генерации движения в видео. Используйте те же {'{переменные}'} что и в Image Prompt.
+          </p>
+        </div>
+      )}
 
       {/* Audio Mode */}
       <div>

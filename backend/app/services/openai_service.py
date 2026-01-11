@@ -146,7 +146,9 @@ class OpenAIService:
         story_template: str,
         content_variables: Dict[str, Any],
         duration: int = 5,
-        aspect_ratio: str = "9:16"
+        aspect_ratio: str = "9:16",
+        feedback: Optional[str] = None,
+        previous_scenario: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Generate scenario with image_prompt from story_template + content_variables.
 
@@ -161,6 +163,8 @@ class OpenAIService:
             content_variables: Hard constraints (actor, vehicle, location, etc.)
             duration: Video duration in seconds
             aspect_ratio: Video aspect ratio (e.g., "9:16", "16:9", "1:1")
+            feedback: Optional user feedback for regeneration
+            previous_scenario: Previous scenario to improve upon
         """
         if self.mock_mode:
             logger.info("MOCK MODE: Returning mock scenario from template")
@@ -186,7 +190,9 @@ class OpenAIService:
             story_template=story_template,
             content_variables=content_variables,
             duration=duration,
-            aspect_ratio=aspect_ratio
+            aspect_ratio=aspect_ratio,
+            feedback=feedback,
+            previous_scenario=previous_scenario
         )
 
         try:
@@ -199,6 +205,52 @@ class OpenAIService:
             return result
         except PiAPIError as e:
             logger.error(f"Failed to generate scenario from template: {e}")
+            raise
+
+    async def refine_prompt(
+        self,
+        current_prompt: str,
+        feedback: str,
+        prompt_type: str = "image"
+    ) -> str:
+        """Refine a prompt based on user feedback.
+
+        Args:
+            current_prompt: The current prompt text
+            feedback: User's feedback/instructions for improvement
+            prompt_type: Type of prompt - "image" or "motion"
+
+        Returns:
+            Refined prompt string
+        """
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock refined prompt")
+            await asyncio.sleep(0.5)
+            return f"{current_prompt} [refined with: {feedback}]"
+
+        if prompt_type == "image":
+            system = "You are an expert at writing image generation prompts. Refine the prompt based on user feedback while keeping the core subject and style."
+        else:
+            system = "You are an expert at writing motion/video prompts. Refine the prompt based on user feedback while keeping the core action."
+
+        user_prompt = f"""Current prompt:
+{current_prompt}
+
+User feedback:
+{feedback}
+
+Create an improved prompt that incorporates the feedback. Keep the same format and language (English). Return ONLY the new prompt text, nothing else."""
+
+        try:
+            result = await self.client.generate_text(
+                prompt=user_prompt,
+                system_prompt=system,
+                temperature=0.7
+            )
+            logger.info(f"Prompt refined successfully: {prompt_type}")
+            return result.strip()
+        except PiAPIError as e:
+            logger.error(f"Failed to refine prompt: {e}")
             raise
 
     async def validate_content(
@@ -230,11 +282,17 @@ class OpenAIService:
 
     async def generate_publishing_meta(
         self,
-        prompt_or_template: str,
         platforms: List[str],
-        image_url: Optional[str] = None
+        scenario_data: Optional[Dict[str, Any]] = None,
+        fallback_text: Optional[str] = None
     ) -> Dict[str, Dict[str, str]]:
-        """Generate publishing metadata for platforms."""
+        """Generate publishing metadata for platforms.
+
+        Args:
+            platforms: List of platforms to generate for
+            scenario_data: Scenario data with story_template, content_variables, image_prompt
+            fallback_text: Fallback text if scenario_data not available
+        """
         if self.mock_mode:
             logger.info("MOCK MODE: Returning mock publishing meta")
             await asyncio.sleep(0.5)
@@ -247,7 +305,11 @@ class OpenAIService:
                 for platform in platforms
             }
 
-        prompt = build_publishing_meta_prompt(prompt_or_template, platforms)
+        prompt = build_publishing_meta_prompt(
+            prompt_or_template=fallback_text or "",
+            platforms=platforms,
+            scenario_data=scenario_data
+        )
 
         try:
             result = await self.client.generate_json(

@@ -38,19 +38,42 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
   // Ref to prevent double auto-start (React StrictMode protection)
   const autoStartedRef = useRef(false)
 
-  // Get completed steps based on video data
-  const completedSteps = getCompletedSteps(video, steps)
-  const currentStepIndex = completedSteps.length
-  const currentStep = currentStepIndex < steps.length ? steps[currentStepIndex] : null
-  const isCompleted = completedSteps.length === steps.length
+  // Use video.current_step from backend to determine state
+  const currentStep = video.current_step as string | null
 
-  // AUTO mode: auto-start when pending (with double-call protection)
+  // Completed steps: all steps that have data (for navigation)
+  const completedSteps = getCompletedSteps(video, steps)
+  const isCompleted = video.status === 'completed'
+
+  // Check if current step has data (awaiting approval)
+  const currentStepHasData = currentStep ? hasStepData(video, currentStep) : false
+
+  // AUTO mode: auto-start when pending or in_progress (resume after refresh)
   useEffect(() => {
-    if (!isManual && video.status === 'pending' && !workflow.isRunningAuto && !autoStartedRef.current) {
+    const status = video.status?.toLowerCase()
+    const shouldAutoStart = !isManual &&
+      (status === 'pending' || (status === 'in_progress' && !isCompleted)) &&
+      !workflow.isRunningAuto &&
+      !autoStartedRef.current
+
+    if (shouldAutoStart) {
       autoStartedRef.current = true
       workflow.runAuto()
     }
-  }, [isManual, video.status, workflow.isRunningAuto])
+  }, [isManual, video.status, isCompleted, workflow.isRunningAuto])
+
+  // MANUAL mode: auto-start current step if it has no data
+  useEffect(() => {
+    if (
+      isManual &&
+      !isCompleted &&
+      currentStep &&
+      !currentStepHasData &&
+      !workflow.isGenerating
+    ) {
+      workflow.generateStep(currentStep as typeof steps[number])
+    }
+  }, [isManual, isCompleted, currentStep, currentStepHasData, workflow.isGenerating])
 
   // Error display
   if (workflow.error) {
@@ -65,7 +88,7 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
           onClick={() => {
             workflow.clearError()
             if (currentStep) {
-              workflow.generateStep(currentStep)
+              workflow.generateStep(currentStep as typeof steps[number])
             }
           }}
           className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
@@ -77,18 +100,16 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
     )
   }
 
-  // MANUAL mode with current step
-  if (isManual && currentStep && !workflow.isGenerating) {
+  // MANUAL mode: show approval UI when current step has data
+  if (isManual && currentStep && currentStepHasData && !workflow.isGenerating) {
+    const stepAsType = currentStep as typeof steps[number]
     return (
       <StepReview
         video={video}
         videoId={videoId}
-        currentStep={currentStep}
-        steps={steps as unknown as string[]}
+        currentStep={stepAsType}
+        steps={[...steps]}
         completedSteps={completedSteps}
-        onGenerate={() => workflow.generateStep(currentStep)}
-        onRegenerate={() => workflow.generateStep(currentStep)}
-        isGenerating={workflow.generatingStep === currentStep}
       />
     )
   }
@@ -127,7 +148,9 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
           {steps.map((step, index) => {
             const isStepCompleted = completedSteps.includes(step)
             const isCurrent = step === (workflow.generatingStep || currentStep)
-            const isGeneratingThis = workflow.generatingStep === step
+            // In AUTO mode, show spinner on currentStep while running
+            const isGeneratingThis = workflow.generatingStep === step ||
+              (!isManual && workflow.isRunningAuto && step === currentStep && !isStepCompleted)
 
             return (
               <div
@@ -171,30 +194,18 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
           })}
         </div>
 
-        {/* Start button for MANUAL mode */}
-        {isManual && !workflow.isGenerating && currentStep && completedSteps.length === 0 && (
-          <button
-            onClick={() => workflow.generateStep(currentStep)}
-            className="mt-6 w-full flex items-center justify-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition"
-          >
-            <Play className="h-5 w-5 mr-2" />
-            Start Generation
-          </button>
-        )}
       </div>
     </div>
   )
 }
 
-// Helper: Get completed steps from video data
+// Helper: Get completed steps (all steps that have data, regardless of current position)
 function getCompletedSteps(video: Video, steps: readonly string[]): string[] {
   const completed: string[] = []
 
   for (const step of steps) {
     if (hasStepData(video, step)) {
       completed.push(step)
-    } else {
-      break // Stop at first incomplete step
     }
   }
 

@@ -34,6 +34,10 @@ router = APIRouter()
 # Schemas
 # =============================================================================
 
+class GenerateRequest(BaseModel):
+    feedback: Optional[str] = None
+
+
 class GenerateResponse(BaseModel):
     variant_id: int
     step_type: str
@@ -47,6 +51,7 @@ class VariantResponse(BaseModel):
     content: Dict[str, Any]
     is_selected: bool
     created_at: datetime
+    feedback: Optional[str] = None
 
 
 class VariantsListResponse(BaseModel):
@@ -67,6 +72,22 @@ class RunAutoResponse(BaseModel):
     completed_steps: List[str]
     current_step: Optional[str] = None
     error: Optional[str] = None
+
+
+class UpdateContentRequest(BaseModel):
+    content: Dict[str, Any]
+
+
+class UpdateContentResponse(BaseModel):
+    variant_id: int
+    step_type: str
+    content: Dict[str, Any]
+    is_selected: bool
+
+
+class GoToStepResponse(BaseModel):
+    step: str
+    has_data: bool
 
 
 # =============================================================================
@@ -126,8 +147,15 @@ def validate_step(step: str, video: Video):
         )
 
 
-async def generate_step_content(step: str, video: Video, db: Session) -> Dict[str, Any]:
-    """Generate content for a specific step."""
+async def generate_step_content(step: str, video: Video, db: Session, feedback: Optional[str] = None) -> Dict[str, Any]:
+    """Generate content for a specific step.
+
+    Args:
+        step: Step type to generate
+        video: Video model
+        db: Database session
+        feedback: Optional user feedback for regeneration
+    """
     project = video.project
     is_remix = project and project.project_type == "remix"
 
@@ -150,7 +178,9 @@ async def generate_step_content(step: str, video: Video, db: Session) -> Dict[st
                 story_template=project.story_template or "",
                 content_variables=video.content_variables or {},
                 duration=project.duration or 5,
-                aspect_ratio=project.aspect_ratio or "9:16"
+                aspect_ratio=project.aspect_ratio or "9:16",
+                feedback=feedback,
+                previous_scenario=video.scenario_data
             )
 
     elif step == "image":
@@ -161,36 +191,68 @@ async def generate_step_content(step: str, video: Video, db: Session) -> Dict[st
             if video.content_variables:
                 for key, value in video.content_variables.items():
                     prompt = prompt.replace(f"{{{key}}}", str(value))
-            image_url = await kling_service.generate_image(
-                prompt=prompt,
-                aspect_ratio=project.aspect_ratio or "9:16"
-            )
         else:
             # For Discover, use image_prompt from scenario_data
             if not video.scenario_data:
                 raise HTTPException(status_code=400, detail="Scenario not generated yet")
-            scenario_data = video.scenario_data
-            image_url = await kling_service.generate_image(
-                prompt=scenario_data.get("image_prompt", ""),
-                negative_prompt=scenario_data.get("negative_prompt"),
-                aspect_ratio=project.aspect_ratio or "9:16"
-            )
-        return {"image_url": image_url}
+            prompt = video.scenario_data.get("image_prompt", "")
+
+        # Refine prompt if feedback provided
+        if feedback and prompt:
+            prompt = await openai_service.refine_prompt(prompt, feedback, prompt_type="image")
+
+        image_url = await kling_service.generate_image(
+            prompt=prompt,
+            negative_prompt=video.scenario_data.get("negative_prompt") if video.scenario_data else None,
+            aspect_ratio=project.aspect_ratio or "9:16"
+        )
+        return {
+            "image_url": image_url,
+            "image_prompt": prompt,
+            "source_scenario": video.scenario_data  # snapshot for lineage
+        }
 
     elif step == "video":
         if not video.image_url:
             raise HTTPException(status_code=400, detail="Image not generated yet")
-        if not video.scenario_data:
-            raise HTTPException(status_code=400, detail="Scenario not generated yet")
+
+        # Get motion prompt and scenario data
+        if is_remix:
+            # Remix: use motion_template from project
+            if not project.motion_template:
+                raise HTTPException(status_code=400, detail="Project has no motion_template")
+            motion_prompt = project.motion_template
+            # Fill placeholders in motion prompt
+            if video.content_variables:
+                for key, value in video.content_variables.items():
+                    motion_prompt = motion_prompt.replace(f"{{{key}}}", str(value))
+            # Build scenario_data for lineage
+            scenario_data = {"motion_prompt": motion_prompt}
+        else:
+            # Discover: use scenario_data from previous step
+            if not video.scenario_data:
+                raise HTTPException(status_code=400, detail="Scenario not generated yet")
+            scenario_data = video.scenario_data
+            motion_prompt = scenario_data.get("motion_prompt", "")
+
+        # Refine motion prompt if feedback provided
+        if feedback and motion_prompt:
+            motion_prompt = await openai_service.refine_prompt(motion_prompt, feedback, prompt_type="motion")
 
         result = await kling_service.generate_video(
             image_url=video.image_url,
-            prompt=video.scenario_data.get("motion_prompt", ""),
+            prompt=motion_prompt,
             duration=project.duration or 5,
             return_task_id=True
         )
         video_url, task_id = result
-        return {"video_url": video_url, "video_task_id": task_id}
+        return {
+            "video_url": video_url,
+            "video_task_id": task_id,
+            "motion_prompt": motion_prompt,
+            "source_image_url": video.image_url,  # snapshot for lineage
+            "source_scenario": scenario_data  # use resolved scenario_data
+        }
 
     elif step == "audio":
         if not video.video_url:
@@ -198,8 +260,26 @@ async def generate_step_content(step: str, video: Video, db: Session) -> Dict[st
         if not video.video_task_id:
             raise HTTPException(status_code=400, detail="Video task ID not found")
         audio_urls = await kling_service.add_audio_to_video(video.video_task_id)
+
+        # Get scenario data for lineage
+        if is_remix:
+            # Build scenario_data from motion_template
+            motion_prompt = project.motion_template or ""
+            if video.content_variables:
+                for key, value in video.content_variables.items():
+                    motion_prompt = motion_prompt.replace(f"{{{key}}}", str(value))
+            scenario_data = {"motion_prompt": motion_prompt}
+        else:
+            scenario_data = video.scenario_data
+
         # Return first audio variant as main
-        return {"audio_url": audio_urls[0] if audio_urls else None, "audio_variants": audio_urls}
+        return {
+            "audio_url": audio_urls[0] if audio_urls else None,
+            "audio_variants": audio_urls,
+            "source_video_url": video.video_url,  # snapshot for lineage
+            "source_image_url": video.image_url,
+            "source_scenario": scenario_data
+        }
 
     else:
         raise HTTPException(status_code=400, detail=f"Unknown step: {step}")
@@ -213,6 +293,7 @@ async def generate_step_content(step: str, video: Video, db: Session) -> Dict[st
 async def generate_step(
     video_id: int,
     step: str,
+    request: GenerateRequest = GenerateRequest(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -226,33 +307,38 @@ async def generate_step(
     db.commit()
 
     try:
-        # Generate content
-        content = await generate_step_content(step, video, db)
+        # Find current selected variant (parent for regeneration)
+        current_variant = db.query(StepHistory).filter(
+            StepHistory.video_id == video_id,
+            StepHistory.step_type == step,
+            StepHistory.is_selected == True
+        ).first()
 
-        # Save to history
+        # Generate content (with optional feedback)
+        content = await generate_step_content(step, video, db, feedback=request.feedback)
+
+        # Deselect current variant if exists
+        if current_variant:
+            current_variant.is_selected = False
+
+        # Save to history with feedback and parent link - always auto-select
         history = StepHistory(
             video_id=video_id,
             step_type=step,
             content=content,
-            is_selected=False
+            is_selected=True,
+            feedback=request.feedback,
+            parent_id=current_variant.id if current_variant else None
         )
         db.add(history)
+
+        # Copy to video
+        _copy_to_video(video, step, content)
         db.commit()
         db.refresh(history)
 
-        # Auto-select if first variant
-        existing_count = db.query(StepHistory).filter(
-            StepHistory.video_id == video_id,
-            StepHistory.step_type == step
-        ).count()
-
-        if existing_count == 1:
-            # First variant - auto-select
-            history.is_selected = True
-            _copy_to_video(video, step, content)
-            # Download media locally (non-blocking, best-effort)
-            await _download_media_for_step(video, step)
-            db.commit()
+        # Download media locally (non-blocking, best-effort)
+        await _download_media_for_step(video, step)
 
         logger.info(f"Generated {step} for video {video_id}, variant_id={history.id}")
 
@@ -300,7 +386,8 @@ async def get_variants(
                 step_type=v.step_type,
                 content=v.content,
                 is_selected=v.is_selected,
-                created_at=v.created_at
+                created_at=v.created_at,
+                feedback=v.feedback
             )
             for v in variants
         ],
@@ -308,14 +395,115 @@ async def get_variants(
     )
 
 
-@router.post("/{video_id}/select/{variant_id}", response_model=SelectResponse)
-async def select_variant(
+@router.patch("/{video_id}/update/{step}", response_model=UpdateContentResponse)
+async def update_step_content(
+    video_id: int,
+    step: str,
+    request: UpdateContentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update step content (manual edit). Creates new variant with edited content."""
+    video = get_video_with_auth(db, video_id, current_user)
+    validate_step(step, video)
+
+    # Find current selected variant (parent)
+    current_variant = db.query(StepHistory).filter(
+        StepHistory.video_id == video_id,
+        StepHistory.step_type == step,
+        StepHistory.is_selected == True
+    ).first()
+
+    # Create new variant with edited content
+    history = StepHistory(
+        video_id=video_id,
+        step_type=step,
+        content=request.content,
+        is_selected=True,
+        feedback="[manual edit]",
+        parent_id=current_variant.id if current_variant else None
+    )
+
+    # Deselect old variant
+    if current_variant:
+        current_variant.is_selected = False
+
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+
+    # Update video with new content
+    _copy_to_video(video, step, request.content)
+    db.commit()
+
+    logger.info(f"Updated {step} content for video {video_id}, variant_id={history.id}")
+
+    return UpdateContentResponse(
+        variant_id=history.id,
+        step_type=step,
+        content=request.content,
+        is_selected=True
+    )
+
+
+class SwitchResponse(BaseModel):
+    variant_id: int
+    step_type: str
+    content: Dict[str, Any]
+
+
+@router.post("/{video_id}/switch/{variant_id}", response_model=SwitchResponse)
+async def switch_variant(
     video_id: int,
     variant_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Select a variant, mark dependent steps as stale."""
+    """Switch to a variant (for preview). Does NOT clear dependent steps."""
+    video = get_video_with_auth(db, video_id, current_user)
+
+    # Get variant
+    variant = db.query(StepHistory).filter(
+        StepHistory.id == variant_id,
+        StepHistory.video_id == video_id
+    ).first()
+
+    if not variant:
+        raise HTTPException(status_code=404, detail="Variant not found")
+
+    step = variant.step_type
+
+    # Deselect all other variants of this step
+    db.query(StepHistory).filter(
+        StepHistory.video_id == video_id,
+        StepHistory.step_type == step
+    ).update({"is_selected": False})
+
+    # Select this variant
+    variant.is_selected = True
+
+    # Copy to video
+    _copy_to_video(video, step, variant.content)
+
+    db.commit()
+
+    logger.info(f"Switched to variant {variant_id} for {step}")
+
+    return SwitchResponse(
+        variant_id=variant_id,
+        step_type=step,
+        content=variant.content
+    )
+
+
+@router.post("/{video_id}/approve/{variant_id}", response_model=SelectResponse)
+async def approve_variant(
+    video_id: int,
+    variant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Approve a variant and move to next step. Clears dependent steps."""
     video = get_video_with_auth(db, video_id, current_user)
 
     # Get variant
@@ -360,14 +548,69 @@ async def select_variant(
         elif stale_step == "audio":
             video.local_audio_path = None
 
+    # Move to next step
+    steps = get_steps_for_video(video)
+    current_index = steps.index(step) if step in steps else -1
+    if current_index < len(steps) - 1:
+        video.current_step = steps[current_index + 1]
+    else:
+        # Last step - mark as completed
+        video.status = WorkflowStatus.COMPLETED
+        video.current_step = None
+
+        # Generate publishing metadata
+        await _generate_publishing_meta(video, db)
+
     db.commit()
 
-    logger.info(f"Selected variant {variant_id} for {step}, stale_steps={stale_steps}")
+    logger.info(f"Approved variant {variant_id} for {step}, next_step={video.current_step}, stale_steps={stale_steps}")
 
     return SelectResponse(
         variant_id=variant_id,
         step_type=step,
         stale_steps=stale_steps
+    )
+
+
+# Legacy endpoint - redirect to approve
+@router.post("/{video_id}/select/{variant_id}", response_model=SelectResponse)
+async def select_variant(
+    video_id: int,
+    variant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """DEPRECATED: Use /approve/{variant_id} instead. This now calls approve."""
+    return await approve_variant(video_id, variant_id, db, current_user)
+
+
+@router.post("/{video_id}/goto/{step}", response_model=GoToStepResponse)
+async def goto_step(
+    video_id: int,
+    step: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Navigate to a specific step (for MANUAL mode back navigation)."""
+    video = get_video_with_auth(db, video_id, current_user)
+    validate_step(step, video)
+
+    # Check if step has data (variants exist)
+    has_variants = db.query(StepHistory).filter(
+        StepHistory.video_id == video_id,
+        StepHistory.step_type == step
+    ).count() > 0
+
+    # Update current step
+    video.current_step = step
+    video.status = WorkflowStatus.IN_PROGRESS
+    db.commit()
+
+    logger.info(f"Navigated to step {step} for video {video_id}")
+
+    return GoToStepResponse(
+        step=step,
+        has_data=has_variants
     )
 
 
@@ -377,17 +620,18 @@ async def run_auto(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Run all steps automatically (AUTO mode)."""
+    """Run all steps automatically (AUTO mode). Can resume from in_progress."""
     video = get_video_with_auth(db, video_id, current_user)
 
-    # Prevent duplicate runs - only start if pending
-    if video.status != WorkflowStatus.PENDING:
+    # Allow pending or in_progress (resume after interruption)
+    # Block if already completed or failed
+    if video.status not in [WorkflowStatus.PENDING, WorkflowStatus.IN_PROGRESS]:
         logger.warning(f"run_auto called but video {video_id} status is {video.status}, skipping")
         return RunAutoResponse(
             video_id=video_id,
             status=video.status.value if video.status else "unknown",
             completed_steps=[],
-            current_step=video.current_step.value if video.current_step else None,
+            current_step=video.current_step if isinstance(video.current_step, str) else None,
             error=None
         )
 
@@ -455,6 +699,10 @@ async def run_auto(
     if not error and len(completed_steps) == len(steps):
         video.status = WorkflowStatus.COMPLETED
         current_step = None
+
+        # Generate publishing metadata
+        await _generate_publishing_meta(video, db)
+
         db.commit()
 
     return RunAutoResponse(
@@ -471,7 +719,10 @@ async def run_auto(
 # =============================================================================
 
 def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
-    """Copy step content to appropriate Video field."""
+    """Copy step content to appropriate Video field.
+
+    Also restores source chain data (lineage) when selecting variants.
+    """
     field = STEP_TO_VIDEO_FIELD.get(step)
     if not field:
         return
@@ -481,12 +732,27 @@ def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
         setattr(video, field, content)
     elif step == "image":
         video.image_url = content.get("image_url")
+        # Restore source chain
+        if content.get("source_scenario"):
+            video.scenario_data = content["source_scenario"]
     elif step == "video":
         video.video_url = content.get("video_url")
         video.video_task_id = content.get("video_task_id")
+        # Restore source chain
+        if content.get("source_image_url"):
+            video.image_url = content["source_image_url"]
+        if content.get("source_scenario"):
+            video.scenario_data = content["source_scenario"]
     elif step == "audio":
         video.video_with_audio_url = content.get("audio_url")
         video.audio_variants = content.get("audio_variants")
+        # Restore source chain
+        if content.get("source_video_url"):
+            video.video_url = content["source_video_url"]
+        if content.get("source_image_url"):
+            video.image_url = content["source_image_url"]
+        if content.get("source_scenario"):
+            video.scenario_data = content["source_scenario"]
 
 
 async def _download_media_for_step(video: Video, step: str):
@@ -513,3 +779,35 @@ async def _download_media_for_step(video: Video, step: str):
     except Exception as e:
         # Non-blocking: log error but don't fail the workflow
         logger.error(f"Failed to download media for step {step}, video {video.id}: {e}")
+
+
+async def _generate_publishing_meta(video: Video, db: Session):
+    """Generate publishing metadata when workflow completes."""
+    try:
+        project = video.project
+        if not project or not project.platforms:
+            logger.info(f"Skipping publishing_meta: no project or platforms for video {video.id}")
+            return
+
+        # Get scenario data for context
+        scenario_data = video.scenario_data or {}
+
+        # Add story_template and content_variables if available
+        if project.story_template and "story_template" not in scenario_data:
+            scenario_data["story_template"] = project.story_template
+        if video.content_variables and "content_variables" not in scenario_data:
+            scenario_data["content_variables"] = video.content_variables
+
+        # Generate publishing meta
+        publishing_meta = await openai_service.generate_publishing_meta(
+            platforms=project.platforms,
+            scenario_data=scenario_data,
+            fallback_text=scenario_data.get("image_prompt", project.story_template or "")
+        )
+
+        video.publishing_meta = publishing_meta
+        logger.info(f"Generated publishing_meta for video {video.id}: {list(publishing_meta.keys())}")
+
+    except Exception as e:
+        # Non-blocking: log error but don't fail the workflow
+        logger.error(f"Failed to generate publishing_meta for video {video.id}: {e}")

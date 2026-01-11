@@ -3,18 +3,13 @@ import { InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/Platf
 import { getImageUrl } from '@/utils/video'
 import type { Video, StepType } from '@/types'
 
-const STEP_ORDER: StepType[] = ['story', 'description', 'prompt', 'image', 'scenario', 'video', 'audio', 'adaptation', 'publishing']
+const STEP_ORDER: StepType[] = ['scenario', 'image', 'video', 'audio']
 
 const STEP_LABELS: Record<StepType, string> = {
-  story: 'Story',
-  description: 'Description',
-  prompt: 'Prompt',
-  image: 'Image',
   scenario: 'Scenario',
+  image: 'Image',
   video: 'Video',
   audio: 'Audio',
-  adaptation: 'Adaptation',
-  publishing: 'Publishing'
 }
 
 function formatDate(dateString: string): string {
@@ -68,7 +63,7 @@ export default function VideoGridCard({ video, onClick, showProjectName, project
   const includeAudio = video.project?.audio_mode !== 'none'
   const baseSteps = isRemix
     ? ['image', 'video', 'audio'] as StepType[]
-    : STEP_ORDER.filter(s => !['adaptation', 'publishing'].includes(s))
+    : STEP_ORDER
   const activeSteps = includeAudio ? baseSteps : baseSteps.filter(s => s !== 'audio')
 
   const stepIndex = activeSteps.indexOf(video.current_step)

@@ -9,76 +9,14 @@
  */
 import { useState, useCallback } from 'react'
 import { useMutation, useQuery, useQueryClient } from 'react-query'
-import axios from 'axios'
+import { workflowApi, StepType } from '@/services/api'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-const api = axios.create({
-  baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
-})
-
-// Add auth token interceptor
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// Steps configuration (NEW: simplified Discover workflow)
+// Steps configuration: unified 4-step workflow
 // scenario generates image_prompt + motion_prompt from story_template + content_variables
 export const DISCOVER_STEPS = ['scenario', 'image', 'video', 'audio'] as const
 export const REMIX_STEPS = ['image', 'video', 'audio'] as const
 
-export type StepType = typeof DISCOVER_STEPS[number]
-
-export interface Variant {
-  id: number
-  step_type: string
-  content: Record<string, unknown>
-  is_selected: boolean
-  created_at: string
-}
-
-export interface GenerateResponse {
-  variant_id: number
-  step_type: string
-  content: Record<string, unknown>
-  is_selected: boolean
-}
-
-export interface SelectResponse {
-  variant_id: number
-  step_type: string
-  stale_steps: string[]
-}
-
-export interface RunAutoResponse {
-  video_id: number
-  status: string
-  completed_steps: string[]
-  current_step: string | null
-  error: string | null
-}
-
-// V3 API calls
-const v3Api = {
-  generateStep: (videoId: number, step: string) =>
-    api.post<GenerateResponse>(`/api/v3/${videoId}/generate/${step}`),
-
-  getVariants: (videoId: number, step: string) =>
-    api.get<{ step_type: string; variants: Variant[]; selected_id: number | null }>(
-      `/api/v3/${videoId}/variants/${step}`
-    ),
-
-  selectVariant: (videoId: number, variantId: number) =>
-    api.post<SelectResponse>(`/api/v3/${videoId}/select/${variantId}`),
-
-  runAuto: (videoId: number) =>
-    api.post<RunAutoResponse>(`/api/v3/${videoId}/run-auto`),
-}
+export type { StepType }
 
 export function useWorkflowV3(videoId: number, isRemix: boolean = false, includeAudio: boolean = true) {
   const queryClient = useQueryClient()
@@ -93,15 +31,16 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
 
   // Generate step mutation
   const generateStepMutation = useMutation(
-    (step: string) => v3Api.generateStep(videoId, step),
+    ({ step, feedback }: { step: StepType; feedback?: string }) =>
+      workflowApi.generateStep(videoId, step, feedback),
     {
-      onMutate: (step: string) => {
+      onMutate: ({ step }) => {
         setGeneratingStep(step)
         setError(null)
       },
-      onSuccess: (_res, step: string) => {
-        queryClient.invalidateQueries(['video', videoId])
-        queryClient.invalidateQueries(['variants', videoId, step])
+      onSuccess: async (_res, { step }) => {
+        await queryClient.invalidateQueries(['video', videoId])
+        await queryClient.invalidateQueries(['variants', videoId, step])
         setGeneratingStep(null)
       },
       onError: (err: Error) => {
@@ -111,11 +50,25 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
     }
   )
 
-  // Select variant mutation
-  const selectVariantMutation = useMutation(
-    (variantId: number) => v3Api.selectVariant(videoId, variantId),
+  // Switch variant mutation (for preview, no auto-continue)
+  const switchVariantMutation = useMutation(
+    (variantId: number) => workflowApi.switchVariant(videoId, variantId),
     {
-      onSuccess: (res: { data: SelectResponse }) => {
+      onSuccess: async (res) => {
+        await queryClient.invalidateQueries(['video', videoId])
+        await queryClient.invalidateQueries(['variants', videoId, res.data.step_type])
+      },
+      onError: (err: Error) => {
+        setError(err.message)
+      },
+    }
+  )
+
+  // Approve variant mutation (move to next step)
+  const approveVariantMutation = useMutation(
+    (variantId: number) => workflowApi.approveVariant(videoId, variantId),
+    {
+      onSuccess: (res) => {
         queryClient.invalidateQueries(['video', videoId])
         // Invalidate stale steps variants
         res.data.stale_steps.forEach((step: string) => {
@@ -128,9 +81,12 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
     }
   )
 
+  // Legacy alias
+  const selectVariantMutation = approveVariantMutation
+
   // Run auto mutation
   const runAutoMutation = useMutation(
-    () => v3Api.runAuto(videoId),
+    () => workflowApi.runAuto(videoId),
     {
       onMutate: () => {
         setError(null)
@@ -144,35 +100,90 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
     }
   )
 
+  // Update content mutation (manual edit)
+  const updateContentMutation = useMutation(
+    ({ step, content }: { step: StepType; content: Record<string, unknown> }) =>
+      workflowApi.updateContent(videoId, step, content),
+    {
+      onSuccess: async (_res, { step }) => {
+        await queryClient.invalidateQueries(['video', videoId])
+        await queryClient.invalidateQueries(['variants', videoId, step])
+      },
+      onError: (err: Error) => {
+        setError(err.message)
+      },
+    }
+  )
+
+  // Go to step mutation (back navigation)
+  const gotoStepMutation = useMutation(
+    (step: StepType) => workflowApi.gotoStep(videoId, step),
+    {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries(['video', videoId])
+      },
+      onError: (err: Error) => {
+        setError(err.message)
+      },
+    }
+  )
+
   // Get variants for a step (query)
-  const useVariants = (step: string) => {
+  const useVariants = (step: StepType) => {
     return useQuery(
       ['variants', videoId, step],
-      () => v3Api.getVariants(videoId, step).then((res: { data: { step_type: string; variants: Variant[]; selected_id: number | null } }) => res.data),
+      () => workflowApi.getVariants(videoId, step).then((res) => res.data),
       { enabled: !!step }
     )
   }
 
   // Generate step
   const generateStep = useCallback(
-    (step: string) => {
-      generateStepMutation.mutate(step)
+    (step: StepType, feedback?: string) => {
+      generateStepMutation.mutate({ step, feedback })
     },
     [generateStepMutation]
   )
 
-  // Select variant
-  const selectVariant = useCallback(
+  // Switch variant (for preview)
+  const switchVariant = useCallback(
     (variantId: number) => {
-      selectVariantMutation.mutate(variantId)
+      switchVariantMutation.mutate(variantId)
     },
-    [selectVariantMutation]
+    [switchVariantMutation]
   )
+
+  // Approve variant (move to next step)
+  const approveVariant = useCallback(
+    (variantId: number) => {
+      approveVariantMutation.mutate(variantId)
+    },
+    [approveVariantMutation]
+  )
+
+  // Go to step (back navigation)
+  const gotoStep = useCallback(
+    (step: StepType) => {
+      gotoStepMutation.mutate(step)
+    },
+    [gotoStepMutation]
+  )
+
+  // Legacy alias
+  const selectVariant = approveVariant
 
   // Run all steps automatically
   const runAuto = useCallback(() => {
     runAutoMutation.mutate()
   }, [runAutoMutation])
+
+  // Update content (manual edit)
+  const updateContent = useCallback(
+    (step: StepType, content: Record<string, unknown>) => {
+      updateContentMutation.mutate({ step, content })
+    },
+    [updateContentMutation]
+  )
 
   // Clear error
   const clearError = useCallback(() => {
@@ -189,14 +200,22 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
 
     // Actions
     generateStep,
-    selectVariant,
+    switchVariant,
+    approveVariant,
+    gotoStep,
+    selectVariant, // Legacy alias for approveVariant
     runAuto,
+    updateContent,
     clearError,
     useVariants,
 
     // Mutation states
     generateStepMutation,
-    selectVariantMutation,
+    switchVariantMutation,
+    approveVariantMutation,
+    gotoStepMutation,
+    selectVariantMutation, // Legacy alias
     runAutoMutation,
+    updateContentMutation,
   }
 }

@@ -37,7 +37,7 @@ export default function PublishingMetaEditor({
     () => workflowApi.generateMeta(videoId),
     {
       onSuccess: (response) => {
-        const newMeta = response.data.publishing_meta || {}
+        const newMeta = (response.data.publishing_meta || {}) as Record<string, PlatformMeta>
         setMeta(newMeta)
         queryClient.invalidateQueries(['video', videoId])
       },

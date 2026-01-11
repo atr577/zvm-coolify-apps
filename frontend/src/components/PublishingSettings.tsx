@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
 import { CheckCircle, Instagram, Youtube, AlertCircle, Loader2 } from 'lucide-react'
-import { workflowApi, publishingApi, socialAccountsApi, SocialAccount } from '@/services/api'
+import { publishingApi, socialAccountsApi, SocialAccount } from '@/services/api'
 import type { AdaptationData, PlatformAdaptation } from '@/types'
 import { getErrorMessage } from '@/types'
 
 interface PublishingSettingsProps {
   videoId: number
-  publishingStepId: number
+  publishingStepId?: number  // Legacy, no longer used
   adaptationData: AdaptationData | null
   platforms: string[]
   videoUrl: string
@@ -22,7 +22,6 @@ interface PublishResult {
 
 export default function PublishingSettings({
   videoId,
-  publishingStepId,
   adaptationData,
   platforms,
   videoUrl
@@ -135,15 +134,10 @@ export default function PublishingSettings({
       setPublishResults([...results])
     }
 
-    // If all successful, approve the step
+    // Invalidate video query to refresh status
     const allSuccess = results.every(r => r.success)
     if (allSuccess) {
-      try {
-        await workflowApi.approveStep(publishingStepId, true, 'Published to all platforms')
-        queryClient.invalidateQueries(['video', videoId])
-      } catch (err) {
-        console.error('Failed to approve step:', err)
-      }
+      queryClient.invalidateQueries(['video', videoId])
     }
 
     setIsPublishing(false)

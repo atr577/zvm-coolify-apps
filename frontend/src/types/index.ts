@@ -9,16 +9,7 @@ export type WorkflowStatus =
   | 'completed'
   | 'failed'
 
-export type StepType =
-  | 'story'
-  | 'description'
-  | 'prompt'
-  | 'image'
-  | 'scenario'
-  | 'video'
-  | 'audio'
-  | 'adaptation'
-  | 'publishing'
+export type StepType = 'scenario' | 'image' | 'video' | 'audio'
 
 export type ValidationStatus = 'pass' | 'pass_with_warnings' | 'fail'
 
@@ -39,26 +30,6 @@ export interface PromptData {
   temperature?: number
 }
 
-export interface WorkflowStep {
-  id: number
-  video_id: number
-  step_type: StepType
-  status: WorkflowStatus
-  content: Record<string, any> | null
-  validation_attempts: number
-  max_validation_attempts: number
-  user_approved: boolean
-  user_feedback: string | null
-  prompt_used: string | null
-  original_prompt: PromptData | null
-  custom_prompt: PromptData | null
-  prompt_manually_edited: boolean
-  generation_time_seconds: number | null
-  started_at: string | null
-  completed_at: string | null
-  created_at: string
-  validations: ValidationResult[]
-}
 
 export type AspectRatio = '9:16' | '16:9' | '1:1'
 export type AudioMode = 'none' | 'scene' | 'music' | 'voiceover' | 'auto'
@@ -78,6 +49,7 @@ export interface Project {
   name: string
   description: string | null
   story_template: string
+  motion_template: string | null  // Motion prompt template (for remix)
   platforms: string[]
   duration: number
   aspect_ratio: AspectRatio
@@ -98,6 +70,7 @@ export interface CreateProjectDto {
   name: string
   description?: string
   story_template: string
+  motion_template?: string  // Motion prompt template (for remix)
   platforms: string[]
   duration: number
   aspect_ratio?: AspectRatio
@@ -117,6 +90,7 @@ export interface UpdateProjectDto {
   name?: string
   description?: string
   story_template?: string
+  motion_template?: string  // Motion prompt template (for remix)
   platforms?: string[]
   duration?: number
   aspect_ratio?: AspectRatio
@@ -162,7 +136,6 @@ export interface Video {
   published_at: string | null
   created_at: string
   updated_at: string
-  workflow_steps?: WorkflowStep[]
   project?: Project
   metrics?: VideoMetrics[]
 }
@@ -394,36 +367,6 @@ export interface AdaptationData {
   [platform: string]: PlatformAdaptation | undefined
 }
 
-// --- Variant System Types ---
-
-export type AttemptStatus = 'pending' | 'success' | 'failed'
-
-export interface Variant {
-  id: number
-  attempt_id: number
-  variant_number: number
-  content: Record<string, any>
-  is_selected: boolean
-}
-
-export interface StepAttempt {
-  id: number
-  step_id: number
-  attempt_number: number
-  status: AttemptStatus
-  parent_variant_id: number | null
-  feedback: string | null
-  started_at: string
-  completed_at: string | null
-  error_message: string | null
-  variants: Variant[]
-}
-
-export interface WorkflowStepWithVariants extends WorkflowStep {
-  attempts: StepAttempt[]
-  selected_variant_id: number | null
-  selected_variant: Variant | null
-}
 
 // --- API Error Type ---
 

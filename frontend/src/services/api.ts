@@ -1,9 +1,6 @@
 import axios from 'axios'
 import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse } from '@/types'
 
-// Flexible types for workflow data from API (may have additional/missing fields)
-type WorkflowData = Record<string, unknown>
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
@@ -47,152 +44,94 @@ export const aiApi = {
     }),
 }
 
-export interface StoryParams {
-  theme?: string
-  target_audience?: string
-  mood?: string
-  key_elements?: string
-  duration: number
-  platforms?: string[]
-  additional_notes?: string
-  custom_prompt?: {
-    system_prompt: string
-    user_prompt: string
-  }
+// Workflow step type
+export type StepType = 'scenario' | 'image' | 'video' | 'audio'
+
+// Workflow API responses
+export interface GenerateStepResponse {
+  variant_id: number
+  step_type: StepType
+  content: Record<string, unknown>
+  is_selected: boolean
 }
 
+export interface VariantResponse {
+  id: number
+  step_type: StepType
+  content: Record<string, unknown>
+  is_selected: boolean
+  created_at: string
+}
+
+export interface VariantsListResponse {
+  step_type: StepType
+  variants: VariantResponse[]
+  selected_id: number | null
+}
+
+export interface SelectResponse {
+  variant_id: number
+  step_type: StepType
+  stale_steps: StepType[]
+}
+
+export interface RunAutoResponse {
+  video_id: number
+  status: string
+  completed_steps: StepType[]
+  current_step: StepType | null
+  error: string | null
+}
+
+// Custom prompt type for prompt editing
 export interface CustomPrompt {
   system_prompt: string
   user_prompt: string
 }
 
-export interface PreviewPromptRequest {
-  video_id: number
-  step_type: 'story' | 'description' | 'prompt' | 'scenario' | 'adaptation'
-  context?: Record<string, unknown>
-}
-
-export interface PreviewPromptResponse {
-  system_prompt: string
-  user_prompt: string
-  step_type: string
-  can_edit: boolean
-}
-
-// Workflow API (обновленный для video_id)
+// Workflow API - 4-step pipeline: SCENARIO → IMAGE → VIDEO → AUDIO
 export const workflowApi = {
-  // Preview prompt before generation
-  previewPrompt: (request: PreviewPromptRequest) =>
-    api.post<PreviewPromptResponse>('/api/workflow/preview-prompt', request),
+  // Run all steps automatically (AUTO mode)
+  runAuto: (videoId: number) =>
+    api.post<RunAutoResponse>(`/api/workflow/${videoId}/run-auto`),
 
-  generateStory: (videoId: number, params: StoryParams) =>
-    api.post('/api/workflow/generate-story', {
-      video_id: videoId,
-      ...params
-    }),
+  // Generate a single step (MANUAL mode)
+  generateStep: (videoId: number, step: StepType, feedback?: string) =>
+    api.post<GenerateStepResponse>(`/api/workflow/${videoId}/generate/${step}`, { feedback }),
 
-  generateDescription: (videoId: number, storyData: WorkflowData, customPrompt?: CustomPrompt) =>
-    api.post('/api/workflow/generate-description', {
-      video_id: videoId,
-      story_data: storyData,
-      custom_prompt: customPrompt
-    }),
+  // Get all variants for a step
+  getVariants: (videoId: number, step: StepType) =>
+    api.get<VariantsListResponse>(`/api/workflow/${videoId}/variants/${step}`),
 
-  generatePrompt: (videoId: number, descriptionData: WorkflowData, customPrompt?: CustomPrompt) =>
-    api.post('/api/workflow/generate-prompt', {
-      video_id: videoId,
-      description_data: descriptionData,
-      custom_prompt: customPrompt
-    }),
+  // Switch to a variant (for preview, no auto-continue)
+  switchVariant: (videoId: number, variantId: number) =>
+    api.post<{ variant_id: number; step_type: string; content: Record<string, unknown> }>(
+      `/api/workflow/${videoId}/switch/${variantId}`
+    ),
 
-  generateImage: (videoId: number, promptOrData: string | WorkflowData, aspectRatio = '9:16', mode = 'std', refillFromTemplate = false) =>
-    api.post('/api/workflow/generate-image', {
-      video_id: videoId,
-      ...(typeof promptOrData === 'string'
-        ? { prompt: promptOrData }
-        : { prompt_data: promptOrData, prompt: (promptOrData as { main_prompt?: string }).main_prompt }
-      ),
-      aspect_ratio: aspectRatio,
-      mode,
-      refill_from_template: refillFromTemplate
-    }),
+  // Approve variant and move to next step
+  approveVariant: (videoId: number, variantId: number) =>
+    api.post<SelectResponse>(`/api/workflow/${videoId}/approve/${variantId}`),
 
-  generateScenario: (videoId: number, imageUrl: string, descriptionData: WorkflowData, customPrompt?: CustomPrompt) =>
-    api.post('/api/workflow/generate-scenario', {
-      video_id: videoId,
-      image_url: imageUrl,
-      description_data: descriptionData,
-      custom_prompt: customPrompt
-    }),
+  // Legacy: kept for compatibility
+  selectVariant: (videoId: number, variantId: number) =>
+    api.post<SelectResponse>(`/api/workflow/${videoId}/select/${variantId}`),
 
-  generateVideo: (videoId: number, imageUrl: string, scenarioData: WorkflowData, duration = 5, mode = 'std') =>
-    api.post('/api/workflow/generate-video', {
-      video_id: videoId,
-      image_url: imageUrl,
-      scenario_data: scenarioData,
-      duration,
-      mode,
-      version: '2.5'
-    }),
+  // Update step content (manual edit)
+  updateContent: (videoId: number, step: StepType, content: Record<string, unknown>) =>
+    api.patch<GenerateStepResponse>(`/api/workflow/${videoId}/update/${step}`, { content }),
 
-  generateAudio: (videoId: number) =>
-    api.post('/api/workflow/generate-audio', { video_id: videoId }),
+  // Navigate to a specific step (MANUAL mode back navigation)
+  gotoStep: (videoId: number, step: StepType) =>
+    api.post<{ step: string; has_data: boolean }>(`/api/workflow/${videoId}/goto/${step}`),
 
-  selectAudioVariant: (videoId: number, variantIndex: number) =>
-    api.post('/api/workflow/select-audio-variant', {
-      video_id: videoId,
-      variant_index: variantIndex
-    }),
-
-  adaptForPlatforms: (videoId: number, scenarioData: WorkflowData, platforms: string[], customPrompt?: CustomPrompt) =>
-    api.post('/api/workflow/adapt-for-platforms', {
-      video_id: videoId,
-      scenario_data: scenarioData,
-      platforms,
-      custom_prompt: customPrompt
-    }),
-
+  // Legacy: Generate publishing metadata (TODO: implement backend endpoint)
   generateMeta: (videoId: number) =>
-    api.post(`/api/workflow/generate-meta?video_id=${videoId}`),
+    api.post<{ publishing_meta: Record<string, unknown> }>(`/api/videos/${videoId}/generate-meta`),
 
-  updateMeta: (videoId: number, meta: Record<string, { title: string; description: string; hashtags: string }>) =>
-    api.patch(`/api/workflow/update-meta?video_id=${videoId}`, meta),
-
-  approveStep: (stepId: number, approved: boolean, feedback?: string, regenerate: boolean = true) =>
-    api.post('/api/workflow/approve-step', {
-      step_id: stepId,
-      approved,
-      feedback,
-      regenerate: !approved ? regenerate : false
-    }),
-
-  autoGenerateToVideo: (videoId: number) =>
-    api.post('/api/workflow/auto-generate-to-video', { video_id: videoId }),
-
-  // New v2 API endpoints (per CONTRACTS.md)
-  startWorkflow: (videoId: number) =>
-    api.post(`/api/workflow/${videoId}/start`),
-
-  getVariants: (videoId: number, stepType: string) =>
-    api.get(`/api/workflow/${videoId}/${stepType}/variants`),
-
-  selectVariant: (videoId: number, stepType: string, variantId: number) =>
-    api.post(`/api/workflow/${videoId}/${stepType}/select`, { variant_id: variantId }),
-
-  approveStepV2: (videoId: number, stepType: string) =>
-    api.post(`/api/workflow/${videoId}/${stepType}/approve`),
-
-  rejectStep: (videoId: number, stepType: string, reason?: string) =>
-    api.post(`/api/workflow/${videoId}/${stepType}/reject`, { reason }),
-
-  regenerateStep: (videoId: number, stepType: string, variantId: number, feedback?: string) =>
-    api.post(`/api/workflow/${videoId}/${stepType}/regenerate`, { variant_id: variantId, feedback }),
-
-  retryStep: (videoId: number, stepType: string) =>
-    api.post(`/api/workflow/${videoId}/${stepType}/retry`),
-
-  rollbackToStep: (videoId: number, targetStep: string) =>
-    api.post(`/api/workflow/${videoId}/rollback/${targetStep}`),
+  // Legacy: Update publishing metadata (uses videos PATCH endpoint)
+  updateMeta: (videoId: number, meta: Record<string, unknown>) =>
+    api.patch(`/api/videos/${videoId}`, { publishing_meta: meta }),
 }
 
 export interface SocialAccount {

@@ -145,12 +145,22 @@ def build_scenario_from_template_prompt(
     story_template: str,
     content_variables: Dict[str, Any],
     duration: int = 5,
-    aspect_ratio: str = "9:16"
+    aspect_ratio: str = "9:16",
+    feedback: Optional[str] = None,
+    previous_scenario: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Build scenario prompt from story_template + content_variables.
 
     This is the NEW Discover workflow - generates scenario with image_prompt directly.
+
+    Args:
+        story_template: The concept/idea for the video
+        content_variables: Hard constraints (actor, vehicle, location, etc.)
+        duration: Video duration in seconds
+        aspect_ratio: Video aspect ratio
+        feedback: Optional user feedback for regeneration
+        previous_scenario: Previous scenario to improve upon
     """
     variables_text = format_content_variables(content_variables)
 
@@ -162,7 +172,7 @@ def build_scenario_from_template_prompt(
     }
     orientation = orientation_map.get(aspect_ratio, f"{aspect_ratio}")
 
-    return f"""
+    prompt = f"""
 Ты режиссёр коротких вирусных видео. Создай ПОЛНЫЙ сценарий для {duration}-секундного видео.
 
 КОНЦЕПЦИЯ ВИДЕО:
@@ -216,3 +226,21 @@ def build_scenario_from_template_prompt(
 - Формат: {orientation}
 - Кинематографичное качество
 """
+
+    # Add feedback section if regenerating with feedback
+    if feedback and previous_scenario:
+        import json
+        feedback_section = f"""
+
+ДОРАБОТКА:
+Предыдущий сценарий:
+{json.dumps(previous_scenario, ensure_ascii=False, indent=2)}
+
+ФИДБЕК ПОЛЬЗОВАТЕЛЯ (обязательно учесть):
+{feedback}
+
+Создай УЛУЧШЕННЫЙ сценарий с учётом фидбека. Сохрани структуру JSON.
+"""
+        return prompt + feedback_section
+
+    return prompt

@@ -2,7 +2,7 @@ import { Volume2 } from 'lucide-react'
 import PublishingSettings from '@/components/PublishingSettings'
 import PublishingMetaEditor from '@/components/PublishingMetaEditor'
 import MetricsSection from './MetricsSection'
-import StepsListV3 from './StepsListV3'
+import StepsList from './StepsList'
 import { getBestVideoUrl } from '@/utils/video'
 import type { Video, VideoMetricsSummary } from '@/types'
 
@@ -78,7 +78,7 @@ export default function CompletedVideoView({
       />
 
       {/* Generation Steps */}
-      <StepsListV3 video={video} />
+      <StepsList video={video} />
     </div>
   )
 }

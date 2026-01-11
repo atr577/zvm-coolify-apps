@@ -20,7 +20,8 @@ class SystemPrompts(BaseModel):
 class ProjectBase(BaseModel):
     name: str
     description: Optional[str] = None
-    story_template: str
+    story_template: str  # Image prompt template with {placeholders}
+    motion_template: Optional[str] = None  # Motion prompt template with {placeholders} (for remix)
     platforms: List[str]
     duration: int
     aspect_ratio: Literal["9:16", "16:9", "1:1"] = "9:16"
@@ -31,7 +32,7 @@ class ProjectBase(BaseModel):
 
     # Remix-specific fields (optional for discover projects)
     source_video_ids: Optional[List[int]] = None  # Discover videos used as basis
-    scenario_template: Optional[Dict[str, str]] = None  # Template for video motion
+    scenario_template: Optional[Dict[str, str]] = None  # Legacy: Template for video motion
     placeholders: Optional[List[str]] = None  # ["dress_color", "car_model"]
     placeholder_suggestions: Optional[Dict[str, List[str]]] = None  # {dress_color: ["red", "blue"]}
 
@@ -44,6 +45,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     story_template: Optional[str] = None
+    motion_template: Optional[str] = None  # Motion prompt template (for remix)
     platforms: Optional[List[str]] = None
     duration: Optional[int] = None
     aspect_ratio: Optional[Literal["9:16", "16:9", "1:1"]] = None
@@ -54,7 +56,7 @@ class ProjectUpdate(BaseModel):
 
     # Remix-specific fields
     source_video_ids: Optional[List[int]] = None
-    scenario_template: Optional[Dict[str, str]] = None
+    scenario_template: Optional[Dict[str, str]] = None  # Legacy
     placeholders: Optional[List[str]] = None
     placeholder_suggestions: Optional[Dict[str, List[str]]] = None
 
