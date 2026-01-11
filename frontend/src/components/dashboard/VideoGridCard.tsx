@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle, Clock, Eye, Heart, Image, MessageCircle, Share2 } from 'lucide-react'
 import { InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PlatformIcons'
+import { getImageUrl } from '@/utils/video'
 import type { Video, StepType } from '@/types'
 
 const STEP_ORDER: StepType[] = ['story', 'description', 'prompt', 'image', 'scenario', 'video', 'audio', 'adaptation', 'publishing']
@@ -85,8 +86,8 @@ export default function VideoGridCard({ video, onClick, showProjectName, project
     >
       {/* Thumbnail */}
       <div className="aspect-video bg-gray-100 relative">
-        {video.image_url ? (
-          <img src={video.image_url} alt={video.title} className="w-full h-full object-cover" />
+        {getImageUrl(video) ? (
+          <img src={getImageUrl(video)!} alt={video.title} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Image className="h-12 w-12 text-gray-300" />

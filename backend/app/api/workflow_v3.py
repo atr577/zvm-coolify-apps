@@ -21,6 +21,7 @@ from app.models.user import User, WorkspaceMember
 from app.core.deps import get_current_user
 from app.services.openai_service import openai_service
 from app.services.kling_service import kling_service
+from app.services import media_downloader
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +248,8 @@ async def generate_step(
             # First variant - auto-select
             history.is_selected = True
             _copy_to_video(video, step, content)
+            # Download media locally (non-blocking, best-effort)
+            await _download_media_for_step(video, step)
             db.commit()
 
         logger.info(f"Generated {step} for video {video_id}, variant_id={history.id}")
@@ -336,14 +339,24 @@ async def select_variant(
     # Copy to video
     _copy_to_video(video, step, variant.content)
 
+    # Download media locally for the selected variant
+    await _download_media_for_step(video, step)
+
     # Get stale steps (dependent steps that need regeneration)
     stale_steps = STEP_DEPENDENCIES.get(step, [])
 
-    # Clear stale step data from video
+    # Clear stale step data and local paths from video
     for stale_step in stale_steps:
         video_field = STEP_TO_VIDEO_FIELD.get(stale_step)
         if video_field:
             setattr(video, video_field, None)
+        # Also clear local paths
+        if stale_step == "image":
+            video.local_image_path = None
+        elif stale_step == "video":
+            video.local_video_path = None
+        elif stale_step == "audio":
+            video.local_audio_path = None
 
     db.commit()
 
@@ -401,6 +414,9 @@ async def run_auto(
             if existing:
                 # Already done - ensure data is copied to video
                 _copy_to_video(video, step, existing.content)
+                # Download media if not already downloaded
+                if step in ["image", "video", "audio"]:
+                    await _download_media_for_step(video, step)
                 db.commit()
                 db.refresh(video)
                 completed_steps.append(step)
@@ -418,6 +434,8 @@ async def run_auto(
             )
             db.add(history)
             _copy_to_video(video, step, content)
+            # Download media locally (non-blocking, best-effort)
+            await _download_media_for_step(video, step)
             db.commit()
             db.refresh(video)  # Refresh to get updated data
 
@@ -467,3 +485,29 @@ def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
     elif step == "audio":
         video.video_with_audio_url = content.get("audio_url")
         video.audio_variants = content.get("audio_variants")
+
+
+async def _download_media_for_step(video: Video, step: str):
+    """Download media files locally after generation (non-blocking, best-effort)."""
+    try:
+        if step == "image" and video.image_url:
+            local_path = await media_downloader.download_image(video.image_url, video.id)
+            if local_path:
+                video.local_image_path = local_path
+                logger.info(f"Downloaded image for video {video.id}: {local_path}")
+
+        elif step == "video" and video.video_url:
+            local_path = await media_downloader.download_video(video.video_url, video.id, "video")
+            if local_path:
+                video.local_video_path = local_path
+                logger.info(f"Downloaded video for video {video.id}: {local_path}")
+
+        elif step == "audio" and video.video_with_audio_url:
+            local_path = await media_downloader.download_video(video.video_with_audio_url, video.id, "audio")
+            if local_path:
+                video.local_audio_path = local_path
+                logger.info(f"Downloaded audio for video {video.id}: {local_path}")
+
+    except Exception as e:
+        # Non-blocking: log error but don't fail the workflow
+        logger.error(f"Failed to download media for step {step}, video {video.id}: {e}")

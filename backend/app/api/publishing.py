@@ -30,13 +30,6 @@ def verify_video_ownership(db: Session, video: Video, current_user: User):
         raise HTTPException(status_code=403, detail="Access denied")
 
 
-def mark_video_published(video: Video):
-    """Mark video as published (only on first publish)"""
-    if not video.is_published:
-        video.is_published = True
-        video.published_at = datetime.utcnow()
-
-
 @router.post("/instagram", response_model=PublishResponse)
 async def publish_to_instagram(
     request: PublishRequest,
@@ -90,7 +83,6 @@ async def publish_to_instagram(
         publish_record.post_id = result.get("post_id")
         publish_record.post_url = result.get("post_url")
         publish_record.published_at = datetime.utcnow()
-        mark_video_published(video)
         db.commit()
 
         # Schedule metrics fetch jobs
@@ -173,8 +165,6 @@ async def publish_to_tiktok(
         publish_record.status = result.get("status", "processing")
         publish_record.post_id = result.get("post_id")
         publish_record.published_at = datetime.utcnow()
-        if publish_record.status == "published":
-            mark_video_published(video)
         db.commit()
 
         # Schedule metrics fetch jobs
@@ -304,7 +294,6 @@ async def publish_to_youtube(
             publish_record.post_id = result.get("post_id")
             publish_record.post_url = result.get("post_url")
             publish_record.published_at = datetime.utcnow()
-            mark_video_published(video)
             db.commit()
 
             # Schedule metrics fetch jobs

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, CheckCircle, Circle } from 'lucide-react'
 import StepContentRenderer from './StepContentRenderer'
-import { getStepLabel } from '@/utils/video'
+import { getStepLabel, getImageUrl, getVideoUrl, getAudioUrl } from '@/utils/video'
 import type { Video } from '@/types'
 
 interface StepsListV3Props {
@@ -33,28 +33,28 @@ function buildStepsFromVideo(video: Video): StepData[] {
     allSteps.push({
       type: 'image',
       label: getStepLabel('image'),
-      content: video.image_url ? { image_url: video.image_url } : null,
-      hasData: !!video.image_url
+      content: getImageUrl(video) ? { image_url: getImageUrl(video) } : null,
+      hasData: !!video.image_url || !!video.local_image_path
     })
     allSteps.push({
       type: 'video',
       label: getStepLabel('video'),
-      content: video.video_url ? { video_url: video.video_url } : null,
-      hasData: !!video.video_url
+      content: getVideoUrl(video) ? { video_url: getVideoUrl(video) } : null,
+      hasData: !!video.video_url || !!video.local_video_path
     })
   } else {
     // Remix workflow: image → video → audio
     allSteps.push({
       type: 'image',
       label: getStepLabel('image'),
-      content: video.image_url ? { image_url: video.image_url } : null,
-      hasData: !!video.image_url
+      content: getImageUrl(video) ? { image_url: getImageUrl(video) } : null,
+      hasData: !!video.image_url || !!video.local_image_path
     })
     allSteps.push({
       type: 'video',
       label: getStepLabel('video'),
-      content: video.video_url ? { video_url: video.video_url } : null,
-      hasData: !!video.video_url
+      content: getVideoUrl(video) ? { video_url: getVideoUrl(video) } : null,
+      hasData: !!video.video_url || !!video.local_video_path
     })
   }
 
@@ -63,8 +63,8 @@ function buildStepsFromVideo(video: Video): StepData[] {
     allSteps.push({
       type: 'audio',
       label: getStepLabel('audio'),
-      content: video.video_with_audio_url ? { video_url: video.video_with_audio_url } : null,
-      hasData: !!video.video_with_audio_url
+      content: getAudioUrl(video) ? { video_url: getAudioUrl(video) } : null,
+      hasData: !!video.video_with_audio_url || !!video.local_audio_path
     })
   }
 

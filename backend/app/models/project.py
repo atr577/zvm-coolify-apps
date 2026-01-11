@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Table, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
@@ -78,6 +78,10 @@ class PublishResult(Base):
     Tracks publishing results for each platform
     """
     __tablename__ = "publish_results"
+    __table_args__ = (
+        # Index for Video.is_published hybrid_property query
+        Index('ix_publish_results_video_status', 'video_id', 'status'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)

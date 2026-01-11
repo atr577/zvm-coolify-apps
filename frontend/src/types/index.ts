@@ -149,6 +149,10 @@ export interface Video {
   video_task_id: string | null
   audio_variants: string[] | null
   video_with_audio_url: string | null
+  // Local file paths (served via /api/files)
+  local_image_path: string | null
+  local_video_path: string | null
+  local_audio_path: string | null
   adaptation_data: Record<string, any> | null
   publishing_meta: Record<string, any> | null
   current_step: StepType

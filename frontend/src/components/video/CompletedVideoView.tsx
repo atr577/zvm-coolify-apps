@@ -3,6 +3,7 @@ import PublishingSettings from '@/components/PublishingSettings'
 import PublishingMetaEditor from '@/components/PublishingMetaEditor'
 import MetricsSection from './MetricsSection'
 import StepsListV3 from './StepsListV3'
+import { getBestVideoUrl } from '@/utils/video'
 import type { Video, VideoMetricsSummary } from '@/types'
 
 interface CompletedVideoViewProps {
@@ -27,14 +28,15 @@ export default function CompletedVideoView({
         <div className="grid md:grid-cols-2 gap-6 p-6">
           {/* Video Preview */}
           <div>
-            {(video.video_with_audio_url || video.video_url) && (
+            {getBestVideoUrl(video) && (
               <div className="relative aspect-[9/16] bg-black rounded-lg overflow-hidden">
                 <video
-                  src={video.video_with_audio_url ?? video.video_url ?? undefined}
+                  src={getBestVideoUrl(video) ?? undefined}
                   controls
                   className="w-full h-full object-contain"
                 />
-                {video.video_with_audio_url && video.video_with_audio_url !== video.video_url && (
+                {(video.video_with_audio_url || video.local_audio_path) &&
+                 (video.video_with_audio_url !== video.video_url || video.local_audio_path) && (
                   <div className="absolute bottom-2 left-2">
                     <span className="px-2 py-1 bg-green-500 text-white text-xs rounded flex items-center">
                       <Volume2 className="h-3 w-3 mr-1" />
@@ -60,7 +62,7 @@ export default function CompletedVideoView({
                 publishingStepId={0}
                 adaptationData={video.publishing_meta || video.adaptation_data || {}}
                 platforms={video.project?.platforms || []}
-                videoUrl={video.video_with_audio_url || video.video_url || ''}
+                videoUrl={getBestVideoUrl(video) || ''}
               />
             </div>
           </div>
