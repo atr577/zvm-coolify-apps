@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-<!-- PROJECT: RE | VERSION: 2.3 -->
+<!-- PROJECT: RE | VERSION: 2.4 -->
 
 ## Workflow (MANDATORY)
 
@@ -54,13 +54,17 @@ BUG → RCA → TASK → [SPEC] → REVIEW → FIX → TEST → COMMIT → MERGE
 
 ---
 
-### Summary Format
+### Summary Format (MANDATORY)
 
-Каждый Summary должен содержать:
+**КРИТИЧНО:** Каждый Summary ОБЯЗАН начинаться с продуктовой ценности. Без этого summary не считается complete.
 
-1. **Что изменилось в продукте** — для кого и как изменился UX/функционал
-2. **Техническое summary** — что сделано (файлы, модели, API)
-3. **Ветка/статус** — где код, что дальше
+| # | Секция | Описание | Обязательно |
+|---|--------|----------|-------------|
+| 1 | **Для пользователя** | Что изменилось в UX/функционале, бизнес-ценность | ✅ YES |
+| 2 | **Техническое** | Файлы, модели, API, миграции | ✅ YES |
+| 3 | **Ветка/статус** | Где код, что дальше, "Мержить?" | ✅ YES |
+
+**Правило:** Если не можешь объяснить ценность для пользователя — возможно делаешь не то.
 
 **Пример:**
 
@@ -140,6 +144,7 @@ Claude: "Что именно не так?
 - Write code without task file in `tasks/`
 - Fix bugs without RCA (use `rca-manager`)
 - Skip Summary + OK at any stage
+- **Write Summary without product/user value** (что изменилось для пользователя)
 - Start CODE without REVIEW approval
 - **Merge to main without explicit user approval** (always ask "Мержить?")
 - Merge to main without tests passing

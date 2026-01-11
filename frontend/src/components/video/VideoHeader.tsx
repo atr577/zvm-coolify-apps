@@ -8,6 +8,7 @@ interface VideoHeaderProps {
   isCompleted: boolean
   workflowMode: string
   isRemix: boolean
+  projectId?: number
   onToggleMode: () => void
   onDelete: () => void
 }
@@ -19,16 +20,26 @@ export default function VideoHeader({
   isCompleted,
   workflowMode,
   isRemix,
+  projectId,
   onToggleMode,
   onDelete,
 }: VideoHeaderProps) {
   const navigate = useNavigate()
 
+  const handleBack = () => {
+    // Navigate back to project if we came from one
+    if (projectId) {
+      navigate(`/?project=${projectId}`)
+    } else {
+      navigate('/')
+    }
+  }
+
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center space-x-4">
         <button
-          onClick={() => navigate('/')}
+          onClick={handleBack}
           className="p-2 hover:bg-gray-100 rounded-lg transition"
         >
           <ArrowLeft className="h-5 w-5 text-gray-600" />

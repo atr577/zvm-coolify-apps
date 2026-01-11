@@ -1,6 +1,6 @@
 import {
   XCircle, Play, Loader2, Volume2, CheckCircle,
-  ThumbsUp, RotateCcw, Edit2
+  ThumbsUp, RotateCcw, Edit2, Circle
 } from 'lucide-react'
 import { CustomPrompt } from '@/services/api'
 import { getStepLabel } from '@/utils/video'
@@ -65,10 +65,18 @@ export default function InProgressView({
     selectAudioMutation
   } = workflow
 
+  // For AUTO mode in_progress, show AutoProgressView
+  const isAutoInProgress = video.workflow_mode !== 'MANUAL' && video.status?.toLowerCase() === 'in_progress'
+
   return (
     <div className="space-y-6">
+      {/* AUTO mode progress display */}
+      {isAutoInProgress && (
+        <AutoProgressView video={video} steps={steps} />
+      )}
+
       {/* First step - Story for Discover, Image for Remix */}
-      {video.workflow_mode === 'MANUAL' && steps.length === 0 && (
+      {!isAutoInProgress && video.workflow_mode === 'MANUAL' && steps.length === 0 && (
         video.project?.project_type === 'remix' ? (
           <RemixStartCard
             video={video}
@@ -98,8 +106,8 @@ export default function InProgressView({
         />
       )}
 
-      {/* Current Step Card */}
-      {currentStep && !isPublishing && (
+      {/* Current Step Card (MANUAL mode only) */}
+      {!isAutoInProgress && currentStep && !isPublishing && (
         <CurrentStepCard
           step={currentStep}
           stepIndex={steps.indexOf(currentStep)}
@@ -121,8 +129,8 @@ export default function InProgressView({
         />
       )}
 
-      {/* Failed step */}
-      {failedStep && !currentStep && (
+      {/* Failed step (MANUAL mode only) */}
+      {!isAutoInProgress && failedStep && !currentStep && (
         <FailedStepCard
           step={failedStep}
           stepIndex={steps.indexOf(failedStep)}
@@ -135,8 +143,8 @@ export default function InProgressView({
         />
       )}
 
-      {/* Pending step */}
-      {!currentStep && !failedStep && pendingSteps.length > 0 && !isPublishing && (
+      {/* Pending step (MANUAL mode only) */}
+      {!isAutoInProgress && !currentStep && !failedStep && pendingSteps.length > 0 && !isPublishing && (
         <PendingStepCard
           step={pendingSteps[0]}
           video={video}
@@ -152,14 +160,16 @@ export default function InProgressView({
         />
       )}
 
-      {/* Steps Progress */}
-      <StepsList
-        steps={steps}
-        completedCount={completedCount}
-        totalSteps={totalSteps}
-        currentStepId={currentStep?.id}
-        showProgress
-      />
+      {/* Steps Progress (hidden during AUTO in_progress since AutoProgressView shows it) */}
+      {!isAutoInProgress && (
+        <StepsList
+          steps={steps}
+          completedCount={completedCount}
+          totalSteps={totalSteps}
+          currentStepId={currentStep?.id}
+          showProgress
+        />
+      )}
     </div>
   )
 }
@@ -639,4 +649,95 @@ function getPromptContext(stepType: string, video: Video) {
     default:
       return undefined
   }
+}
+
+// AUTO mode progress display
+const DISCOVER_STEPS = ['story', 'description', 'prompt', 'image', 'scenario', 'video', 'audio']
+const REMIX_STEPS = ['image', 'video', 'audio']
+
+function AutoProgressView({
+  video,
+  steps
+}: {
+  video: Video
+  steps: WorkflowStep[]
+}) {
+  const isRemix = video.project?.project_type === 'remix'
+  const baseSteps = isRemix ? REMIX_STEPS : DISCOVER_STEPS
+  // Filter out audio step if audio_mode is 'none'
+  const allSteps = video.project?.audio_mode === 'none'
+    ? baseSteps.filter(s => s !== 'audio')
+    : baseSteps
+  const currentStepType = video.current_step?.toLowerCase()
+
+  // Build status map from completed workflow steps
+  const stepStatusMap = new Map<string, 'completed' | 'in_progress' | 'pending'>()
+
+  for (const step of steps) {
+    const status = step.status?.toLowerCase()
+    if (status === 'approved' || status === 'completed') {
+      stepStatusMap.set(step.step_type, 'completed')
+    }
+  }
+
+  // Mark current step as in_progress
+  if (currentStepType && allSteps.includes(currentStepType)) {
+    stepStatusMap.set(currentStepType, 'in_progress')
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg border-2 border-purple-200 overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b">
+        <div className="flex items-center space-x-3">
+          <Loader2 className="h-6 w-6 text-purple-600 animate-spin" />
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Generating Video</h2>
+            <p className="text-sm text-gray-600">
+              {currentStepType ? `Processing: ${getStepLabel(currentStepType)}` : 'Starting workflow...'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-6">
+        <div className="space-y-3">
+          {allSteps.map((stepType, index) => {
+            const status = stepStatusMap.get(stepType) || 'pending'
+            const isCompleted = status === 'completed'
+            const isCurrent = status === 'in_progress'
+
+            return (
+              <div
+                key={stepType}
+                className={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isCurrent ? 'bg-purple-50 border border-purple-200' :
+                  isCompleted ? 'bg-green-50' : 'bg-gray-50'
+                }`}
+              >
+                <div className="flex-shrink-0">
+                  {isCompleted ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : isCurrent ? (
+                    <Loader2 className="h-5 w-5 text-purple-600 animate-spin" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-gray-300" />
+                  )}
+                </div>
+                <span className="text-sm text-gray-500 w-8">#{index + 1}</span>
+                <span className={`flex-1 font-medium ${
+                  isCurrent ? 'text-purple-700' :
+                  isCompleted ? 'text-green-700' : 'text-gray-400'
+                }`}>
+                  {getStepLabel(stepType)}
+                </span>
+                {isCurrent && (
+                  <span className="text-xs text-purple-600 animate-pulse">Processing...</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
 }

@@ -121,12 +121,23 @@ class VideoResponse(BaseModel):
     video_task_id: Optional[str] = None
     audio_variants: Optional[List[str]] = None
     video_with_audio_url: Optional[str] = None
+
+    # Local file paths (served via /api/files)
+    local_image_path: Optional[str] = None
+    local_video_path: Optional[str] = None
+    local_audio_path: Optional[str] = None
     adaptation_data: Optional[Dict[str, Any]] = None
     publishing_meta: Optional[Dict[str, Any]] = None
 
-    current_step: str
+    current_step: Optional[str] = None
     status: str
     author_rating: Optional[int] = None
+
+    # Publishing - computed from publish_results relationship
+    is_published: bool = False
+    published_at: Optional[datetime] = None
+    published_platforms: List[str] = []  # ["youtube", "instagram"]
+    publish_urls: Dict[str, str] = {}  # {"youtube": "https://..."}
 
     created_at: datetime
     updated_at: datetime

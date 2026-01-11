@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Table, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
@@ -43,6 +43,12 @@ class Project(Base):
     # Project type: discover (full workflow) or remix (skip to image generation)
     project_type = Column(String(20), nullable=False, default="discover")
 
+    # Remix-specific fields
+    source_video_ids = Column(JSON, nullable=True)  # List[int] - Discover videos used as basis
+    scenario_template = Column(JSON, nullable=True)  # Template with {placeholders} for video motion
+    placeholders = Column(JSON, nullable=True)  # List[str] - ["dress_color", "car_model"]
+    placeholder_suggestions = Column(JSON, nullable=True)  # {dress_color: ["red", "blue"], ...}
+
     # Workflow control: pause after image generation for approval (saves tokens during dev)
     require_image_approval = Column(Integer, nullable=False, default=0)  # 0=False, 1=True (SQLite boolean)
 
@@ -72,6 +78,10 @@ class PublishResult(Base):
     Tracks publishing results for each platform
     """
     __tablename__ = "publish_results"
+    __table_args__ = (
+        # Index for Video.is_published hybrid_property query
+        Index('ix_publish_results_video_status', 'video_id', 'status'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)

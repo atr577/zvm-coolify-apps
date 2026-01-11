@@ -81,7 +81,7 @@ export default function CreateVideo() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate(`/?project=${id}`)}
           className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
@@ -123,8 +123,12 @@ export default function CreateVideo() {
               <div className="font-medium text-gray-900">Auto</div>
               <div className="text-sm text-gray-500">
                 {project.project_type === 'remix'
-                  ? 'Image → Video → Audio без остановок'
-                  : 'Все 7 шагов автоматически, без остановок'}
+                  ? project.audio_mode === 'none'
+                    ? 'Image → Video без остановок'
+                    : 'Image → Video → Audio без остановок'
+                  : project.audio_mode === 'none'
+                    ? 'Scenario → Image → Video без остановок'
+                    : 'Scenario → Image → Video → Audio без остановок'}
               </div>
             </label>
 

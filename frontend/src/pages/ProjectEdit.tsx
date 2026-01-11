@@ -61,7 +61,11 @@ export default function ProjectEdit() {
           initialData={{
             ...project,
             description: project.description ?? undefined,
-            system_prompts: project.system_prompts ?? undefined
+            system_prompts: project.system_prompts ?? undefined,
+            source_video_ids: project.source_video_ids ?? undefined,
+            scenario_template: project.scenario_template ?? undefined,
+            placeholders: project.placeholders ?? undefined,
+            placeholder_suggestions: project.placeholder_suggestions ?? undefined
           }}
           onSubmit={(data) => updateMutation.mutate(data)}
           onCancel={() => navigate(`/?project=${projectId}`)}

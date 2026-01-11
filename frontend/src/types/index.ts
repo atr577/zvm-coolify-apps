@@ -85,6 +85,11 @@ export interface Project {
   project_type: ProjectType
   require_image_approval: boolean
   system_prompts: SystemPrompts | null
+  // Remix-specific fields
+  source_video_ids: number[] | null
+  scenario_template: Record<string, string> | null
+  placeholders: string[] | null
+  placeholder_suggestions: Record<string, string[]> | null
   created_at: string
   updated_at: string
 }
@@ -101,6 +106,11 @@ export interface CreateProjectDto {
   require_image_approval?: boolean
   system_prompts?: SystemPrompts
   workspace_id?: number
+  // Remix-specific fields
+  source_video_ids?: number[]
+  scenario_template?: Record<string, string>
+  placeholders?: string[]
+  placeholder_suggestions?: Record<string, string[]>
 }
 
 export interface UpdateProjectDto {
@@ -114,6 +124,11 @@ export interface UpdateProjectDto {
   project_type?: ProjectType
   require_image_approval?: boolean
   system_prompts?: SystemPrompts
+  // Remix-specific fields
+  source_video_ids?: number[]
+  scenario_template?: Record<string, string>
+  placeholders?: string[]
+  placeholder_suggestions?: Record<string, string[]>
 }
 
 export type WorkflowMode = 'MANUAL' | 'AUTO'
@@ -134,12 +149,17 @@ export interface Video {
   video_task_id: string | null
   audio_variants: string[] | null
   video_with_audio_url: string | null
+  // Local file paths (served via /api/files)
+  local_image_path: string | null
+  local_video_path: string | null
+  local_audio_path: string | null
   adaptation_data: Record<string, any> | null
   publishing_meta: Record<string, any> | null
   current_step: StepType
   status: WorkflowStatus
   author_rating: number | null
   is_published: boolean
+  published_at: string | null
   created_at: string
   updated_at: string
   workflow_steps?: WorkflowStep[]

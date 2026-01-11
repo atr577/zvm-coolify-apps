@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { projectsApi, videosApi, workspacesApi } from '@/services/api'
 import type { Video, CreateProjectDto, Workspace } from '@/types'
 
-export type FilterTab = 'all' | 'in_progress' | 'published' | 'errors'
+export type FilterTab = 'all' | 'in_progress' | 'ready' | 'published' | 'errors'
 
 const IN_PROGRESS_STATUSES = ['pending', 'in_progress', 'awaiting_approval', 'validating']
 const ERROR_STATUSES = ['failed', 'validation_failed']
@@ -17,8 +17,12 @@ function isError(status: string): boolean {
   return ERROR_STATUSES.includes(status.toLowerCase())
 }
 
-function isPublished(status: string): boolean {
-  return status.toLowerCase() === 'completed'
+function isReady(video: Video): boolean {
+  return video.status?.toLowerCase() === 'completed' && !video.is_published
+}
+
+function isPublished(video: Video): boolean {
+  return video.is_published === true
 }
 
 export function useDashboardData() {
@@ -94,29 +98,29 @@ export function useDashboardData() {
       ? allVideos[selectedProjectId] || []
       : Object.values(allVideos).flat()
 
-    const status = (v: Video) => v.status || ''
     switch (activeFilter) {
-      case 'in_progress': return videos.filter(v => isInProgress(status(v)))
-      case 'published': return videos.filter(v => isPublished(status(v)))
-      case 'errors': return videos.filter(v => isError(status(v)))
+      case 'in_progress': return videos.filter(v => isInProgress(v.status || ''))
+      case 'ready': return videos.filter(v => isReady(v))
+      case 'published': return videos.filter(v => isPublished(v))
+      case 'errors': return videos.filter(v => isError(v.status || ''))
       default: return videos
     }
   }, [allVideos, selectedProjectId, activeFilter])
 
   // Calculate counts for badges
   const counts = useMemo(() => {
-    if (!allVideos) return { all: 0, in_progress: 0, published: 0, errors: 0 }
+    if (!allVideos) return { all: 0, in_progress: 0, ready: 0, published: 0, errors: 0 }
 
     const videos: Video[] = selectedProjectId
       ? allVideos[selectedProjectId] || []
       : Object.values(allVideos).flat()
 
-    const status = (v: Video) => v.status || ''
     return {
       all: videos.length,
-      in_progress: videos.filter(v => isInProgress(status(v))).length,
-      published: videos.filter(v => isPublished(status(v))).length,
-      errors: videos.filter(v => isError(status(v))).length
+      in_progress: videos.filter(v => isInProgress(v.status || '')).length,
+      ready: videos.filter(v => isReady(v)).length,
+      published: videos.filter(v => isPublished(v)).length,
+      errors: videos.filter(v => isError(v.status || '')).length
     }
   }, [allVideos, selectedProjectId])
 

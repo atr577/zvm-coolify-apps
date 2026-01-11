@@ -5,6 +5,8 @@ generator/backend/data/api_cache/
 # Database files at any level
 *.db
 
+data/media
+
 # Python
 __pycache__/
 *.py[cod]

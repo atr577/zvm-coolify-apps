@@ -36,6 +36,7 @@ export default function Dashboard() {
   const tabs: { key: FilterTab; label: string; count: number }[] = [
     { key: 'all', label: 'Все', count: counts.all },
     { key: 'in_progress', label: 'В работе', count: counts.in_progress },
+    { key: 'ready', label: 'Готово', count: counts.ready },
     { key: 'published', label: 'Опубликовано', count: counts.published },
     { key: 'errors', label: 'Ошибки', count: counts.errors },
   ]
