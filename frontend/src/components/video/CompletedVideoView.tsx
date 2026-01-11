@@ -2,15 +2,12 @@ import { Volume2 } from 'lucide-react'
 import PublishingSettings from '@/components/PublishingSettings'
 import PublishingMetaEditor from '@/components/PublishingMetaEditor'
 import MetricsSection from './MetricsSection'
-import StepsList from './StepsList'
-import type { Video, WorkflowStep, VideoMetricsSummary } from '@/types'
+import StepsListV3 from './StepsListV3'
+import type { Video, VideoMetricsSummary } from '@/types'
 
 interface CompletedVideoViewProps {
   video: Video
   videoId: number
-  steps: WorkflowStep[]
-  completedCount: number
-  totalSteps: number
   metricsSummary?: VideoMetricsSummary
   onRefetchMetrics: () => void
   onSetRating: (rating: number) => void
@@ -19,9 +16,6 @@ interface CompletedVideoViewProps {
 export default function CompletedVideoView({
   video,
   videoId,
-  steps,
-  completedCount,
-  totalSteps,
   metricsSummary,
   onRefetchMetrics,
   onSetRating
@@ -81,12 +75,8 @@ export default function CompletedVideoView({
         onSetRating={onSetRating}
       />
 
-      {/* Collapsed Steps */}
-      <StepsList
-        steps={steps}
-        completedCount={completedCount}
-        totalSteps={totalSteps}
-      />
+      {/* Generation Steps */}
+      <StepsListV3 video={video} />
     </div>
   )
 }

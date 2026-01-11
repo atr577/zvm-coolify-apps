@@ -49,18 +49,16 @@ STEP_TO_VIDEO_FIELD = {
     "audio": "audio_url",
 }
 
-# Порядок шагов для Discover (scenario перед prompt для лучшей согласованности)
-DISCOVER_STEPS = ["story", "description", "scenario", "prompt", "image", "video", "audio"]
+# Порядок шагов для Discover (NEW: simplified workflow)
+# scenario generates image_prompt + motion_prompt from story_template + content_variables
+DISCOVER_STEPS = ["scenario", "image", "video", "audio"]
 
 # Порядок шагов для Remix
 REMIX_STEPS = ["image", "video", "audio"]
 
 # Зависимости: если изменился шаг X, нужно перегенерить шаги Y
 STEP_DEPENDENCIES = {
-    "story": ["description", "scenario", "prompt", "image", "video", "audio"],
-    "description": ["scenario", "prompt", "image", "video", "audio"],
-    "scenario": ["prompt", "image", "video", "audio"],  # scenario теперь влияет на prompt
-    "prompt": ["image", "video", "audio"],
+    "scenario": ["image", "video", "audio"],
     "image": ["video", "audio"],
     "video": ["audio"],
     "audio": [],

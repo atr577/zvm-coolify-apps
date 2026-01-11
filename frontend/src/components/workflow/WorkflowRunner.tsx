@@ -5,7 +5,7 @@
  * - AUTO: Shows progress, runs all steps
  * - MANUAL: Shows step-by-step with approval
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { CheckCircle, Circle, Loader2, Play, AlertCircle, RefreshCw } from 'lucide-react'
 import { useWorkflowV3 } from '@/hooks/useWorkflowV3'
 import StepReview from './StepReview'
@@ -35,15 +35,19 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
   const workflow = useWorkflowV3(videoId, isRemix, includeAudio)
   const steps = workflow.steps  // Use steps from hook (respects includeAudio)
 
+  // Ref to prevent double auto-start (React StrictMode protection)
+  const autoStartedRef = useRef(false)
+
   // Get completed steps based on video data
   const completedSteps = getCompletedSteps(video, steps)
   const currentStepIndex = completedSteps.length
   const currentStep = currentStepIndex < steps.length ? steps[currentStepIndex] : null
   const isCompleted = completedSteps.length === steps.length
 
-  // AUTO mode: auto-start when pending
+  // AUTO mode: auto-start when pending (with double-call protection)
   useEffect(() => {
-    if (!isManual && video.status === 'pending' && !workflow.isRunningAuto) {
+    if (!isManual && video.status === 'pending' && !workflow.isRunningAuto && !autoStartedRef.current) {
+      autoStartedRef.current = true
       workflow.runAuto()
     }
   }, [isManual, video.status, workflow.isRunningAuto])

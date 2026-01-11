@@ -27,8 +27,9 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Steps configuration (scenario before prompt for better image-animation alignment)
-export const DISCOVER_STEPS = ['story', 'description', 'scenario', 'prompt', 'image', 'video', 'audio'] as const
+// Steps configuration (NEW: simplified Discover workflow)
+// scenario generates image_prompt + motion_prompt from story_template + content_variables
+export const DISCOVER_STEPS = ['scenario', 'image', 'video', 'audio'] as const
 export const REMIX_STEPS = ['image', 'video', 'audio'] as const
 
 export type StepType = typeof DISCOVER_STEPS[number]

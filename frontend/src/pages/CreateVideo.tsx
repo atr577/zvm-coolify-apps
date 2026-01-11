@@ -127,8 +127,8 @@ export default function CreateVideo() {
                     ? 'Image → Video без остановок'
                     : 'Image → Video → Audio без остановок'
                   : project.audio_mode === 'none'
-                    ? 'Все 6 шагов автоматически, без остановок'
-                    : 'Все 7 шагов автоматически, без остановок'}
+                    ? 'Scenario → Image → Video без остановок'
+                    : 'Scenario → Image → Video → Audio без остановок'}
               </div>
             </label>
 

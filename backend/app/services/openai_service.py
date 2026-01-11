@@ -10,7 +10,7 @@ from app.services.prompts import (
     STORY_SYSTEM_PROMPT, build_story_prompt, build_story_from_template_prompt,
     DESCRIPTION_SYSTEM_PROMPT, build_description_prompt,
     IMAGE_PROMPT_SYSTEM_PROMPT, build_image_prompt_prompt,
-    SCENARIO_SYSTEM_PROMPT, build_scenario_prompt,
+    SCENARIO_SYSTEM_PROMPT, build_scenario_prompt, build_scenario_from_template_prompt,
     VALIDATION_SYSTEM_PROMPT, build_validation_prompt,
     ADAPTATION_SYSTEM_PROMPT, build_adaptation_prompt,
     build_publishing_meta_prompt,
@@ -228,6 +228,66 @@ class OpenAIService:
             return result
         except PiAPIError as e:
             logger.error(f"Failed to generate scenario from description: {e}")
+            raise
+
+    async def generate_scenario_from_template(
+        self,
+        story_template: str,
+        content_variables: Dict[str, Any],
+        duration: int = 5,
+        aspect_ratio: str = "9:16"
+    ) -> Dict[str, Any]:
+        """Generate scenario with image_prompt from story_template + content_variables.
+
+        This is the NEW Discover workflow - single step that generates:
+        - image_prompt (for image generation)
+        - motion_prompt (for video generation)
+        - camera_movement
+        - key_moments
+
+        Args:
+            story_template: The concept/idea for the video
+            content_variables: Hard constraints (actor, vehicle, location, etc.)
+            duration: Video duration in seconds
+            aspect_ratio: Video aspect ratio (e.g., "9:16", "16:9", "1:1")
+        """
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock scenario from template")
+            await asyncio.sleep(1)
+            return {
+                "image_prompt": "A redhead woman in elegant dress standing next to Ford Mustang in mountain landscape, cinematic lighting, vertical 9:16",
+                "negative_prompt": "blurry, low quality, distorted",
+                "motion_prompt": "Woman turns gracefully, wind blows through her hair, soft movements",
+                "camera_movement": {
+                    "type": "dolly_in",
+                    "speed": "slow",
+                    "description": "Плавный наезд камеры"
+                },
+                "subject_action": "Девушка поворачивается к камере",
+                "key_moments": [
+                    {"timestamp": "0.0-1.5s", "action": "Девушка стоит у машины"},
+                    {"timestamp": "1.5-3.0s", "action": "Поворачивается"},
+                    {"timestamp": "3.0-5.0s", "action": "Улыбается в камеру"}
+                ]
+            }
+
+        prompt = build_scenario_from_template_prompt(
+            story_template=story_template,
+            content_variables=content_variables,
+            duration=duration,
+            aspect_ratio=aspect_ratio
+        )
+
+        try:
+            result = await self.client.generate_json(
+                prompt=prompt,
+                system_prompt=SCENARIO_SYSTEM_PROMPT,
+                temperature=0.7
+            )
+            logger.info("Scenario from template generated successfully")
+            return result
+        except PiAPIError as e:
+            logger.error(f"Failed to generate scenario from template: {e}")
             raise
 
     async def validate_content(

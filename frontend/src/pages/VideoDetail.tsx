@@ -74,7 +74,8 @@ export default function VideoDetail() {
 
   const isRemix = video.project?.project_type === 'remix'
   const includeAudio = video.project?.audio_mode !== 'none'
-  const totalSteps = isRemix ? (includeAudio ? 3 : 2) : (includeAudio ? 7 : 6)
+  // NEW: Discover now has 4 steps (scenario, image, video, audio), Remix has 3 (image, video, audio)
+  const totalSteps = isRemix ? (includeAudio ? 3 : 2) : (includeAudio ? 4 : 3)
   const completedCount = getCompletedCount(video, isRemix, includeAudio)
   const isCompleted = video.status?.toLowerCase() === 'completed'
 
@@ -96,9 +97,6 @@ export default function VideoDetail() {
         <CompletedVideoView
           video={video}
           videoId={videoId}
-          steps={video.workflow_steps || []}
-          completedCount={completedCount}
-          totalSteps={totalSteps}
           metricsSummary={metricsSummary}
           onRefetchMetrics={() => refetchMetrics()}
           onSetRating={(rating) => setRatingMutation.mutate(rating)}
@@ -183,10 +181,10 @@ function VideoHeader({
 
 // Helper: Count completed steps from video data
 function getCompletedCount(video: Video, isRemix: boolean, includeAudio: boolean = true): number {
-  // scenario before prompt for better image-animation alignment
+  // NEW: simplified Discover workflow - scenario generates image_prompt + motion_prompt
   let steps = isRemix
     ? ['image', 'video', 'audio']
-    : ['story', 'description', 'scenario', 'prompt', 'image', 'video', 'audio']
+    : ['scenario', 'image', 'video', 'audio']
 
   if (!includeAudio) {
     steps = steps.filter(s => s !== 'audio')

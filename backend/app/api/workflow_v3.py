@@ -126,41 +126,33 @@ def validate_step(step: str, video: Video):
 async def generate_step_content(step: str, video: Video, db: Session) -> Dict[str, Any]:
     """Generate content for a specific step."""
     project = video.project
+    is_remix = project and project.project_type == "remix"
 
-    if step == "story":
-        return await openai_service.generate_story_from_template(
-            story_template=project.story_template or "",
-            content_variables=video.content_variables or {},
-            duration=project.duration,
-            platforms=project.platforms,
-            system_prompt=project.system_prompts.get("story") if project.system_prompts else None
-        )
-
-    elif step == "description":
-        if not video.story_data:
-            raise HTTPException(status_code=400, detail="Story not generated yet")
-        return await openai_service.generate_description(video.story_data)
-
-    elif step == "scenario":
-        # Scenario теперь генерируется ДО image, только на основе description
-        if not video.description_data:
-            raise HTTPException(status_code=400, detail="Description not generated yet")
-        return await openai_service.generate_scenario_from_description(
-            video.description_data
-        )
-
-    elif step == "prompt":
-        if not video.description_data:
-            raise HTTPException(status_code=400, detail="Description not generated yet")
-        # Prompt теперь использует scenario для лучшей согласованности
-        return await openai_service.generate_image_prompt(
-            video.description_data,
-            scenario_data=video.scenario_data  # Передаём scenario для учёта анимации
-        )
+    if step == "scenario":
+        if is_remix:
+            # Remix: use scenario_template from project
+            if not project.scenario_template:
+                raise HTTPException(status_code=400, detail="Project has no scenario template")
+            scenario_data = dict(project.scenario_template)
+            # Fill placeholders with content_variables
+            if video.content_variables:
+                for key, value in video.content_variables.items():
+                    for field in scenario_data:
+                        if isinstance(scenario_data[field], str):
+                            scenario_data[field] = scenario_data[field].replace(f"{{{key}}}", str(value))
+            return scenario_data
+        else:
+            # Discover: generate scenario from story_template + content_variables
+            return await openai_service.generate_scenario_from_template(
+                story_template=project.story_template or "",
+                content_variables=video.content_variables or {},
+                duration=project.duration or 5,
+                aspect_ratio=project.aspect_ratio or "9:16"
+            )
 
     elif step == "image":
         # For Remix, use prompt from project template
-        if project.project_type == "remix":
+        if is_remix:
             # Fill template with variables
             prompt = project.story_template or ""
             if video.content_variables:
@@ -171,13 +163,13 @@ async def generate_step_content(step: str, video: Video, db: Session) -> Dict[st
                 aspect_ratio=project.aspect_ratio or "9:16"
             )
         else:
-            # For Discover, use generated prompt_data
-            if not video.prompt_data:
-                raise HTTPException(status_code=400, detail="Prompt not generated yet")
-            prompt_data = video.prompt_data
+            # For Discover, use image_prompt from scenario_data
+            if not video.scenario_data:
+                raise HTTPException(status_code=400, detail="Scenario not generated yet")
+            scenario_data = video.scenario_data
             image_url = await kling_service.generate_image(
-                prompt=prompt_data.get("main_prompt", ""),
-                negative_prompt=prompt_data.get("negative_prompt"),
+                prompt=scenario_data.get("image_prompt", ""),
+                negative_prompt=scenario_data.get("negative_prompt"),
                 aspect_ratio=project.aspect_ratio or "9:16"
             )
         return {"image_url": image_url}
@@ -185,24 +177,12 @@ async def generate_step_content(step: str, video: Video, db: Session) -> Dict[st
     elif step == "video":
         if not video.image_url:
             raise HTTPException(status_code=400, detail="Image not generated yet")
-
-        # For Remix, use scenario from template
-        if project.project_type == "remix" and project.scenario_template:
-            scenario_data = dict(project.scenario_template)
-            if video.content_variables:
-                for key, value in video.content_variables.items():
-                    for field in scenario_data:
-                        if isinstance(scenario_data[field], str):
-                            scenario_data[field] = scenario_data[field].replace(f"{{{key}}}", str(value))
-        else:
-            scenario_data = video.scenario_data
-
-        if not scenario_data:
+        if not video.scenario_data:
             raise HTTPException(status_code=400, detail="Scenario not generated yet")
 
         result = await kling_service.generate_video(
             image_url=video.image_url,
-            prompt=scenario_data.get("motion_prompt", ""),
+            prompt=video.scenario_data.get("motion_prompt", ""),
             duration=project.duration or 5,
             return_task_id=True
         )
@@ -384,6 +364,18 @@ async def run_auto(
 ):
     """Run all steps automatically (AUTO mode)."""
     video = get_video_with_auth(db, video_id, current_user)
+
+    # Prevent duplicate runs - only start if pending
+    if video.status != WorkflowStatus.PENDING:
+        logger.warning(f"run_auto called but video {video_id} status is {video.status}, skipping")
+        return RunAutoResponse(
+            video_id=video_id,
+            status=video.status.value if video.status else "unknown",
+            completed_steps=[],
+            current_step=video.current_step.value if video.current_step else None,
+            error=None
+        )
+
     steps = get_steps_for_video(video)
 
     video.status = WorkflowStatus.IN_PROGRESS
