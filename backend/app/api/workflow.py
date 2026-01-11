@@ -1,481 +1,515 @@
 """
-Workflow API endpoints for video generation pipeline.
-Handles 8-stage workflow: Story → Description → Prompt → Image → Scenario → Video → Audio → Adaptation
+Workflow API - 4-step video generation pipeline.
+
+SCENARIO → IMAGE → VIDEO → AUDIO
+
+Endpoints:
+- POST /{video_id}/generate/{step} - Generate one step
+- GET /{video_id}/variants/{step} - Get all variants for a step
+- POST /{video_id}/select/{variant_id} - Select a variant
+- POST /{video_id}/run-auto - Run all steps (AUTO mode)
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import logging
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 
 from app.db.base import get_db
-from app.models.video import Video, WorkflowMode
-from app.models.workflow_step import WorkflowStep, WorkflowStatus, StepType
-from app.models.user import User
-from app.core.deps import get_current_user, get_image_service, get_video_service, get_audio_service
-
-from app.schemas.workflow import (
-    GenerateStoryRequest, GenerateDescriptionRequest, GeneratePromptRequest,
-    GenerateImageRequest, GenerateScenarioRequest, GenerateVideoRequest,
-    GenerateAudioRequest, SelectAudioVariantRequest, AdaptForPlatformsRequest,
-    ApprovalRequest, AutoGenerateRequest, PreviewPromptRequest, PreviewPromptResponse
-)
-
+from app.models.video import Video, WorkflowStatus
+from app.models.step_history import StepHistory, STEP_TO_VIDEO_FIELD, DISCOVER_STEPS, REMIX_STEPS, STEP_DEPENDENCIES
+from app.models.user import User, WorkspaceMember
+from app.core.deps import get_current_user
 from app.services.openai_service import openai_service
-from app.services.workflow.steps import (
-    StoryStep, DescriptionStep, PromptStep, ScenarioStep,
-    AdaptationStep, ImageStep, VideoStep, AudioStep,
-)
-from app.services.workflow.approval import ApprovalHandler
-from app.services.workflow.prompt_preview import PromptPreviewBuilder
-from app.api.workflow_helpers import (
-    build_camera_control, get_video_with_auth, verify_video_ownership
-)
+from app.services.kling_service import kling_service
+from app.services import media_downloader
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-# -----------------------------------------------------------------------------
-# Prompt Preview
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Schemas
+# =============================================================================
 
-@router.post("/preview-prompt", response_model=PreviewPromptResponse)
-async def preview_prompt(
-    request: PreviewPromptRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Preview the prompt that will be sent to AI for a specific step."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-    project = video.project
-    project_prompts = project.system_prompts if project and project.system_prompts else {}
-
-    builder = PromptPreviewBuilder(video, project_prompts)
-    prompt_data = builder.build(request.step_type, request.context or {})
-
-    return PreviewPromptResponse(
-        system_prompt=prompt_data.system_prompt,
-        user_prompt=prompt_data.user_prompt,
-        step_type=request.step_type.value,
-        can_edit=True
-    )
+class GenerateResponse(BaseModel):
+    variant_id: int
+    step_type: str
+    content: Dict[str, Any]
+    is_selected: bool
 
 
-# -----------------------------------------------------------------------------
-# Text Generation Steps (Story, Description, Prompt, Scenario, Adaptation)
-# -----------------------------------------------------------------------------
-
-@router.post("/generate-story")
-async def generate_story(
-    request: GenerateStoryRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 1: Generate story/concept."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-    step = StoryStep(db, video)
-    return await step.execute(request, request.custom_prompt)
+class VariantResponse(BaseModel):
+    id: int
+    step_type: str
+    content: Dict[str, Any]
+    is_selected: bool
+    created_at: datetime
 
 
-@router.post("/generate-description")
-async def generate_description(
-    request: GenerateDescriptionRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 2: Generate detailed visual description."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-    if request.story_data:
-        video.story_data = request.story_data
-    step = DescriptionStep(db, video)
-    return await step.execute(request, request.custom_prompt)
+class VariantsListResponse(BaseModel):
+    step_type: str
+    variants: List[VariantResponse]
+    selected_id: Optional[int]
 
 
-@router.post("/generate-prompt")
-async def generate_prompt(
-    request: GeneratePromptRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 3: Generate image prompt."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-    if request.description_data:
-        video.description_data = request.description_data
-    step = PromptStep(db, video)
-    return await step.execute(request, request.custom_prompt)
+class SelectResponse(BaseModel):
+    variant_id: int
+    step_type: str
+    stale_steps: List[str]
 
 
-@router.post("/generate-scenario")
-async def generate_scenario(
-    request: GenerateScenarioRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 5: Generate video motion scenario."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-    if request.image_url:
-        video.image_url = request.image_url
-    if request.description_data:
-        video.description_data = request.description_data
-    step = ScenarioStep(db, video)
-    return await step.execute(request, request.custom_prompt)
+class RunAutoResponse(BaseModel):
+    video_id: int
+    status: str
+    completed_steps: List[str]
+    current_step: Optional[str] = None
+    error: Optional[str] = None
 
 
-@router.post("/adapt-for-platforms")
-async def adapt_for_platforms(
-    request: AdaptForPlatformsRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 7: Adapt content for social platforms."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-    if request.scenario_data:
-        video.scenario_data = request.scenario_data
-    if video.project and request.platforms:
-        video.project.platforms = request.platforms
-    step = AdaptationStep(db, video)
-    return await step.execute(request, request.custom_prompt)
+# =============================================================================
+# Helpers
+# =============================================================================
 
+def get_video_with_auth(db: Session, video_id: int, user: User) -> Video:
+    """Get video with ownership check."""
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
 
-# -----------------------------------------------------------------------------
-# Media Generation Steps (Image, Video, Audio)
-# -----------------------------------------------------------------------------
-
-@router.post("/generate-image")
-async def generate_image(
-    request: GenerateImageRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 4: Generate image (provider-agnostic)."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-
-    prompt_str = request.prompt
-    negative_prompt = None
-    style_suffix = None
-
-    # Handle remix mode template refill
-    if request.refill_from_template and video.project and video.project.project_type == "remix":
-        filled_prompt = video.project.story_template or ""
-        for key, value in (video.content_variables or {}).items():
-            value_str = ", ".join(f"{k}: {v}" for k, v in value.items()) if isinstance(value, dict) else str(value)
-            filled_prompt = filled_prompt.replace(f"{{{key}}}", value_str)
-        prompt_str = filled_prompt
-        video.image_prompt = filled_prompt
-        db.commit()
-
-    if request.prompt_data:
-        prompt_str = prompt_str or request.prompt_data.get("main_prompt", "")
-        negative_prompt = request.prompt_data.get("negative_prompt")
-        style_suffix = request.prompt_data.get("style_suffix")
-
-    if not prompt_str:
-        raise HTTPException(status_code=400, detail="Either prompt or prompt_data.main_prompt is required")
-
-    step = ImageStep(db, video, get_image_service())
-    return await step.execute(
-        prompt=prompt_str,
-        aspect_ratio=request.aspect_ratio,
-        negative_prompt=negative_prompt,
-        style_suffix=style_suffix,
-        mode=request.mode
-    )
-
-
-@router.post("/generate-video")
-async def generate_video(
-    request: GenerateVideoRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 6: Generate video (provider-agnostic)."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-
-    prompt = request.scenario_data.get("motion_prompt", "") or request.scenario_data.get("scene_direction", "")
-    camera_control = build_camera_control(request.scenario_data.get("camera_movement"))
-
-    step = VideoStep(db, video, get_video_service())
-    return await step.execute(
-        image_url=request.image_url,
-        prompt=prompt,
-        duration=request.duration,
-        camera_control=camera_control,
-        mode=request.mode
-    )
-
-
-@router.post("/generate-audio")
-async def generate_audio(
-    request: GenerateAudioRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Stage 7: Generate audio variants (provider-agnostic)."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-
-    step = AudioStep(db, video, get_audio_service())
-    result = await step.execute(video_task_id=video.video_task_id)
-
-    if result.get("status") == "completed":
-        result["message"] = "4 audio variants generated. Please select one."
-    return result
-
-
-@router.post("/select-audio-variant")
-async def select_audio_variant(
-    request: SelectAudioVariantRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Select one of 4 audio variants and finalize video."""
-    video = get_video_with_auth(db, request.video_id, current_user)
-
-    if not video.audio_variants:
-        raise HTTPException(status_code=400, detail="No audio variants available. Generate audio first.")
-    if request.variant_index >= len(video.audio_variants):
-        raise HTTPException(status_code=400, detail=f"Invalid variant index. Available: 0-{len(video.audio_variants)-1}")
-
-    # Select variant and update video
-    selected_url = video.audio_variants[request.variant_index]
-    video.video_with_audio_url = selected_url
-
-    # Approve audio step
-    audio_step = db.query(WorkflowStep).filter(
-        WorkflowStep.video_id == video.id,
-        WorkflowStep.step_type == StepType.AUDIO
-    ).first()
-    if audio_step:
-        audio_step.status = WorkflowStatus.APPROVED
-        audio_step.user_approved = True
-        audio_step.user_feedback = f"Selected variant {request.variant_index + 1}"
-
-    db.commit()
-
-    # Generate publishing metadata
-    project = video.project
-    platforms = project.platforms if project else ["youtube"]
-    prompt_context = (
-        video.image_prompt or
-        (video.story_data.get("concept", "") if video.story_data else "") or
-        (project.story_template if project else "") or
-        "Video content"
-    )
-
-    try:
-        meta = await openai_service.generate_publishing_meta(
-            prompt_or_template=prompt_context,
-            platforms=platforms,
-            image_url=video.image_url
-        )
-        video.publishing_meta = meta
-    except Exception:
-        video.publishing_meta = {}
-
-    video.status = WorkflowStatus.COMPLETED
-    db.commit()
-
-    return {
-        "message": f"Selected audio variant {request.variant_index + 1}. Video ready for publishing.",
-        "video_with_audio_url": selected_url,
-        "publishing_meta": video.publishing_meta
-    }
-
-
-# -----------------------------------------------------------------------------
-# Publishing Metadata
-# -----------------------------------------------------------------------------
-
-@router.post("/generate-meta")
-async def generate_publishing_meta(
-    video_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Generate publishing metadata (title, description, hashtags)."""
-    video = get_video_with_auth(db, video_id, current_user)
+    logger.info(f"Auth check: video_id={video_id}, user_id={user.id}, project_id={video.project_id}")
 
     if not video.project:
-        raise HTTPException(status_code=400, detail="Video has no project")
+        logger.warning(f"Video {video_id} has no project (project_id={video.project_id})")
+        raise HTTPException(status_code=403, detail="Not authorized - no project")
 
-    platforms = video.project.platforms or ["youtube"]
-    prompt_context = (
-        video.image_prompt or
-        video.story_data.get("concept", "") if video.story_data else "" or
-        video.project.story_template or
-        "Video content"
-    )
+    # Check direct ownership
+    if video.project.user_id == user.id:
+        logger.info(f"Auth OK: direct ownership")
+        return video
 
-    meta = await openai_service.generate_publishing_meta(
-        prompt_or_template=prompt_context,
-        platforms=platforms,
-        image_url=video.image_url
-    )
+    # Check workspace membership
+    if video.project.workspace_id:
+        is_member = db.query(WorkspaceMember).filter(
+            WorkspaceMember.workspace_id == video.project.workspace_id,
+            WorkspaceMember.user_id == user.id
+        ).first()
+        if is_member:
+            logger.info(f"Auth OK: workspace member")
+            return video
 
-    video.publishing_meta = meta
-    db.commit()
-
-    return {"video_id": video_id, "publishing_meta": meta}
+    logger.warning(f"Auth FAIL: project.user_id={video.project.user_id}, user_id={user.id}, workspace_id={video.project.workspace_id}")
+    raise HTTPException(status_code=403, detail="Not authorized")
 
 
-@router.patch("/update-meta")
-async def update_publishing_meta(
+def get_steps_for_video(video: Video) -> List[str]:
+    """Get step list based on project type and settings."""
+    is_remix = video.project and video.project.project_type == "remix"
+    steps = list(REMIX_STEPS if is_remix else DISCOVER_STEPS)
+
+    # Skip audio step if audio_mode is 'none'
+    if video.project and video.project.audio_mode == 'none':
+        steps = [s for s in steps if s != 'audio']
+
+    return steps
+
+
+def validate_step(step: str, video: Video):
+    """Validate step is valid for this video."""
+    valid_steps = get_steps_for_video(video)
+    if step not in valid_steps:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid step '{step}'. Valid: {valid_steps}"
+        )
+
+
+async def generate_step_content(step: str, video: Video, db: Session) -> Dict[str, Any]:
+    """Generate content for a specific step."""
+    project = video.project
+    is_remix = project and project.project_type == "remix"
+
+    if step == "scenario":
+        if is_remix:
+            # Remix: use scenario_template from project
+            if not project.scenario_template:
+                raise HTTPException(status_code=400, detail="Project has no scenario template")
+            scenario_data = dict(project.scenario_template)
+            # Fill placeholders with content_variables
+            if video.content_variables:
+                for key, value in video.content_variables.items():
+                    for field in scenario_data:
+                        if isinstance(scenario_data[field], str):
+                            scenario_data[field] = scenario_data[field].replace(f"{{{key}}}", str(value))
+            return scenario_data
+        else:
+            # Discover: generate scenario from story_template + content_variables
+            return await openai_service.generate_scenario_from_template(
+                story_template=project.story_template or "",
+                content_variables=video.content_variables or {},
+                duration=project.duration or 5,
+                aspect_ratio=project.aspect_ratio or "9:16"
+            )
+
+    elif step == "image":
+        # For Remix, use prompt from project template
+        if is_remix:
+            # Fill template with variables
+            prompt = project.story_template or ""
+            if video.content_variables:
+                for key, value in video.content_variables.items():
+                    prompt = prompt.replace(f"{{{key}}}", str(value))
+            image_url = await kling_service.generate_image(
+                prompt=prompt,
+                aspect_ratio=project.aspect_ratio or "9:16"
+            )
+        else:
+            # For Discover, use image_prompt from scenario_data
+            if not video.scenario_data:
+                raise HTTPException(status_code=400, detail="Scenario not generated yet")
+            scenario_data = video.scenario_data
+            image_url = await kling_service.generate_image(
+                prompt=scenario_data.get("image_prompt", ""),
+                negative_prompt=scenario_data.get("negative_prompt"),
+                aspect_ratio=project.aspect_ratio or "9:16"
+            )
+        return {"image_url": image_url}
+
+    elif step == "video":
+        if not video.image_url:
+            raise HTTPException(status_code=400, detail="Image not generated yet")
+        if not video.scenario_data:
+            raise HTTPException(status_code=400, detail="Scenario not generated yet")
+
+        result = await kling_service.generate_video(
+            image_url=video.image_url,
+            prompt=video.scenario_data.get("motion_prompt", ""),
+            duration=project.duration or 5,
+            return_task_id=True
+        )
+        video_url, task_id = result
+        return {"video_url": video_url, "video_task_id": task_id}
+
+    elif step == "audio":
+        if not video.video_url:
+            raise HTTPException(status_code=400, detail="Video not generated yet")
+        if not video.video_task_id:
+            raise HTTPException(status_code=400, detail="Video task ID not found")
+        audio_urls = await kling_service.add_audio_to_video(video.video_task_id)
+        # Return first audio variant as main
+        return {"audio_url": audio_urls[0] if audio_urls else None, "audio_variants": audio_urls}
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown step: {step}")
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+@router.post("/{video_id}/generate/{step}", response_model=GenerateResponse)
+async def generate_step(
     video_id: int,
-    meta: dict,
+    step: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update publishing metadata (user edits)."""
+    """Generate a single step variant."""
     video = get_video_with_auth(db, video_id, current_user)
-    video.publishing_meta = meta
+    validate_step(step, video)
+
+    # Update status
+    video.status = WorkflowStatus.IN_PROGRESS
+    video.current_step = step
     db.commit()
-    return {"video_id": video_id, "publishing_meta": meta}
-
-
-# -----------------------------------------------------------------------------
-# Step Approval
-# -----------------------------------------------------------------------------
-
-@router.post("/approve-step")
-async def approve_step(
-    request: ApprovalRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Approve or reject a workflow step."""
-    step = db.query(WorkflowStep).filter(WorkflowStep.id == request.step_id).first()
-    if not step:
-        raise HTTPException(status_code=404, detail="Step not found")
-
-    verify_video_ownership(db, step.video, current_user)
-
-    handler = ApprovalHandler(db, step)
-    return await handler.handle_approval(
-        approved=request.approved,
-        feedback=request.feedback,
-        regenerate=request.regenerate
-    )
-
-
-# -----------------------------------------------------------------------------
-# Auto-Generation
-# -----------------------------------------------------------------------------
-
-@router.post("/auto-generate-to-video")
-async def auto_generate_to_video(
-    request: AutoGenerateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Automatic video generation using WorkflowOrchestrator.
-
-    Supports:
-    - Discover mode: Story → Description → Prompt → Image → Scenario → Video → Audio
-    - Remix mode: Template → Image → Video → Audio
-    - Resume after image approval
-    """
-    from app.services.workflow.orchestrator import WorkflowOrchestrator, WorkflowResult
-
-    video = get_video_with_auth(db, request.video_id, current_user)
 
     try:
-        orchestrator = WorkflowOrchestrator(db, video)
-        result: WorkflowResult = await orchestrator.run()
+        # Generate content
+        content = await generate_step_content(step, video, db)
 
-        response = {
-            "video_id": result.video_id,
-            "message": result.message,
-            "total_time_seconds": result.total_time_seconds,
-            "steps_completed": result.steps_completed,
-            "mode": result.mode
-        }
+        # Save to history
+        history = StepHistory(
+            video_id=video_id,
+            step_type=step,
+            content=content,
+            is_selected=False
+        )
+        db.add(history)
+        db.commit()
+        db.refresh(history)
 
-        if result.paused_for_approval:
-            response["paused_for_approval"] = True
-        if result.next_action:
-            response["next_action"] = result.next_action
-        if result.audio_variants:
-            response["audio_variants"] = result.audio_variants
-        if result.audio_skipped:
-            response["audio_skipped"] = True
+        # Auto-select if first variant
+        existing_count = db.query(StepHistory).filter(
+            StepHistory.video_id == video_id,
+            StepHistory.step_type == step
+        ).count()
 
-        return response
+        if existing_count == 1:
+            # First variant - auto-select
+            history.is_selected = True
+            _copy_to_video(video, step, content)
+            # Download media locally (non-blocking, best-effort)
+            await _download_media_for_step(video, step)
+            db.commit()
+
+        logger.info(f"Generated {step} for video {video_id}, variant_id={history.id}")
+
+        return GenerateResponse(
+            variant_id=history.id,
+            step_type=step,
+            content=content,
+            is_selected=history.is_selected
+        )
 
     except Exception as e:
+        logger.error(f"Failed to generate {step}: {e}")
         video.status = WorkflowStatus.FAILED
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# -----------------------------------------------------------------------------
-# Approve and Continue (New Breakpoints System)
-# -----------------------------------------------------------------------------
-
-@router.post("/{video_id}/{step_type}/approve-and-continue")
-async def approve_and_continue(
+@router.get("/{video_id}/variants/{step}", response_model=VariantsListResponse)
+async def get_variants(
     video_id: int,
-    step_type: str,
+    step: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Approve current step and continue workflow to next step.
+    """Get all variants for a step."""
+    video = get_video_with_auth(db, video_id, current_user)
+    validate_step(step, video)
 
-    Used with new breakpoints system (USE_NEW_BREAKPOINTS=true).
-    In MANUAL mode, workflow pauses after each step for user approval.
-    This endpoint approves the current step and continues execution.
-    """
-    from app.services.workflow.orchestrator import WorkflowOrchestrator, WorkflowResult
+    variants = db.query(StepHistory).filter(
+        StepHistory.video_id == video_id,
+        StepHistory.step_type == step
+    ).order_by(StepHistory.created_at.desc()).all()
 
+    selected_id = None
+    for v in variants:
+        if v.is_selected:
+            selected_id = v.id
+            break
+
+    return VariantsListResponse(
+        step_type=step,
+        variants=[
+            VariantResponse(
+                id=v.id,
+                step_type=v.step_type,
+                content=v.content,
+                is_selected=v.is_selected,
+                created_at=v.created_at
+            )
+            for v in variants
+        ],
+        selected_id=selected_id
+    )
+
+
+@router.post("/{video_id}/select/{variant_id}", response_model=SelectResponse)
+async def select_variant(
+    video_id: int,
+    variant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Select a variant, mark dependent steps as stale."""
     video = get_video_with_auth(db, video_id, current_user)
 
-    # Validate step type
-    try:
-        expected_step = StepType(step_type.upper())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid step type: {step_type}")
+    # Get variant
+    variant = db.query(StepHistory).filter(
+        StepHistory.id == variant_id,
+        StepHistory.video_id == video_id
+    ).first()
 
-    # Verify step matches current step
-    if video.current_step != expected_step:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Expected step {video.current_step.value}, got {step_type}"
+    if not variant:
+        raise HTTPException(status_code=404, detail="Variant not found")
+
+    step = variant.step_type
+
+    # Deselect all other variants of this step
+    db.query(StepHistory).filter(
+        StepHistory.video_id == video_id,
+        StepHistory.step_type == step
+    ).update({"is_selected": False})
+
+    # Select this variant
+    variant.is_selected = True
+
+    # Copy to video
+    _copy_to_video(video, step, variant.content)
+
+    # Download media locally for the selected variant
+    await _download_media_for_step(video, step)
+
+    # Get stale steps (dependent steps that need regeneration)
+    stale_steps = STEP_DEPENDENCIES.get(step, [])
+
+    # Clear stale step data and local paths from video
+    for stale_step in stale_steps:
+        video_field = STEP_TO_VIDEO_FIELD.get(stale_step)
+        if video_field:
+            setattr(video, video_field, None)
+        # Also clear local paths
+        if stale_step == "image":
+            video.local_image_path = None
+        elif stale_step == "video":
+            video.local_video_path = None
+        elif stale_step == "audio":
+            video.local_audio_path = None
+
+    db.commit()
+
+    logger.info(f"Selected variant {variant_id} for {step}, stale_steps={stale_steps}")
+
+    return SelectResponse(
+        variant_id=variant_id,
+        step_type=step,
+        stale_steps=stale_steps
+    )
+
+
+@router.post("/{video_id}/run-auto", response_model=RunAutoResponse)
+async def run_auto(
+    video_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Run all steps automatically (AUTO mode)."""
+    video = get_video_with_auth(db, video_id, current_user)
+
+    # Prevent duplicate runs - only start if pending
+    if video.status != WorkflowStatus.PENDING:
+        logger.warning(f"run_auto called but video {video_id} status is {video.status}, skipping")
+        return RunAutoResponse(
+            video_id=video_id,
+            status=video.status.value if video.status else "unknown",
+            completed_steps=[],
+            current_step=video.current_step.value if video.current_step else None,
+            error=None
         )
 
-    # Verify workflow is awaiting approval
-    if video.status != WorkflowStatus.AWAITING_APPROVAL:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Workflow not awaiting approval (status: {video.status.value})"
-        )
+    steps = get_steps_for_video(video)
 
-    try:
-        orchestrator = WorkflowOrchestrator(db, video)
-        result: WorkflowResult = await orchestrator.resume_workflow()
+    video.status = WorkflowStatus.IN_PROGRESS
+    db.commit()
 
-        response = {
-            "video_id": result.video_id,
-            "message": result.message,
-            "total_time_seconds": result.total_time_seconds,
-            "steps_completed": result.steps_completed,
-            "mode": result.mode
-        }
+    completed_steps = []
+    current_step = None
+    error = None
 
-        if result.paused_for_approval:
-            response["paused_for_approval"] = True
-        if result.next_action:
-            response["next_action"] = result.next_action
-        if result.audio_variants:
-            response["audio_variants"] = result.audio_variants
-        if result.audio_skipped:
-            response["audio_skipped"] = True
-
-        return response
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error resuming workflow: {e}")
-        video.status = WorkflowStatus.FAILED
+    for step in steps:
+        current_step = step
+        video.current_step = step
         db.commit()
-        raise HTTPException(status_code=500, detail=str(e))
+
+        try:
+            # Check if step already has selected variant
+            existing = db.query(StepHistory).filter(
+                StepHistory.video_id == video_id,
+                StepHistory.step_type == step,
+                StepHistory.is_selected == True
+            ).first()
+
+            if existing:
+                # Already done - ensure data is copied to video
+                _copy_to_video(video, step, existing.content)
+                # Download media if not already downloaded
+                if step in ["image", "video", "audio"]:
+                    await _download_media_for_step(video, step)
+                db.commit()
+                db.refresh(video)
+                completed_steps.append(step)
+                continue
+
+            # Generate
+            content = await generate_step_content(step, video, db)
+
+            # Save and auto-select
+            history = StepHistory(
+                video_id=video_id,
+                step_type=step,
+                content=content,
+                is_selected=True
+            )
+            db.add(history)
+            _copy_to_video(video, step, content)
+            # Download media locally (non-blocking, best-effort)
+            await _download_media_for_step(video, step)
+            db.commit()
+            db.refresh(video)  # Refresh to get updated data
+
+            completed_steps.append(step)
+            logger.info(f"AUTO: Completed {step} for video {video_id}")
+
+        except Exception as e:
+            logger.error(f"AUTO: Failed at {step}: {e}")
+            error = str(e)
+            video.status = WorkflowStatus.FAILED
+            db.commit()
+            break
+
+    # All done?
+    if not error and len(completed_steps) == len(steps):
+        video.status = WorkflowStatus.COMPLETED
+        current_step = None
+        db.commit()
+
+    return RunAutoResponse(
+        video_id=video_id,
+        status=video.status.value,
+        completed_steps=completed_steps,
+        current_step=current_step,
+        error=error
+    )
+
+
+# =============================================================================
+# Internal Helpers
+# =============================================================================
+
+def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
+    """Copy step content to appropriate Video field."""
+    field = STEP_TO_VIDEO_FIELD.get(step)
+    if not field:
+        return
+
+    if step in ["story", "description", "prompt", "scenario"]:
+        # JSON fields
+        setattr(video, field, content)
+    elif step == "image":
+        video.image_url = content.get("image_url")
+    elif step == "video":
+        video.video_url = content.get("video_url")
+        video.video_task_id = content.get("video_task_id")
+    elif step == "audio":
+        video.video_with_audio_url = content.get("audio_url")
+        video.audio_variants = content.get("audio_variants")
+
+
+async def _download_media_for_step(video: Video, step: str):
+    """Download media files locally after generation (non-blocking, best-effort)."""
+    try:
+        if step == "image" and video.image_url:
+            local_path = await media_downloader.download_image(video.image_url, video.id)
+            if local_path:
+                video.local_image_path = local_path
+                logger.info(f"Downloaded image for video {video.id}: {local_path}")
+
+        elif step == "video" and video.video_url:
+            local_path = await media_downloader.download_video(video.video_url, video.id, "video")
+            if local_path:
+                video.local_video_path = local_path
+                logger.info(f"Downloaded video for video {video.id}: {local_path}")
+
+        elif step == "audio" and video.video_with_audio_url:
+            local_path = await media_downloader.download_video(video.video_with_audio_url, video.id, "audio")
+            if local_path:
+                video.local_audio_path = local_path
+                logger.info(f"Downloaded audio for video {video.id}: {local_path}")
+
+    except Exception as e:
+        # Non-blocking: log error but don't fail the workflow
+        logger.error(f"Failed to download media for step {step}, video {video.id}: {e}")

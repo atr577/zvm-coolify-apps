@@ -35,23 +35,6 @@ class ProjectBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class WorkflowStepResponse(BaseModel):
-    id: int
-    video_id: int
-    step_type: str
-    status: str
-    content: Optional[Dict[str, Any]] = None
-    user_approved: Optional[bool] = None
-    user_feedback: Optional[str] = None
-    prompt_used: Optional[str] = None
-    generation_time_seconds: Optional[float] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # --- Metrics Schemas (must be before VideoResponse due to forward reference) ---
 
 class VideoMetricsCreate(BaseModel):
@@ -143,7 +126,6 @@ class VideoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    workflow_steps: List[WorkflowStepResponse] = []
     project: Optional[ProjectBrief] = None
     metrics: List[VideoMetricsResponse] = []
 

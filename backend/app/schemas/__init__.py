@@ -7,35 +7,34 @@ from app.schemas.video import (
     VideoCreate,
     VideoUpdate,
     VideoResponse,
-    WorkflowStepResponse,
 )
 from app.schemas.workflow import (
-    GenerateStoryRequest,
-    GenerateDescriptionRequest,
-    GeneratePromptRequest,
+    StepTypeEnum,
+    CustomPrompt,
     GenerateImageRequest,
-    GenerateScenarioRequest,
     GenerateVideoRequest,
     GenerateAudioRequest,
     SelectAudioVariantRequest,
-    AdaptForPlatformsRequest,
-    ApprovalRequest,
+    PreviewPromptRequest,
+    PreviewPromptResponse,
 )
 
 __all__ = [
+    # Project
     "ProjectCreate",
     "ProjectUpdate",
     "ProjectResponse",
+    # Video
     "VideoCreate",
     "VideoUpdate",
     "VideoResponse",
-    "WorkflowStepResponse",
-    "GenerateStoryRequest",
-    "GenerateDescriptionRequest",
-    "GeneratePromptRequest",
+    # Workflow
+    "StepTypeEnum",
+    "CustomPrompt",
     "GenerateImageRequest",
-    "GenerateScenarioRequest",
     "GenerateVideoRequest",
-    "AdaptForPlatformsRequest",
-    "ApprovalRequest",
+    "GenerateAudioRequest",
+    "SelectAudioVariantRequest",
+    "PreviewPromptRequest",
+    "PreviewPromptResponse",
 ]

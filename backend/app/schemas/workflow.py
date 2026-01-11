@@ -1,14 +1,19 @@
+"""
+Workflow schemas for 4-step video generation pipeline.
+
+SCENARIO → IMAGE → VIDEO → AUDIO
+"""
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
 
 class StepTypeEnum(str, Enum):
-    STORY = "story"
-    DESCRIPTION = "description"
-    PROMPT = "prompt"
+    """Valid workflow steps."""
     SCENARIO = "scenario"
-    ADAPTATION = "adaptation"
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
 
 
 class CustomPrompt(BaseModel):
@@ -17,11 +22,38 @@ class CustomPrompt(BaseModel):
     user_prompt: str
 
 
+# Request schemas for specific endpoints
+
+class GenerateImageRequest(BaseModel):
+    """Request to generate image step."""
+    video_id: int
+    prompt: Optional[str] = None
+    aspect_ratio: str = Field(default="9:16", pattern="^(16:9|9:16|1:1)$")
+
+
+class GenerateVideoRequest(BaseModel):
+    """Request to generate video step."""
+    video_id: int
+    duration: int = Field(default=5, ge=5, le=10)
+
+
+class GenerateAudioRequest(BaseModel):
+    """Request to generate audio step."""
+    video_id: int
+
+
+class SelectAudioVariantRequest(BaseModel):
+    """Request to select audio variant."""
+    video_id: int
+    variant_index: int = Field(..., ge=0, le=3)
+
+
+# Prompt preview (kept for backwards compatibility)
+
 class PreviewPromptRequest(BaseModel):
     """Request to preview prompt before generation."""
     video_id: int
     step_type: StepTypeEnum
-    # Context data for building the prompt (depends on step type)
     context: Optional[Dict[str, Any]] = None
 
 
@@ -31,80 +63,3 @@ class PreviewPromptResponse(BaseModel):
     user_prompt: str
     step_type: str
     can_edit: bool = True
-
-
-class GenerateStoryRequest(BaseModel):
-    video_id: int
-    theme: Optional[str] = None  # Тема/ниша: авто, мода, lifestyle, tech и т.д.
-    target_audience: Optional[str] = None  # Целевая аудитория
-    mood: Optional[str] = None  # Настроение: драматично, весело, мотивационно, эпично
-    key_elements: Optional[str] = None  # Обязательные элементы
-    duration: int = Field(default=5, ge=5, le=10)  # Длительность видео
-    platforms: Optional[List[str]] = None  # Целевые платформы
-    additional_notes: Optional[str] = None  # Дополнительные указания
-    content_variables: Optional[Dict[str, Any]] = None  # Переменные контента (animal, environment, etc.)
-    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
-
-
-class GenerateDescriptionRequest(BaseModel):
-    video_id: int
-    story_data: Dict[str, Any]  # Данные сюжета из предыдущего этапа
-    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
-
-
-class GeneratePromptRequest(BaseModel):
-    video_id: int
-    description_data: Dict[str, Any]  # Данные описания
-    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
-
-
-class GenerateImageRequest(BaseModel):
-    video_id: int
-    prompt: Optional[str] = None  # Simple string prompt
-    prompt_data: Optional[Dict[str, Any]] = None  # Or structured prompt with main_prompt, negative_prompt, etc.
-    aspect_ratio: str = Field(default="9:16", pattern="^(16:9|9:16|1:1)$")  # Default vertical for Reels/TikTok/Shorts
-    mode: str = Field(default="std", pattern="^(std|pro)$")
-    refill_from_template: bool = False  # Re-fill prompt from project template (for remix regeneration)
-
-
-class GenerateScenarioRequest(BaseModel):
-    video_id: int
-    image_url: str
-    description_data: Dict[str, Any]
-    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
-
-
-class GenerateVideoRequest(BaseModel):
-    video_id: int
-    image_url: str
-    scenario_data: Dict[str, Any]
-    duration: int = Field(default=5, ge=5, le=10)
-    mode: str = Field(default="std", pattern="^(std|pro)$")
-    version: str = Field(default="2.5", pattern="^(1\\.5|1\\.6|2\\.1|2\\.5|2\\.6)$")
-
-
-class GenerateAudioRequest(BaseModel):
-    video_id: int
-
-
-class SelectAudioVariantRequest(BaseModel):
-    video_id: int
-    variant_index: int = Field(..., ge=0, le=3)  # 0-3 for 4 variants
-
-
-class AdaptForPlatformsRequest(BaseModel):
-    video_id: int
-    platforms: List[str] = Field(..., min_items=1)  # ["instagram", "tiktok", "youtube"]
-    scenario_data: Dict[str, Any]
-    custom_prompt: Optional[CustomPrompt] = None  # User-edited prompt
-
-
-class ApprovalRequest(BaseModel):
-    step_id: int
-    approved: bool
-    feedback: Optional[str] = None
-    regenerate: bool = False  # Если true, регенерировать контент
-
-
-class AutoGenerateRequest(BaseModel):
-    video_id: int
