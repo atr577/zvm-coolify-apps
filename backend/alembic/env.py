@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.db.base import Base
 # Import all models to ensure they're registered with Base
-from app.models import Project, Video, WorkflowStep, ValidationResult, StepAttempt, Variant
+from app.models import Project, Video, StepHistory
 
 target_metadata = Base.metadata
 

@@ -94,7 +94,6 @@ class Video(Base):
 
     # Relationships
     project = relationship("Project", back_populates="videos")
-    workflow_steps = relationship("WorkflowStep", back_populates="video", cascade="all, delete-orphan")
     publish_results = relationship("PublishResult", back_populates="video", cascade="all, delete-orphan")
     metrics = relationship("VideoMetrics", back_populates="video", cascade="all, delete-orphan")
     step_history = relationship("StepHistory", back_populates="video", cascade="all, delete-orphan")
@@ -118,19 +117,19 @@ class Video(Base):
             (PublishResult.status == 'published')
         )
 
-    @hybrid_property
+    @property
     def published_at(self) -> Optional[datetime]:
         """Timestamp of first successful publication."""
         published = [pr.published_at for pr in self.publish_results
                      if pr.status == 'published' and pr.published_at]
         return min(published) if published else None
 
-    @hybrid_property
+    @property
     def published_platforms(self) -> List[str]:
         """List of platforms where video is published."""
         return list(set(pr.platform for pr in self.publish_results if pr.status == 'published'))
 
-    @hybrid_property
+    @property
     def publish_urls(self) -> dict:
         """Dict of platform -> post_url for published platforms."""
         return {pr.platform: pr.post_url for pr in self.publish_results

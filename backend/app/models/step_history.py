@@ -6,7 +6,7 @@ StepHistory - история вариантов для каждого шага w
 - Откатываться к предыдущим вариантам
 - Отслеживать какой вариант выбран
 """
-from sqlalchemy import Column, Integer, String, JSON, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, JSON, DateTime, Boolean, ForeignKey, Text, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
@@ -19,7 +19,7 @@ class StepHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Тип шага: story, description, prompt, image, scenario, video, audio
+    # Тип шага: scenario, image, video, audio
     step_type = Column(String(50), nullable=False, index=True)
 
     # Содержимое варианта (JSON)
@@ -28,11 +28,23 @@ class StepHistory(Base):
     # Выбран ли этот вариант как текущий
     is_selected = Column(Boolean, default=False, nullable=False)
 
+    # Status tracking (NEW)
+    status = Column(String(20), default="pending", nullable=True)  # pending, success, failed
+    error_message = Column(Text, nullable=True)
+
+    # Metrics (NEW)
+    generation_time_seconds = Column(Float, nullable=True)
+
+    # Lineage for regenerate with feedback (NEW)
+    parent_id = Column(Integer, ForeignKey("step_history.id"), nullable=True)
+    feedback = Column(Text, nullable=True)
+
     # Метаданные
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Связь с Video
+    # Связи
     video = relationship("Video", back_populates="step_history")
+    parent = relationship("StepHistory", remote_side=[id], backref="children")
 
     def __repr__(self):
         return f"<StepHistory(id={self.id}, video_id={self.video_id}, step={self.step_type}, selected={self.is_selected})>"
