@@ -9,8 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     SECRET_KEY: str
     MOCK_MODE: bool = False
-    USE_VARIANT_MODEL: bool = False  # Feature flag: use StepAttempt/Variant hierarchy
-    USE_NEW_BREAKPOINTS: bool = False  # Feature flag: new breakpoints system (AUTO/MANUAL modes)
+    LOG_LEVEL: str = "INFO"  # DEBUG for dev (full payloads), INFO for prod
     CACHE_API_RESPONSES: bool = True  # Сохранять ответы API для будущих моков
     API_CACHE_DIR: str = "data/api_cache"
 
@@ -71,6 +70,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore deprecated env vars
 
 
 settings = Settings()

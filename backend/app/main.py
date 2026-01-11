@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.base import engine, Base
-from app.api import auth, projects, videos, ai_generation, workflow, workflow_v2, workflow_v3, social_accounts, oauth, publishing, metrics, files
+from app.api import auth, projects, videos, ai_generation, workflow_v3, social_accounts, oauth, publishing, metrics, files
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 import os
 
@@ -48,9 +48,7 @@ app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=[
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(videos.router, prefix="/api/videos", tags=["videos"])
 app.include_router(ai_generation.router, prefix="/api/ai", tags=["ai"])
-app.include_router(workflow.router, prefix="/api/workflow", tags=["workflow"])
-app.include_router(workflow_v2.router, prefix="/api/workflow", tags=["workflow-v2"])
-app.include_router(workflow_v3.router, prefix="/api/v3", tags=["workflow-v3"])
+app.include_router(workflow_v3.router, prefix="/api/workflow", tags=["workflow"])
 app.include_router(publishing.router, prefix="/api/publish", tags=["publish"])
 app.include_router(metrics.router, prefix="/api", tags=["metrics"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])

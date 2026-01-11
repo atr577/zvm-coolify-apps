@@ -1,5 +1,5 @@
 """
-Test configuration and fixtures.
+Test configuration and fixtures for 4-step workflow.
 """
 import pytest
 from typing import Generator
@@ -18,8 +18,8 @@ from app.main import app
 from app.db.base import Base, get_db
 from app.models.user import User, Workspace, WorkspaceMember
 from app.models.project import Project
-from app.models.video import Video, WorkflowMode, WorkflowStatus, StepType
-from app.models.workflow_step import WorkflowStep
+from app.models.video import Video, WorkflowMode, WorkflowStatus
+from app.models.step_history import StepHistory
 from app.core.security import hash_password, create_access_token
 
 
@@ -136,8 +136,6 @@ def test_workspace(db: Session, test_user: User) -> Workspace:
 @pytest.fixture
 def test_project(db: Session, test_workspace: Workspace, test_user: User) -> Project:
     """Create a test project."""
-    from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
-
     project = Project(
         name="Test Project",
         workspace_id=test_workspace.id,
@@ -147,7 +145,6 @@ def test_project(db: Session, test_workspace: Workspace, test_user: User) -> Pro
         duration=5,
         aspect_ratio="9:16",
         audio_mode="auto",
-        system_prompts=DEFAULT_SYSTEM_PROMPTS
     )
     db.add(project)
     db.commit()
@@ -161,10 +158,10 @@ def test_video(db: Session, test_project: Project) -> Video:
     video = Video(
         project_id=test_project.id,
         title="Test Video",
-        workflow_mode=WorkflowMode.AUTO,  # AUTO for tests expecting complete workflow
+        workflow_mode=WorkflowMode.AUTO,
         content_variables={"animal": "cat", "location": "beach"},
         status=WorkflowStatus.PENDING,
-        current_step=StepType.STORY
+        current_step="scenario"
     )
     db.add(video)
     db.commit()
@@ -173,23 +170,29 @@ def test_video(db: Session, test_project: Project) -> Video:
 
 
 @pytest.fixture
-def test_video_with_story(db: Session, test_video: Video) -> Video:
-    """Create a test video with completed story step."""
-    from tests.fixtures.mock_responses import MOCK_STORY
+def test_video_with_scenario(db: Session, test_video: Video) -> Video:
+    """Create a test video with completed scenario step."""
+    scenario_content = {
+        "image_prompt": "A cat on the beach, cinematic lighting",
+        "motion_prompt": "Cat slowly walks on sand",
+        "camera_movement": {"type": "pan_left", "speed": "slow"},
+    }
 
-    # Create story step
-    step = WorkflowStep(
+    # Create scenario step history
+    step = StepHistory(
         video_id=test_video.id,
-        step_type=StepType.STORY,
-        status=WorkflowStatus.AWAITING_APPROVAL,
-        content=MOCK_STORY
+        step_type="scenario",
+        content=scenario_content,
+        status="success",
+        is_selected=True,
     )
     db.add(step)
 
     # Update video
-    test_video.story_data = MOCK_STORY
-    test_video.current_step = StepType.STORY
-    test_video.status = WorkflowStatus.IN_PROGRESS
+    test_video.scenario_data = scenario_content
+    test_video.image_prompt = scenario_content["image_prompt"]
+    test_video.current_step = "image"
+    test_video.status = WorkflowStatus.AWAITING_APPROVAL
 
     db.commit()
     db.refresh(test_video)
@@ -197,19 +200,23 @@ def test_video_with_story(db: Session, test_video: Video) -> Video:
 
 
 @pytest.fixture
-def test_step_awaiting_approval(db: Session, test_video: Video) -> WorkflowStep:
-    """Create a workflow step awaiting approval."""
-    from tests.fixtures.mock_responses import MOCK_STORY
+def test_step_awaiting_approval(db: Session, test_video: Video) -> StepHistory:
+    """Create a step history entry awaiting approval."""
+    scenario_content = {
+        "image_prompt": "A cat on the beach, cinematic lighting",
+        "motion_prompt": "Cat slowly walks on sand",
+    }
 
-    # Set story_data on video for auto-generation flow
-    test_video.story_data = MOCK_STORY
+    # Set scenario_data on video
+    test_video.scenario_data = scenario_content
+    test_video.image_prompt = scenario_content["image_prompt"]
     db.commit()
 
-    step = WorkflowStep(
+    step = StepHistory(
         video_id=test_video.id,
-        step_type=StepType.STORY,
-        status=WorkflowStatus.AWAITING_APPROVAL,
-        content=MOCK_STORY
+        step_type="scenario",
+        content=scenario_content,
+        status="success",
     )
     db.add(step)
     db.commit()
@@ -218,50 +225,8 @@ def test_step_awaiting_approval(db: Session, test_video: Video) -> WorkflowStep:
 
 
 @pytest.fixture
-def test_project_with_image_approval(db: Session, test_workspace: Workspace, test_user: User) -> Project:
-    """Create a test project with require_image_approval=True."""
-    from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
-
-    project = Project(
-        name="Test Project With Image Approval",
-        workspace_id=test_workspace.id,
-        user_id=test_user.id,
-        story_template="A story about {animal} in {location}",
-        platforms=["instagram", "tiktok"],
-        duration=5,
-        aspect_ratio="9:16",
-        audio_mode="auto",
-        require_image_approval=True,
-        system_prompts=DEFAULT_SYSTEM_PROMPTS
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    return project
-
-
-@pytest.fixture
-def test_video_with_image_approval(db: Session, test_project_with_image_approval: Project) -> Video:
-    """Create a test video in project with require_image_approval=True (AUTO mode)."""
-    video = Video(
-        project_id=test_project_with_image_approval.id,
-        title="Test Video With Image Approval",
-        workflow_mode=WorkflowMode.AUTO,  # AUTO mode - legacy test for require_image_approval
-        content_variables={"animal": "cat", "location": "beach"},
-        status=WorkflowStatus.PENDING,
-        current_step=StepType.STORY
-    )
-    db.add(video)
-    db.commit()
-    db.refresh(video)
-    return video
-
-
-@pytest.fixture
 def test_remix_project(db: Session, test_workspace: Workspace, test_user: User) -> Project:
     """Create a test Remix project."""
-    from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
-
     project = Project(
         name="Test Remix Project",
         workspace_id=test_workspace.id,
@@ -272,7 +237,6 @@ def test_remix_project(db: Session, test_workspace: Workspace, test_user: User) 
         aspect_ratio="9:16",
         audio_mode="auto",
         project_type="remix",
-        system_prompts=DEFAULT_SYSTEM_PROMPTS
     )
     db.add(project)
     db.commit()
@@ -282,15 +246,15 @@ def test_remix_project(db: Session, test_workspace: Workspace, test_user: User) 
 
 @pytest.fixture
 def test_remix_video(db: Session, test_remix_project: Project) -> Video:
-    """Create a test video in Remix project with image_prompt set (AUTO mode for full workflow)."""
+    """Create a test video in Remix project with image_prompt set."""
     video = Video(
         project_id=test_remix_project.id,
         title="Test Remix Video",
-        workflow_mode=WorkflowMode.AUTO,  # AUTO to complete all steps without stopping
+        workflow_mode=WorkflowMode.AUTO,
         content_variables={},
         image_prompt="A beautiful sunset over the ocean, cinematic, 8k",
         status=WorkflowStatus.PENDING,
-        current_step=StepType.IMAGE
+        current_step="image"
     )
     db.add(video)
     db.commit()

@@ -2,16 +2,27 @@
 
 Каноническое описание целевой архитектуры workflow системы.
 
+**Версия:** 2.0
+**Обновлено:** 2026-01-11
+
 ---
 
 ## 1. Обзор
 
+### Унифицированный workflow: 4 шага
+
+```
+SCENARIO → IMAGE → VIDEO → AUDIO
+```
+
+Оба типа проектов используют одинаковые 4 шага. Отличается только логика SCENARIO.
+
 ### Типы проектов
 
-| Тип | Описание | Шаги |
-|-----|----------|------|
-| **discover** | Полный workflow: идея → видео | 7 шагов |
-| **remix** | Быстрая генерация из шаблона | 3 шага |
+| Тип | Описание | SCENARIO |
+|-----|----------|----------|
+| **discover** | Творческий поиск: идея → видео | LLM генерирует креативно (много свободы) |
+| **remix** | Масштабирование: шаблон → N видео | LLM заполняет переменные в шаблоне (мало свободы) |
 
 ### Режимы выполнения
 
@@ -37,32 +48,17 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         DISCOVER WORKFLOW (7 шагов)                         │
+│                         DISCOVER WORKFLOW (4 шага)                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  ┌──────────┐   ┌─────────────┐   ┌──────────┐   ┌──────────┐              │
-│  │  STORY   │──►│ DESCRIPTION │──►│  PROMPT  │──►│  IMAGE   │              │
-│  │  Step 1  │   │   Step 2    │   │  Step 3  │   │  Step 4  │              │
-│  │   LLM    │   │    LLM      │   │   LLM    │   │ ImageGen │              │
-│  └──────────┘   └─────────────┘   └──────────┘   └──────────┘              │
-│       │               │                │               │                    │
-│       ▼               ▼                ▼               ▼                    │
-│   story_data    description_data   prompt_data     image_url               │
-│                                                        │                    │
-│       ┌────────────────────────────────────────────────┘                    │
-│       │                                                                     │
-│       ▼                                                                     │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐                                │
-│  │ SCENARIO │──►│  VIDEO   │──►│  AUDIO   │                                │
-│  │  Step 5  │   │  Step 6  │   │  Step 7  │                                │
-│  │   LLM    │   │ VideoGen │   │ AudioGen │                                │
-│  └──────────┘   └──────────┘   └──────────┘                                │
-│       │               │               │                                     │
-│       ▼               ▼               ▼                                     │
-│  scenario_data    video_url    audio_variants[]                            │
-│                                       │                                     │
-│                                       ▼                                     │
-│                              video_with_audio_url                          │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐                 │
+│  │ SCENARIO │──►│  IMAGE   │──►│  VIDEO   │──►│  AUDIO   │                 │
+│  │  Step 1  │   │  Step 2  │   │  Step 3  │   │  Step 4  │                 │
+│  │   LLM    │   │ ImageGen │   │ VideoGen │   │ AudioGen │                 │
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘                 │
+│       │               │               │               │                     │
+│       ▼               ▼               ▼               ▼                     │
+│  scenario_data    image_url       video_url    video_with_audio_url        │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -71,35 +67,118 @@
 
 | # | Step | Service | Input | Output |
 |---|------|---------|-------|--------|
-| 1 | STORY | LLM | creative inputs (theme, mood, etc.) | story_data |
-| 2 | DESCRIPTION | LLM | story_data | description_data |
-| 3 | PROMPT | LLM | description_data | prompt_data |
-| 4 | IMAGE | ImageGen | prompt_data | image_url |
-| 5 | SCENARIO | LLM | story_data + image_url | scenario_data |
-| 6 | VIDEO | VideoGen | image_url + scenario_data | video_url |
-| 7 | AUDIO | AudioGen | video_url | audio_variants[] |
+| 1 | SCENARIO | LLM | story template (концепция) + creative inputs | scenario_data (включает prompt) |
+| 2 | IMAGE | ImageGen | scenario_data.prompt | image_url |
+| 3 | VIDEO | VideoGen | image_url + scenario_data | video_url |
+| 4 | AUDIO | AudioGen | video_url | video_with_audio_url |
 
-### Creative Inputs (Discover)
+### SCENARIO в Discover
 
-Свободные параметры для экспериментов — LLM генерирует креативно:
+LLM получает **концепцию** (story template) и **creative inputs**, генерирует полный сценарий с высокой степенью свободы.
 
-```
-Video.creative_inputs: {
-  theme: "cats in space",
-  mood: "funny",
+**Вход:**
+```python
+story_template: "Девушка в машине, атмосферно"  # концепция
+creative_inputs: {
+  theme: "luxury lifestyle",
+  mood: "mysterious",
   target_audience: "gen-z",
-  key_elements: ["astronaut helmet", "floating"],
-  additional_notes: "make it viral"
+  key_elements: ["golden hour", "city lights"],
+  additional_notes: "viral potential"
 }
 ```
 
-Нет жёстких шаблонов — каждая генерация может быть уникальной.
+**LLM генерирует (много свободы):**
+```python
+scenario_data: {
+  # Для IMAGE
+  prompt: "A woman in red dress sitting in BMW M4, golden hour...",
+  negative_prompt: "...",
+
+  # Для VIDEO
+  camera_movement: "slow zoom in",
+  subject_motion: "turns head, slight smile",
+  duration: 5,
+
+  # Метаданные
+  concept: "Mysterious woman in luxury car at sunset",
+  hook: "First 2 seconds: close-up of eyes in rearview mirror"
+}
+```
+
+**Варианты:** В MANUAL mode LLM генерирует N вариантов scenario_data, user выбирает лучший.
 
 ---
 
 ## 3. Remix Workflow
 
-### Концепция
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          REMIX WORKFLOW (4 шага)                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐                 │
+│  │ SCENARIO │──►│  IMAGE   │──►│  VIDEO   │──►│  AUDIO   │                 │
+│  │  Step 1  │   │  Step 2  │   │  Step 3  │   │  Step 4  │                 │
+│  │   LLM    │   │ ImageGen │   │ VideoGen │   │ AudioGen │                 │
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘                 │
+│       │               │               │               │                     │
+│       ▼               ▼               ▼               ▼                     │
+│  scenario_data    image_url       video_url    video_with_audio_url        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Шаги Remix
+
+| # | Step | Service | Input | Output |
+|---|------|---------|-------|--------|
+| 1 | SCENARIO | LLM | story template (с {переменными}) | scenario_data (заполненный) |
+| 2 | IMAGE | ImageGen | scenario_data.prompt | image_url |
+| 3 | VIDEO | VideoGen | image_url + scenario_data | video_url |
+| 4 | AUDIO | AudioGen | video_url | video_with_audio_url |
+
+### SCENARIO в Remix
+
+LLM получает **жёсткий шаблон** с {переменными}, генерирует значения переменных с низкой степенью свободы.
+
+**Вход:**
+```python
+story_template: {
+  prompt: "A woman in {dress_color} dress sitting in {car_model}, {lighting}",
+  camera_movement: "{camera_style}",
+  subject_motion: "exits car elegantly"
+}
+placeholders: ["dress_color", "car_model", "lighting", "camera_style"]
+placeholder_suggestions: {
+  dress_color: ["red", "black", "white"],
+  car_model: ["BMW M4", "Mercedes AMG", "Porsche 911"],
+  lighting: ["golden hour", "neon city lights", "studio lighting"],
+  camera_style: ["slow zoom in", "static front", "tracking shot"]
+}
+```
+
+**LLM генерирует (мало свободы):**
+```python
+# LLM выбирает из suggestions или генерирует похожее
+generated_variables: {
+  dress_color: "red",
+  car_model: "BMW M4",
+  lighting: "golden hour",
+  camera_style: "slow zoom in"
+}
+
+# Результат: заполненный шаблон
+scenario_data: {
+  prompt: "A woman in red dress sitting in BMW M4, golden hour",
+  camera_movement: "slow zoom in",
+  subject_motion: "exits car elegantly"
+}
+```
+
+**Варианты:** В MANUAL mode LLM генерирует N вариантов (разные комбинации переменных).
+
+### Концепция Remix
 
 **Discover** = эксперименты, поиск "формулы" (prompt + scenario + style)
 **Remix** = масштабирование найденной формулы с вариациями
@@ -179,9 +258,8 @@ class RemixProject:
     # Source
     source_video_ids: List[int]         # Discover videos used as basis
 
-    # Templates (with {placeholders}) — только для шагов Remix
-    prompt_template: str                # → IMAGE step
-    scenario_template: JSON             # → VIDEO step
+    # Story template (жёсткая канва с {переменными})
+    story_template: JSON                # → SCENARIO step заполняет и генерирует scenario_data
 
     # Defined placeholders
     placeholders: List[str]             # ["dress_color", "car_model"]
@@ -193,66 +271,18 @@ class RemixProject:
 - **Template Builder** → LLM анализирует source videos + метрики, предлагает suggestions, user редактирует
 - **Manual creation** → user вводит placeholders и suggestions вручную
 
-### Remix Video Generation
+### Auto-fill переменных в SCENARIO
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          REMIX WORKFLOW (3 шага)                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌────────────────────────────────────────┐                                │
-│  │         PREPARE (не WorkflowStep)      │                                │
-│  │                                        │                                │
-│  │  Input:                                │                                │
-│  │  ├─ Project.prompt_template           │                                │
-│  │  ├─ Project.scenario_template         │                                │
-│  │  └─ Video.content_variables           │                                │
-│  │                                        │                                │
-│  │  Process: string replacement          │                                │
-│  │  ├─ prompt_data = fill(prompt_template)     → IMAGE                    │
-│  │  └─ scenario_data = fill(scenario_template) → VIDEO                    │
-│  │                                        │                                │
-│  │  Validation: все {placeholders} есть  │                                │
-│  └────────────────────────────────────────┘                                │
-│                      │                                                      │
-│                      ▼                                                      │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐                                │
-│  │  IMAGE   │──►│  VIDEO   │──►│  AUDIO   │                                │
-│  │  Step 1  │   │  Step 2  │   │  Step 3  │                                │
-│  │ ImageGen │   │ VideoGen │   │ AudioGen │                                │
-│  └──────────┘   └──────────┘   └──────────┘                                │
-│       │               │               │                                     │
-│       ▼               ▼               ▼                                     │
-│   image_url       video_url    audio_variants[]                            │
-│                                       │                                     │
-│                                       ▼                                     │
-│                              video_with_audio_url                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Шаги Remix
-
-| # | Step | Service | Input | Output |
-|---|------|---------|-------|--------|
-| 1 | IMAGE | ImageGen | prompt_data (filled) | image_url |
-| 2 | VIDEO | VideoGen | image_url + scenario_data (filled) | video_url |
-| 3 | AUDIO | AudioGen | video_url | audio_variants[] |
-
-### PREPARE phase (не WorkflowStep)
-
-Выполняется синхронно в начале workflow. Заполняет только данные для шагов Remix.
-
-**Auto-fill логика:** если user не указал значение — система выбирает из suggestions или через LLM.
+SCENARIO step автоматически заполняет недостающие переменные.
 
 **Выбор значения:**
 - **Batch generation** → Round-robin (равномерное покрытие всех комбинаций)
 - **Single video** → LLM выбирает лучшее для контекста
 
 ```python
-def prepare_remix(project: RemixProject, video: RemixVideo, batch_index: int = None):
-    """Fill templates for Remix steps (IMAGE, VIDEO)."""
-    variables = dict(video.content_variables)  # copy
+def generate_scenario_remix(project: RemixProject, video: Video, batch_index: int = None):
+    """SCENARIO step for Remix: LLM fills template variables."""
+    variables = dict(video.content_variables or {})
 
     # Auto-fill missing variables
     missing = set(project.placeholders) - set(variables.keys())
@@ -260,46 +290,18 @@ def prepare_remix(project: RemixProject, video: RemixVideo, batch_index: int = N
         suggestions = project.placeholder_suggestions.get(placeholder, [])
 
         if batch_index is not None and suggestions:
-            # Batch mode: round-robin для равномерного покрытия
+            # Batch mode: round-robin
             variables[placeholder] = suggestions[batch_index % len(suggestions)]
         elif suggestions:
-            # Single mode: LLM выбирает лучшее для контекста
+            # Single mode: LLM выбирает
             variables[placeholder] = llm_choose_best(placeholder, suggestions, project)
         else:
-            # Fallback: LLM генерирует (не должно происходить при валидном project)
-            variables[placeholder] = generate_placeholder_value(placeholder, project)
+            # Fallback: LLM генерирует
+            variables[placeholder] = llm_generate_value(placeholder, project)
 
-    # Сохранить auto-filled переменные
-    video.content_variables = variables
-
-    # Fill templates
-    video.prompt_data = fill_template(project.prompt_template, variables)      # → IMAGE
-    video.scenario_data = fill_template(project.scenario_template, variables)  # → VIDEO
-
-def fill_template(template: str | dict, variables: dict) -> str | dict:
-    """Replace {placeholders} with values."""
-    if isinstance(template, str):
-        for key, value in variables.items():
-            template = template.replace(f"{{{key}}}", str(value))
-        return template
-    elif isinstance(template, dict):
-        return {k: fill_template(v, variables) for k, v in template.items()}
-```
-
-**Валидация при создании Project:**
-```python
-def create_remix_project(data: CreateRemixProjectRequest):
-    # Все placeholders должны иметь suggestions
-    missing_suggestions = set(data.placeholders) - set(data.placeholder_suggestions.keys())
-    if missing_suggestions:
-        raise HTTPException(400, f"Missing suggestions for: {missing_suggestions}")
-
-    # Каждый suggestion должен иметь хотя бы одно значение
-    empty_suggestions = [p for p, vals in data.placeholder_suggestions.items() if not vals]
-    if empty_suggestions:
-        raise HTTPException(400, f"Empty suggestions for: {empty_suggestions}")
-
-    return create_project(data)
+    # Fill template → scenario_data
+    video.scenario_data = fill_template(project.story_template, variables)
+    video.content_variables = variables  # сохранить для истории
 ```
 
 ### Remix Scaling
@@ -327,7 +329,40 @@ Remix Project: "Luxury Car Girl"
 
 ## 4. Структуры данных
 
-### story_data
+### scenario_data (главная структура)
+
+Единая структура, создаваемая на шаге SCENARIO. Содержит всё необходимое для последующих шагов.
+
+```json
+{
+  // Для IMAGE step
+  "prompt": "A woman in red dress sitting in BMW M4, golden hour lighting",
+  "negative_prompt": "blurry, low quality, distorted",
+  "style_suffix": "cinematic, professional photography",
+  "aspect_ratio": "9:16",
+
+  // Для VIDEO step
+  "camera_movement": "slow zoom in",
+  "camera_speed": "slow",
+  "subject_motion": "turns head, slight smile",
+  "duration": 5,
+
+  // Метаданные (для аналитики и publishing)
+  "concept": "Mysterious woman in luxury car at sunset",
+  "hook": "Close-up of eyes in rearview mirror",
+  "tone": "mysterious",
+  "emotional_trigger": "curiosity"
+}
+```
+
+### Устаревшие структуры (deprecated)
+
+> **Note:** Следующие структуры сохранены для обратной совместимости, но не используются в новых видео.
+
+<details>
+<summary>story_data, description_data, prompt_data (deprecated)</summary>
+
+#### story_data
 ```json
 {
   "concept": "Краткое описание идеи видео",
@@ -341,7 +376,7 @@ Remix Project: "Luxury Car Girl"
 }
 ```
 
-### description_data
+#### description_data
 ```json
 {
   "scene": "Детальное описание визуальной сцены",
@@ -354,7 +389,7 @@ Remix Project: "Luxury Car Girl"
 }
 ```
 
-### prompt_data
+#### prompt_data
 ```json
 {
   "main_prompt": "Основной промпт для генерации изображения",
@@ -364,16 +399,7 @@ Remix Project: "Luxury Car Girl"
 }
 ```
 
-### scenario_data
-```json
-{
-  "camera_movement": "zoom_in | zoom_out | pan_left | pan_right | static",
-  "camera_speed": "slow | medium | fast",
-  "subject_motion": "Описание движения объекта",
-  "transition": "Тип перехода в конце",
-  "duration": 5
-}
-```
+</details>
 
 ### audio_variants[]
 ```json
@@ -434,8 +460,7 @@ Remix Project: "Luxury Car Girl"
 | Параметр | Тип | Описание |
 |----------|-----|----------|
 | `source_video_ids` | int[] | Discover videos как источник шаблона |
-| `prompt_template` | string | Шаблон image prompt с `{placeholders}` |
-| `scenario_template` | json | Шаблон scenario с `{placeholders}` |
+| `story_template` | json | Шаблон scenario_data с `{placeholders}` |
 | `placeholders` | string[] | Список плейсхолдеров: `["dress_color", "car_model"]` |
 | `placeholder_suggestions` | json | Предложенные значения: `{dress_color: ["red", "blue"]}` |
 
@@ -446,13 +471,10 @@ Remix Project: "Luxury Car Girl"
 
 ```json
 {
-  "STORY": 1,
-  "DESCRIPTION": 1,
-  "PROMPT": 1,
-  "IMAGE": 3,
   "SCENARIO": 1,
+  "IMAGE": 3,
   "VIDEO": 1,
-  "AUDIO": 3
+  "AUDIO": 1
 }
 ```
 
@@ -526,14 +548,15 @@ AUTO mode всё равно создаёт полную иерархию:
 Время   Событие                      Video.status          Video.current_step
 ─────   ───────                      ────────────          ──────────────────
 t0      Start                        PENDING               null
-t1      Generate starts              IN_PROGRESS           STORY
-t2      STORY готов                  AWAITING_APPROVAL     STORY         ← ждём user
-t3      User: Approve                IN_PROGRESS           DESCRIPTION   ← сразу генерит
-t4      DESCRIPTION готов            AWAITING_APPROVAL     DESCRIPTION   ← ждём user
-t5      User: Approve                IN_PROGRESS           PROMPT        ← сразу генерит
-...
-t12     AUDIO готов                  AWAITING_APPROVAL     AUDIO
-t13     User: select variant         COMPLETED             AUDIO
+t1      Generate starts              IN_PROGRESS           SCENARIO
+t2      SCENARIO готов               AWAITING_APPROVAL     SCENARIO      ← ждём user
+t3      User: Approve                IN_PROGRESS           IMAGE         ← сразу генерит
+t4      IMAGE готов                  AWAITING_APPROVAL     IMAGE         ← ждём user
+t5      User: Approve                IN_PROGRESS           VIDEO         ← сразу генерит
+t6      VIDEO готов                  AWAITING_APPROVAL     VIDEO         ← ждём user
+t7      User: Approve                IN_PROGRESS           AUDIO         ← сразу генерит
+t8      AUDIO готов                  AWAITING_APPROVAL     AUDIO
+t9      User: select variant         COMPLETED             AUDIO
 ```
 
 **Паттерн:**
@@ -567,26 +590,21 @@ t13     User: select variant         COMPLETED             AUDIO
 
 ## 7. Breakpoints (MANUAL mode)
 
-### Discover
+### Унифицированный workflow (4 шага)
 ```
-STORY ──⏸──► DESCRIPTION ──⏸──► PROMPT ──⏸──► IMAGE ──⏸──► SCENARIO ──⏸──► VIDEO ──⏸──► AUDIO
+SCENARIO ──⏸──► IMAGE ──⏸──► VIDEO ──⏸──► AUDIO
 ```
 
-### Remix
-```
-IMAGE ──⏸──► VIDEO ──⏸──► AUDIO
-```
+Одинаковый для Discover и Remix. Отличие только в логике SCENARIO step.
 
 ### Логика
 ```python
+WORKFLOW_STEPS = [SCENARIO, IMAGE, VIDEO, AUDIO]
+
 def should_pause(step_type: StepType, video: Video, project: Project) -> bool:
     if video.workflow_mode == WorkflowMode.AUTO:
         return False
-
-    if project.project_type == "remix":
-        return step_type in [IMAGE, VIDEO, AUDIO]
-    else:
-        return step_type in [STORY, DESCRIPTION, PROMPT, IMAGE, SCENARIO, VIDEO, AUDIO]
+    return step_type in WORKFLOW_STEPS
 ```
 
 ---
@@ -596,14 +614,14 @@ def should_pause(step_type: StepType, video: Video, project: Project) -> bool:
 ### Иерархия
 
 ```
-WorkflowStep (один на шаг)
+WorkflowStep (один на шаг: SCENARIO, IMAGE, VIDEO, AUDIO)
   │
   └── StepAttempt (одна попытка генерации)
         │
         └── Variant (один результат, может быть N штук)
 ```
 
-**WorkflowStep** — шаг в workflow (STORY, IMAGE, etc.)
+**WorkflowStep** — шаг в workflow (SCENARIO, IMAGE, VIDEO, AUDIO)
 **StepAttempt** — одна попытка генерации (один API call)
 **Variant** — один результат внутри attempt (1 или N в зависимости от настроек)
 
@@ -1166,8 +1184,8 @@ Frontend                                        Backend
    │◄─── 202 Accepted ─────────────────────────────┤  ← Сразу возвращает
    │                                               │
    │                                               │  Background job:
-   │                                               │  ├─► STORY генерация
-   │                                               │  ├─► DESCRIPTION генерация
+   │                                               │  ├─► SCENARIO генерация
+   │                                               │  ├─► IMAGE генерация
    │                                               │  └─► ... (или пауза на MANUAL)
    │                                               │
    ├─── GET /videos/{id} ─────────────────────────►│  ← Polling каждые 3 сек
@@ -1175,9 +1193,9 @@ Frontend                                        Backend
    │                                               │
    ├─── GET /videos/{id} ─────────────────────────►│
    │◄─── {status: "awaiting_approval",             │  ← Готово для approve
-   │      current_step: "STORY"} ──────────────────┤
+   │      current_step: "SCENARIO"} ───────────────┤
    │                                               │
-   ├─── POST /workflow/{id}/STORY/approve ────────►│
+   ├─── POST /workflow/{id}/SCENARIO/approve ─────►│
    │◄─── 200 OK ───────────────────────────────────┤
    │                                               │
    ├─── POST /workflow/auto-generate-to-video ────►│  ← Продолжить workflow
@@ -1211,14 +1229,14 @@ GET /videos/{video_id}
 Response: {
   video_id: int,
   status: "pending" | "in_progress" | "awaiting_approval" | "completed" | "failed",
-  current_step: "STORY" | "DESCRIPTION" | ... | "AUDIO",  # используется в URL: /workflow/{video_id}/{current_step}/...
-  steps_completed: ["STORY", "DESCRIPTION", ...],
+  current_step: "SCENARIO" | "IMAGE" | "VIDEO" | "AUDIO",
+  steps_completed: ["SCENARIO", "IMAGE", ...],
 
   # Данные шагов (для просмотра)
-  story_data?: {...},
+  scenario_data?: {...},
   image_url?: "...",
   video_url?: "...",
-  ...
+  video_with_audio_url?: "...",
 
   # Для AWAITING_APPROVAL — информация для UI
   current_step_variants_count: int,  # Сколько вариантов доступно
@@ -1234,7 +1252,7 @@ Response: {
 /workflow/{video_id}/{step_type}/action
 ```
 
-**step_type:** `STORY`, `DESCRIPTION`, `PROMPT`, `IMAGE`, `SCENARIO`, `VIDEO`, `AUDIO`
+**step_type:** `SCENARIO`, `IMAGE`, `VIDEO`, `AUDIO`
 
 ---
 
@@ -1519,10 +1537,18 @@ Events: step_started, step_completed, step_failed, workflow_completed
 
 | Сценарий | Ожидаемый результат |
 |----------|---------------------|
-| Discover + AUTO | 7 шагов без пауз → COMPLETED |
-| Discover + MANUAL | Пауза после каждого из 7 шагов |
-| Remix + AUTO | 3 шага без пауз → COMPLETED |
-| Remix + MANUAL | Пауза после каждого из 3 шагов |
+| Discover + AUTO | 4 шага (SCENARIO → IMAGE → VIDEO → AUDIO) без пауз → COMPLETED |
+| Discover + MANUAL | Пауза после каждого из 4 шагов |
+| Remix + AUTO | 4 шага (SCENARIO → IMAGE → VIDEO → AUDIO) без пауз → COMPLETED |
+| Remix + MANUAL | Пауза после каждого из 4 шагов |
+
+### SCENARIO step
+
+| Сценарий | Ожидаемый результат |
+|----------|---------------------|
+| Discover SCENARIO | LLM генерирует scenario_data креативно из story_template + creative_inputs |
+| Remix SCENARIO | LLM заполняет {переменные} в story_template → scenario_data |
+| Discover vs Remix | Одинаковый output (scenario_data), разный process |
 
 ### Unified Variant Model
 

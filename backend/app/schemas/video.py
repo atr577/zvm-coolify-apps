@@ -29,6 +29,7 @@ class ProjectBrief(BaseModel):
     platforms: List[str]
     duration: int
     project_type: str = "discover"
+    audio_mode: str = "auto"  # none, scene, music, voiceover, auto
     require_image_approval: bool = False
 
     model_config = ConfigDict(from_attributes=True)

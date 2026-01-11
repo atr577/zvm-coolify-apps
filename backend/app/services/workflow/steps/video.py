@@ -1,124 +1,63 @@
 """
-VideoStep - Generates video from image using media service.
+Video step - generates video from image using motion prompts.
 
-Step 6 in the workflow pipeline (after Scenario generation).
+Uses kling_service.generate_video() with image_url and motion_prompt.
 """
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+import logging
 
-from sqlalchemy.orm import Session
+from app.services.kling_service import kling_service
 
-from app.models.video import Video, StepType, WorkflowStatus
-from app.models.workflow_step import WorkflowStep
-from app.services.media.base import VideoServiceProtocol
+logger = logging.getLogger(__name__)
 
 
-class VideoStep:
+async def generate(video) -> Dict[str, Any]:
     """
-    Video generation step using injected service.
+    Generate video from image.
 
-    Unlike text generation steps, this:
-    - Does NOT use AI validation (visual content)
-    - Uses dependency injection for the video service
-    - Returns task_id needed for audio generation
+    Args:
+        video: Video model with image_url and scenario_data
+
+    Returns:
+        Dict with video_url and task_id
     """
+    logger.info(f"Video step: generating for video {video.id}")
 
-    step_type = StepType.VIDEO
-    step_name = "video"
+    # Get image URL
+    image_url = video.image_url
+    if not image_url:
+        raise ValueError("image_url not found. Run image step first.")
 
-    def __init__(
-        self,
-        db: Session,
-        video: Video,
-        video_service: VideoServiceProtocol
-    ):
-        self.db = db
-        self.video = video
-        self.project = video.project
-        self.video_service = video_service
-        self.step: Optional[WorkflowStep] = None
+    # Get motion prompt from scenario_data
+    motion_prompt = None
+    camera_control = None
+    negative_prompt = None
 
-    async def execute(
-        self,
-        image_url: str,
-        prompt: str,
-        duration: int = 5,
-        camera_control: Optional[Dict[str, Any]] = None,
-        negative_prompt: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Generate video from image.
+    if video.scenario_data and isinstance(video.scenario_data, dict):
+        motion_prompt = video.scenario_data.get("motion_prompt")
+        camera_control = video.scenario_data.get("camera_movement")
+        negative_prompt = video.scenario_data.get("negative_prompt")
 
-        Args:
-            image_url: Source image URL
-            prompt: Motion/scenario prompt
-            duration: Video duration in seconds
-            camera_control: Camera movement settings
-            negative_prompt: What should NOT appear
+    # Use image_prompt as fallback for motion
+    if not motion_prompt:
+        motion_prompt = video.image_prompt or "subtle natural movement"
 
-        Returns:
-            Dict with step_id, content (video_url, task_id), status
-        """
-        self.step = self._get_or_create_step()
+    # Get duration from project
+    duration = video.project.duration if video.project else 5
 
-        try:
-            # Generate video
-            video_url, task_id = await self.video_service.generate(
-                image_url=image_url,
-                prompt=prompt,
-                duration=duration,
-                camera_control=camera_control,
-                negative_prompt=negative_prompt,
-                **kwargs
-            )
+    # Generate video (returns tuple with task_id)
+    video_url, task_id = await kling_service.generate_video(
+        image_url=image_url,
+        prompt=motion_prompt,
+        duration=duration,
+        camera_control=camera_control,
+        negative_prompt=negative_prompt,
+        return_task_id=True,
+    )
 
-            # Save to step and video
-            self.step.content = {"video_url": video_url, "task_id": task_id}
-            self.video.video_url = video_url
-            self.video.video_task_id = task_id
-            self.video.current_step = self.step_type
-            self.step.status = WorkflowStatus.AWAITING_APPROVAL
-            self.step.completed_at = datetime.utcnow()
-            self.db.commit()
+    logger.info(f"Video step: generated {video_url[:50]}..., task_id={task_id}")
 
-            return {
-                "step_id": self.step.id,
-                "content": {"video_url": video_url, "task_id": task_id},
-                "status": "completed"
-            }
-
-        except Exception as e:
-            self._handle_failure(e)
-            raise
-
-    def _get_or_create_step(self) -> WorkflowStep:
-        """Get existing PENDING step or create new one."""
-        step = self.db.query(WorkflowStep).filter(
-            WorkflowStep.video_id == self.video.id,
-            WorkflowStep.step_type == self.step_type,
-            WorkflowStep.status == WorkflowStatus.PENDING
-        ).first()
-
-        if step:
-            step.status = WorkflowStatus.IN_PROGRESS
-            step.started_at = datetime.utcnow()
-        else:
-            step = WorkflowStep(
-                video_id=self.video.id,
-                step_type=self.step_type,
-                status=WorkflowStatus.IN_PROGRESS,
-                started_at=datetime.utcnow()
-            )
-            self.db.add(step)
-
-        self.db.commit()
-        self.db.refresh(step)
-        return step
-
-    def _handle_failure(self, error: Exception):
-        """Handle step failure."""
-        if self.step:
-            self.step.status = WorkflowStatus.FAILED
-            self.step.completed_at = datetime.utcnow()
-            self.db.commit()
+    return {
+        "video_url": video_url,
+        "task_id": task_id,
+    }
