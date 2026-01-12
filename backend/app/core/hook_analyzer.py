@@ -141,6 +141,8 @@ class HookAnalyzer:
         logger.info(f"Sending audio to GPT-4o-audio-preview ({len(audio_data)} bytes)")
 
         try:
+            # Note: gpt-4o-audio-preview doesn't support response_format parameter
+            # JSON parsing is handled via prompt instructions
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_AUDIO_MODEL,
                 messages=[
@@ -161,11 +163,16 @@ class HookAnalyzer:
                         ],
                     }
                 ],
-                response_format={"type": "json_object"},
             )
 
-            # Parse response
+            # Parse response - handle potential markdown code blocks
             content = response.choices[0].message.content
+            # Strip markdown code blocks if present
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            content = content.strip()
             result = json.loads(content)
             hooks_data = result.get("hooks", [])
 
