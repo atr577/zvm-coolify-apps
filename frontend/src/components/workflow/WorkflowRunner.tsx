@@ -69,11 +69,12 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
       !isCompleted &&
       currentStep &&
       !currentStepHasData &&
-      !workflow.isGenerating
+      !workflow.isGenerating &&
+      !workflow.error  // Don't retry if there's an error (user must click Retry)
     ) {
       workflow.generateStep(currentStep as typeof steps[number])
     }
-  }, [isManual, isCompleted, currentStep, currentStepHasData, workflow.isGenerating])
+  }, [isManual, isCompleted, currentStep, currentStepHasData, workflow.isGenerating, workflow.error])
 
   // Error display
   if (workflow.error) {
