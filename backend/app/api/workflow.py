@@ -315,6 +315,13 @@ async def generate_step(
     video = get_video_with_auth(db, video_id, current_user)
     validate_step(step, video)
 
+    # Prevent concurrent generation for the same step
+    if video.status == WorkflowStatus.IN_PROGRESS and video.current_step == step:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Generation already in progress for step {step}"
+        )
+
     # Update status
     video.status = WorkflowStatus.IN_PROGRESS
     video.current_step = step
