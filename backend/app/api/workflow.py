@@ -819,8 +819,19 @@ def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
         if content.get("source_scenario"):
             video.scenario_data = content["source_scenario"]
     elif step == "audio":
-        video.video_with_audio_url = content.get("audio_url")
-        video.audio_variants = content.get("audio_variants")
+        # For ai_music: set audio_data (final URL set after approve/merge)
+        # For kling: set video_with_audio_url directly
+        if content.get("provider") == "ai_music":
+            video.audio_data = {
+                "provider": "ai_music",
+                "preview_url": content.get("preview_url"),
+                "music_prompt": content.get("music_prompt"),
+                "full_track_url": content.get("full_track_url"),
+                "hook": content.get("hook"),
+            }
+        else:
+            video.video_with_audio_url = content.get("audio_url")
+            video.audio_variants = content.get("audio_variants")
         # Restore source chain
         if content.get("source_video_url"):
             video.video_url = content["source_video_url"]

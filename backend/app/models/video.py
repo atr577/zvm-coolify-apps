@@ -66,8 +66,9 @@ class Video(Base):
     scenario_data = Column(JSON, nullable=True)
     video_url = Column(Text, nullable=True)  # Silent video URL
     video_task_id = Column(String(255), nullable=True)  # KLING task ID for audio generation
-    audio_variants = Column(JSON, nullable=True)  # List of 4 video URLs with different audio
-    video_with_audio_url = Column(Text, nullable=True)  # Selected video with audio
+    audio_data = Column(JSON, nullable=True)  # Audio step result: {provider, preview_url, music_prompt, ...}
+    audio_variants = Column(JSON, nullable=True)  # Deprecated: use StepHistory for variants
+    video_with_audio_url = Column(Text, nullable=True)  # Final merged video with audio
 
     # Local file paths (downloaded from CDN for permanent storage)
     local_image_path = Column(String(500), nullable=True)  # e.g., "images/123_image_1736600000.png"

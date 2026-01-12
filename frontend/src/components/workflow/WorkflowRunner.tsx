@@ -229,7 +229,7 @@ function hasStepData(video: Video, step: string): boolean {
     case 'video':
       return !!video.video_url
     case 'audio':
-      return !!video.video_with_audio_url
+      return !!video.audio_data || !!video.video_with_audio_url
     default:
       return false
   }

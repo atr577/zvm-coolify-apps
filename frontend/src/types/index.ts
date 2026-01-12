@@ -125,7 +125,8 @@ export interface Video {
   scenario_data: Record<string, any> | null
   video_url: string | null
   video_task_id: string | null
-  audio_variants: string[] | null
+  audio_data: Record<string, any> | null  // ai_music step result
+  audio_variants: string[] | null  // deprecated
   video_with_audio_url: string | null
   // Local file paths (served via /api/files)
   local_image_path: string | null
