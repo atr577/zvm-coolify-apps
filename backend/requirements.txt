@@ -19,6 +19,7 @@ apscheduler==3.10.4
 
 # AI Services
 httpx==0.26.0  # Used by AIMLAPI client
+openai>=1.10.0  # Used by HookAnalyzer for GPT-4o-audio-preview
 
 # Image/Video processing
 pillow>=10.2.0
