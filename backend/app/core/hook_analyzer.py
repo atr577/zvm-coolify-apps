@@ -145,6 +145,7 @@ class HookAnalyzer:
             # JSON parsing is handled via prompt instructions
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_AUDIO_MODEL,
+                modalities=["text"],  # Only text output, no audio response
                 messages=[
                     {
                         "role": "user",
