@@ -41,8 +41,8 @@ async def create_video(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Remix starts at IMAGE, Discover starts at STORY
-    initial_step = StepType.IMAGE if project.project_type == "remix" else StepType.STORY
+    # Remix starts at IMAGE, Discover starts at SCENARIO
+    initial_step = StepType.IMAGE if project.project_type == "remix" else StepType.SCENARIO
 
     db_video = Video(
         project_id=video.project_id,
