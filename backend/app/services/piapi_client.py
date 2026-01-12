@@ -645,12 +645,17 @@ class PiAPIClient:
             if status in ["completed", "succeeded", "success"]:
                 output = data.get("output", {})
 
-                # music-u returns audio_url or audio_urls array
+                # music-u returns various formats:
+                # 1. output.audio_url
+                # 2. output.audio_urls array
+                # 3. output.audio.url
+                # 4. output.songs[0].song_path (Udio format)
                 audio_url = (
                     output.get("audio_url") or
                     (output.get("audio_urls", [None])[0] if output.get("audio_urls") else None) or
-                    # Alternative format with audio object
-                    output.get("audio", {}).get("url")
+                    output.get("audio", {}).get("url") or
+                    # Udio format: songs array with song_path
+                    (output.get("songs", [{}])[0].get("song_path") if output.get("songs") else None)
                 )
 
                 if not audio_url:
