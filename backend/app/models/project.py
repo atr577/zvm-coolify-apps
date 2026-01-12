@@ -41,6 +41,9 @@ class Project(Base):
     # Audio mode: none, scene, music, voiceover, auto
     audio_mode = Column(String(20), nullable=False, default="auto")
 
+    # Audio provider: kling (default), ai_music (requires OPENAI_API_KEY)
+    audio_provider = Column(String(20), nullable=True)  # None = use default for audio_mode
+
     # Project type: discover (full workflow) or remix (skip to image generation)
     project_type = Column(String(20), nullable=False, default="discover")
 

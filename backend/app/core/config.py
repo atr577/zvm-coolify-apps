@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     GPT_MODEL: str = ""  # Deprecated: use LLM_MODEL
     KLING_MODEL: str = ""  # Deprecated: use VIDEO_MODEL
 
+    # OpenAI Direct (for GPT-4o-audio-preview - not available via PiAPI)
+    OPENAI_API_KEY: str = ""  # Optional: enables ai_music provider
+    OPENAI_AUDIO_MODEL: str = "gpt-4o-audio-preview"  # Model for audio analysis
+
+    # Temp files
+    TEMP_DIR: str = "data/temp"  # Temporary files for audio processing
+
     # Instagram OAuth
     INSTAGRAM_CLIENT_ID: str = ""
     INSTAGRAM_CLIENT_SECRET: str = ""
