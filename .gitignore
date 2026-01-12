@@ -79,3 +79,6 @@ celerybeat.pid
 dump.rdb
 
 # Tasks - tracked for project planning
+
+# Temp audio files
+backend/data/temp/*.mp3
