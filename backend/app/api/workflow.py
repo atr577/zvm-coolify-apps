@@ -342,7 +342,57 @@ async def generate_step(
         if current_variant:
             current_variant.is_selected = False
 
-        # Save to history with feedback and parent link - always auto-select
+        # Special handling for ai_music: create separate StepHistory for each hook
+        if content.get('provider') == 'ai_music' and content.get('variants'):
+            variants_data = content.get('variants', [])
+            shared_data = {
+                'full_track_url': content.get('full_track_url'),
+                'music_prompt': content.get('music_prompt'),
+                'provider': 'ai_music',
+                'source_video_url': content.get('source_video_url'),
+                'source_image_url': content.get('source_image_url'),
+                'source_scenario': content.get('source_scenario'),
+            }
+
+            first_history = None
+            for i, variant in enumerate(variants_data):
+                # Each hook becomes a separate StepHistory
+                hook_content = {
+                    **shared_data,
+                    'hook': variant.get('hook'),
+                    'preview_url': variant.get('preview_url'),
+                    'local_path': variant.get('local_path'),
+                    'hook_index': i,
+                }
+                history = StepHistory(
+                    video_id=video_id,
+                    step_type=step,
+                    content=hook_content,
+                    is_selected=(i == 0),  # First hook selected by default
+                    feedback=request.feedback,
+                    parent_id=current_variant.id if current_variant else None
+                )
+                db.add(history)
+                if i == 0:
+                    first_history = history
+
+            db.commit()
+            db.refresh(first_history)
+
+            # Copy first variant to video
+            _copy_to_video(video, step, first_history.content)
+            db.commit()
+
+            logger.info(f"Generated {step} for video {video_id}, created {len(variants_data)} hook variants")
+
+            return GenerateResponse(
+                variant_id=first_history.id,
+                step_type=step,
+                content=first_history.content,
+                is_selected=first_history.is_selected
+            )
+
+        # Standard handling for other steps
         history = StepHistory(
             video_id=video_id,
             step_type=step,
