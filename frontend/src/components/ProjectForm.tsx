@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { CreateProjectDto, Workspace, AudioMode, ProjectType, SystemPrompts } from '@/types'
+import { CreateProjectDto, Workspace, AudioMode, AudioProvider, ProjectType, SystemPrompts } from '@/types'
 
 interface ProjectFormProps {
   initialData?: Partial<CreateProjectDto>
@@ -22,6 +22,14 @@ const AUDIO_MODES: { value: AudioMode; label: string; description: string }[] = 
   { value: 'voiceover', label: 'Озвучка', description: 'Голосовое сопровождение' },
   { value: 'auto', label: 'Авто', description: 'AI выберет подходящий режим' },
 ]
+
+const AUDIO_PROVIDERS: { value: AudioProvider; label: string; description: string }[] = [
+  { value: 'kling', label: 'KLING Sound', description: 'Звуки сцены от KLING AI' },
+  { value: 'ai_music', label: 'AI Music', description: 'Генерация музыки с выбором хука' },
+]
+
+// Audio modes that support multiple providers
+const MODES_WITH_PROVIDER_CHOICE: AudioMode[] = ['music', 'auto']
 
 const STEP_PROMPTS: { key: keyof SystemPrompts; label: string }[] = [
   { key: 'story', label: 'Story Generation' },
@@ -47,6 +55,7 @@ export default function ProjectForm({
     duration: initialData?.duration || 5,
     aspect_ratio: initialData?.aspect_ratio || '9:16',
     audio_mode: initialData?.audio_mode || 'auto',
+    audio_provider: initialData?.audio_provider,
     project_type: initialData?.project_type || 'discover',
     require_image_approval: initialData?.require_image_approval || false,
     system_prompts: initialData?.system_prompts || {},
@@ -262,7 +271,12 @@ export default function ProjectForm({
                 name="audio_mode"
                 value={mode.value}
                 checked={formData.audio_mode === mode.value}
-                onChange={() => setFormData({ ...formData, audio_mode: mode.value })}
+                onChange={() => setFormData({
+                  ...formData,
+                  audio_mode: mode.value,
+                  // Reset provider when changing mode
+                  audio_provider: MODES_WITH_PROVIDER_CHOICE.includes(mode.value) ? formData.audio_provider : undefined
+                })}
                 className="sr-only"
               />
               <span className="text-sm font-medium">{mode.label}</span>
@@ -270,6 +284,41 @@ export default function ProjectForm({
           ))}
         </div>
       </div>
+
+      {/* Audio Provider (only for music/auto modes) */}
+      {MODES_WITH_PROVIDER_CHOICE.includes(formData.audio_mode || 'auto') && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Источник звука
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            {AUDIO_PROVIDERS.map(provider => (
+              <label
+                key={provider.value}
+                className={`flex flex-col p-3 border-2 rounded-lg cursor-pointer transition ${
+                  formData.audio_provider === provider.value
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="audio_provider"
+                  value={provider.value}
+                  checked={formData.audio_provider === provider.value}
+                  onChange={() => setFormData({ ...formData, audio_provider: provider.value })}
+                  className="sr-only"
+                />
+                <span className="font-medium text-gray-900">{provider.label}</span>
+                <span className="text-xs text-gray-500 mt-1">{provider.description}</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            AI Music генерирует уникальную музыку и позволяет выбрать лучший фрагмент (хук) для видео.
+          </p>
+        </div>
+      )}
 
       {/* Workflow Control */}
       <div>

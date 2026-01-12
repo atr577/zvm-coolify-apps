@@ -1,7 +1,7 @@
 """
 Files API - Serve local media files
 
-Provides endpoints to serve locally stored images and videos.
+Provides endpoints to serve locally stored images, videos, and audio.
 """
 import logging
 from pathlib import Path
@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from app.services.media_downloader import MEDIA_BASE_DIR
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,14 @@ MIME_TYPES = {
     "mp4": "video/mp4",
     "mov": "video/quicktime",
     "webm": "video/webm",
+    # Audio
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+    "ogg": "audio/ogg",
 }
 
 # Allowed directories
-ALLOWED_TYPES = {"images", "videos"}
+ALLOWED_TYPES = {"images", "videos", "audio"}
 
 
 @router.get("/{file_type}/{filename}")
@@ -38,7 +43,7 @@ async def serve_file(file_type: str, filename: str):
     Serve a local media file.
 
     Args:
-        file_type: Type of file (images or videos)
+        file_type: Type of file (images, videos, or audio)
         filename: Name of the file to serve
 
     Returns:
@@ -52,8 +57,13 @@ async def serve_file(file_type: str, filename: str):
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    # Build file path
-    file_path = MEDIA_BASE_DIR / file_type / filename
+    # Build file path based on type
+    if file_type == "audio":
+        # Audio files are served from temp directory (hook previews)
+        file_path = Path(settings.TEMP_DIR) / filename
+    else:
+        # Images and videos from media directory
+        file_path = MEDIA_BASE_DIR / file_type / filename
 
     # Check if file exists
     if not file_path.exists():
@@ -66,10 +76,12 @@ async def serve_file(file_type: str, filename: str):
 
     logger.debug(f"Serving file: {file_path} as {media_type}")
 
+    # Audio previews use shorter cache (may be cleaned up)
+    cache_time = "max-age=3600" if file_type == "audio" else "max-age=31536000, immutable"
+
     return FileResponse(
         path=file_path,
         media_type=media_type,
         filename=filename,
-        # Cache for 1 year (immutable content)
-        headers={"Cache-Control": "public, max-age=31536000, immutable"}
+        headers={"Cache-Control": f"public, {cache_time}"}
     )

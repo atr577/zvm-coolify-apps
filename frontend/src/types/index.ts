@@ -33,6 +33,7 @@ export interface PromptData {
 
 export type AspectRatio = '9:16' | '16:9' | '1:1'
 export type AudioMode = 'none' | 'scene' | 'music' | 'voiceover' | 'auto'
+export type AudioProvider = 'kling' | 'ai_music'
 export type ProjectType = 'discover' | 'remix'
 
 export interface SystemPrompts {
@@ -54,6 +55,7 @@ export interface Project {
   duration: number
   aspect_ratio: AspectRatio
   audio_mode: AudioMode
+  audio_provider: AudioProvider | null  // null = use default for audio_mode
   project_type: ProjectType
   require_image_approval: boolean
   system_prompts: SystemPrompts | null
@@ -75,6 +77,7 @@ export interface CreateProjectDto {
   duration: number
   aspect_ratio?: AspectRatio
   audio_mode?: AudioMode
+  audio_provider?: AudioProvider  // null = use default for audio_mode
   project_type?: ProjectType
   require_image_approval?: boolean
   system_prompts?: SystemPrompts
@@ -95,6 +98,7 @@ export interface UpdateProjectDto {
   duration?: number
   aspect_ratio?: AspectRatio
   audio_mode?: AudioMode
+  audio_provider?: AudioProvider  // null = use default for audio_mode
   project_type?: ProjectType
   require_image_approval?: boolean
   system_prompts?: SystemPrompts

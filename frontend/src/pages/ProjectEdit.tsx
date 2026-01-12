@@ -62,6 +62,7 @@ export default function ProjectEdit() {
             ...project,
             description: project.description ?? undefined,
             motion_template: project.motion_template ?? undefined,
+            audio_provider: project.audio_provider ?? undefined,
             system_prompts: project.system_prompts ?? undefined,
             source_video_ids: project.source_video_ids ?? undefined,
             scenario_template: project.scenario_template ?? undefined,

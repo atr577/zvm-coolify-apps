@@ -1,3 +1,13 @@
-"""Audio providers package."""
+"""
+Audio providers package.
 
-# Providers are imported lazily in factory.py to avoid circular imports
+Providers:
+- KlingAudioProvider: Sound effects via KLING API
+- AiMusicProvider: AI-generated music with hook analysis
+"""
+
+from app.providers.audio.kling import KlingAudioProvider
+
+__all__ = ["KlingAudioProvider"]
+
+# AiMusicProvider is lazy-loaded in factory (requires OPENAI_API_KEY)

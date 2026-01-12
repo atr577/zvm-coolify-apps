@@ -73,6 +73,7 @@ async def create_project(
         duration=project.duration,
         aspect_ratio=project.aspect_ratio,
         audio_mode=project.audio_mode,
+        audio_provider=project.audio_provider,
         project_type=project.project_type,
         system_prompts=system_prompts,
         workspace_id=workspace_id,
@@ -188,3 +189,20 @@ async def delete_project(
     db.delete(project)
     db.commit()
     return {"message": "Project deleted successfully"}
+
+
+@router.get("/audio-options")
+async def get_audio_options_endpoint():
+    """
+    Get available audio providers and their configuration.
+
+    Returns:
+        Dict with:
+            - types: list of audio types (none, scene, music, voiceover, auto)
+            - providers: mapping of audio_mode to available providers
+            - defaults: mapping of audio_mode to default provider
+            - ai_music_available: whether ai_music provider can be used
+    """
+    from app.core.audio_config import get_audio_options
+
+    return get_audio_options()

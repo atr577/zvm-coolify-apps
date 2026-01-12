@@ -257,9 +257,9 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
     elif step == "audio":
         if not video.video_url:
             raise HTTPException(status_code=400, detail="Video not generated yet")
-        if not video.video_task_id:
-            raise HTTPException(status_code=400, detail="Video task ID not found")
-        audio_urls = await kling_service.add_audio_to_video(video.video_task_id)
+
+        # Get provider from project settings (default: kling)
+        provider_name = project.audio_provider if project else None
 
         # Get scenario data for lineage
         if is_remix:
@@ -272,14 +272,28 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         else:
             scenario_data = video.scenario_data
 
-        # Return first audio variant as main
-        return {
-            "audio_url": audio_urls[0] if audio_urls else None,
-            "audio_variants": audio_urls,
-            "source_video_url": video.video_url,  # snapshot for lineage
+        # Use provider factory to generate audio
+        from app.providers.factory import get_audio_provider
+        provider = get_audio_provider(provider_name)
+        result = await provider.generate(video)
+
+        # Build response with lineage data
+        response = {
+            **result,
+            "source_video_url": video.video_url,
             "source_image_url": video.image_url,
             "source_scenario": scenario_data
         }
+
+        # For kling provider, use first variant as main audio_url
+        if result.get("provider") == "kling":
+            response["audio_url"] = result.get("video_with_audio_url")
+            response["audio_variants"] = result.get("audio_variants", [])
+        # For ai_music provider, no audio_url until user selects hook
+        elif result.get("provider") == "ai_music":
+            response["audio_url"] = None  # Will be set after hook selection + merge
+
+        return response
 
     else:
         raise HTTPException(status_code=400, detail=f"Unknown step: {step}")
@@ -531,6 +545,10 @@ async def approve_variant(
 
     # Download media locally for the selected variant
     await _download_media_for_step(video, step)
+
+    # Special handling for ai_music provider: merge video + selected hook
+    if step == "audio" and variant.content.get("provider") == "ai_music":
+        await _merge_audio_for_ai_music(video, variant, db)
 
     # Get stale steps (dependent steps that need regeneration)
     stale_steps = STEP_DEPENDENCIES.get(step, [])
@@ -811,3 +829,64 @@ async def _generate_publishing_meta(video: Video, db: Session):
     except Exception as e:
         # Non-blocking: log error but don't fail the workflow
         logger.error(f"Failed to generate publishing_meta for video {video.id}: {e}")
+
+
+async def _merge_audio_for_ai_music(video: Video, variant, db: Session):
+    """
+    Merge video + selected audio hook for ai_music provider.
+
+    Called when user approves an ai_music audio variant.
+    Downloads video if needed, merges with selected hook audio.
+    """
+    from app.core.media_processor import media_processor
+    from pathlib import Path
+
+    try:
+        content = variant.content
+
+        # Get hook data from variant
+        # For ai_music, each variant is a single hook
+        hook = content.get("hook")
+        local_audio_path = content.get("local_path")
+
+        if not local_audio_path:
+            logger.error(f"ai_music merge: no local_path in variant {variant.id}")
+            return
+
+        if not Path(local_audio_path).exists():
+            logger.error(f"ai_music merge: audio file not found: {local_audio_path}")
+            return
+
+        # Get video path (download if needed)
+        video_path = video.local_video_path
+        if not video_path or not Path(video_path).exists():
+            if not video.video_url:
+                logger.error(f"ai_music merge: no video_url for video {video.id}")
+                return
+            logger.info(f"ai_music merge: downloading video for video {video.id}")
+            video_path = await media_processor.download_file(video.video_url)
+
+        # Merge video + audio
+        logger.info(f"ai_music merge: merging video {video.id} with hook")
+        merged_path = await media_processor.merge_video_audio(
+            video_path=video_path,
+            audio_path=local_audio_path,
+        )
+
+        # Move merged file to media directory for permanent storage
+        import shutil
+        from app.services.media_downloader import VIDEOS_DIR
+
+        final_filename = f"video_{video.id}_with_audio.mp4"
+        final_path = VIDEOS_DIR / final_filename
+        shutil.move(merged_path, final_path)
+
+        # Update video with merged URL
+        video.video_with_audio_url = f"/api/files/videos/{final_filename}"
+        video.local_audio_path = str(final_path)
+
+        logger.info(f"ai_music merge: completed for video {video.id} -> {final_path}")
+
+    except Exception as e:
+        logger.error(f"ai_music merge failed for video {video.id}: {e}")
+        # Don't fail the approval, just log the error
