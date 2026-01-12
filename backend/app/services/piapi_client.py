@@ -566,6 +566,140 @@ class PiAPIClient:
         task_id = await self.create_sound_task(origin_task_id=video_task_id)
         return await self.wait_for_sound(task_id)
 
+    # ============ Music Generation (music-u / Udio) ============
+
+    async def create_music_task(
+        self,
+        prompt: str,
+        lyrics_type: str = "instrumental",
+        seed: int = -1,
+    ) -> str:
+        """
+        Create music-u (Udio) music generation task.
+
+        Args:
+            prompt: Music description (e.g., "80s synthpop, energetic, romantic")
+            lyrics_type: "instrumental" or "generate" (with AI lyrics)
+            seed: Random seed (-1 for random)
+
+        Returns:
+            task_id for polling
+        """
+        payload = {
+            "model": "music-u",
+            "task_type": "generate_music",
+            "input": {
+                "gpt_description_prompt": prompt,
+                "lyrics_type": lyrics_type,
+                "seed": seed,
+            }
+        }
+
+        logger.info(f"Creating music-u task: {prompt[:50]}...")
+
+        response = await self._make_request(
+            "POST",
+            f"{self.task_base_url}/task",
+            headers=self._get_task_headers(),
+            data=payload
+        )
+
+        task_id = response.get("data", {}).get("task_id") or response.get("task_id")
+        if not task_id:
+            raise PiAPIError(f"No task_id in response: {response}")
+
+        logger.info(f"Created music task: {task_id}")
+        return task_id
+
+    async def wait_for_music(
+        self,
+        task_id: str,
+        max_wait_time: int = 300,
+        poll_interval: int = 10,
+    ) -> str:
+        """
+        Poll music generation until complete.
+
+        Args:
+            task_id: Task ID from create_music_task
+            max_wait_time: Maximum wait time in seconds
+            poll_interval: Polling interval in seconds
+
+        Returns:
+            Audio URL (mp3)
+
+        Raises:
+            PiAPIError: On generation failure
+            TimeoutError: If max_wait_time exceeded
+        """
+        elapsed = 0
+
+        while elapsed < max_wait_time:
+            result = await self.get_task_status(task_id)
+
+            data = result.get("data", result)
+            status = data.get("status", "").lower()
+
+            logger.debug(f"Music task {task_id} status: {status}")
+
+            if status in ["completed", "succeeded", "success"]:
+                output = data.get("output", {})
+
+                # music-u returns audio_url or audio_urls array
+                audio_url = (
+                    output.get("audio_url") or
+                    (output.get("audio_urls", [None])[0] if output.get("audio_urls") else None) or
+                    # Alternative format with audio object
+                    output.get("audio", {}).get("url")
+                )
+
+                if not audio_url:
+                    raise PiAPIError(f"Music completed but no audio URL found: {result}")
+
+                logger.info(f"Music ready: {audio_url}")
+                return audio_url
+
+            elif status in ["failed", "error"]:
+                error_msg = data.get("error", {}).get("message", str(data))
+                raise PiAPIError(f"Music generation failed: {error_msg}")
+
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        raise TimeoutError(f"Music generation timed out after {max_wait_time}s")
+
+    async def generate_music(
+        self,
+        prompt: str,
+        lyrics_type: str = "instrumental",
+        seed: int = -1,
+    ) -> str:
+        """
+        Generate music track using music-u (Udio).
+
+        High-level method that creates task and waits for completion.
+
+        Args:
+            prompt: Music description
+            lyrics_type: "instrumental" or "generate"
+            seed: Random seed (-1 for random)
+
+        Returns:
+            Audio URL (mp3)
+        """
+        task_id = await self.create_music_task(
+            prompt=prompt,
+            lyrics_type=lyrics_type,
+            seed=seed,
+        )
+        audio_url = await self.wait_for_music(task_id)
+
+        # Cache result
+        request_data = {"prompt": prompt, "lyrics_type": lyrics_type, "seed": seed}
+        cache_key = self._get_cache_key("music", prompt, request_data)
+        self._save_to_cache(cache_key, "music", request_data, {"audio_url": audio_url, "task_id": task_id})
+
+        return audio_url
 
     # ============ Image Generation (model-agnostic) ============
 
