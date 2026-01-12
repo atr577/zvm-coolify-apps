@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { useWorkflowV3, StepType } from '@/hooks/useWorkflowV3'
+import HookSelector, { AiMusicVariant } from '@/components/video/HookSelector'
 import type { Video as VideoType } from '@/types'
 
 interface StepReviewProps {
@@ -79,6 +80,28 @@ export default function StepReview({
 
   // Check if step content is editable (text-based steps)
   const isEditableStep = ['scenario'].includes(currentStep)
+
+  // Check if this is ai_music audio step
+  const isAiMusicAudio = currentStep === 'audio' &&
+    currentVariant?.content?.provider === 'ai_music'
+
+  // Selected hook index for ai_music (find selected variant index)
+  const [selectedHookIndex, setSelectedHookIndex] = useState(0)
+
+  // Convert variants to AiMusicVariant format for HookSelector
+  const aiMusicVariants: AiMusicVariant[] = isAiMusicAudio
+    ? variants
+        .filter(v => v.content?.hook)
+        .map((v, idx) => {
+          const content = v.content as Record<string, any>
+          return {
+            hook: content.hook,
+            preview_url: (content.preview_url || content.local_path || '') as string,
+            video_id: (content.video_id || video.id) as number,
+            index: idx,
+          }
+        })
+    : []
 
   // Handle approve (move to next step)
   const handleApprove = async () => {
@@ -226,6 +249,24 @@ export default function StepReview({
                     className="w-full h-64 px-3 py-2 font-mono text-sm border rounded-lg focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
+              ) : isAiMusicAudio && aiMusicVariants.length > 0 ? (
+                /* AI Music Hook Selector */
+                <HookSelector
+                  videoUrl={video.video_url || ''}
+                  variants={aiMusicVariants}
+                  selectedIndex={selectedHookIndex}
+                  onSelect={(idx) => {
+                    setSelectedHookIndex(idx)
+                    // Switch to corresponding variant
+                    const variant = variants.find(v => v.content?.index === idx)
+                    if (variant) {
+                      workflow.switchVariant(variant.id)
+                    }
+                  }}
+                  onConfirm={handleApprove}
+                  isLoading={isApproving}
+                  musicPrompt={(currentVariant?.content as Record<string, any>)?.music_prompt as string | undefined}
+                />
               ) : (
                 <div className="relative">
                   {isEditableStep && (
@@ -279,44 +320,49 @@ export default function StepReview({
               </div>
             )}
 
-            {/* Feedback input for regeneration */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Feedback (optional)
-              </label>
-              <textarea
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Describe what to change..."
-                className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                rows={2}
-              />
-            </div>
+            {/* Feedback input and Actions - hide for ai_music (HookSelector has its own) */}
+            {!isAiMusicAudio && (
+              <>
+                {/* Feedback input for regeneration */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Feedback (optional)
+                  </label>
+                  <textarea
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    placeholder="Describe what to change..."
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
+                    rows={2}
+                  />
+                </div>
 
-            {/* Actions */}
-            <div className="flex space-x-3">
-              <button
-                onClick={handleApprove}
-                disabled={isApproving || !currentVariant || isEditing}
-                className="flex-1 flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-              >
-                {isApproving ? (
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                ) : (
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                )}
-                {isLastStep ? 'Complete' : 'Approve & Continue'}
-                {!isLastStep && !isApproving && <ChevronRight className="h-4 w-4 ml-1" />}
-              </button>
-              <button
-                onClick={handleRegenerate}
-                disabled={isGenerating || isApproving || isEditing}
-                className="flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
-              >
-                <RefreshCw className="h-5 w-5 mr-2" />
-                Regenerate
-              </button>
-            </div>
+                {/* Actions */}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleApprove}
+                    disabled={isApproving || !currentVariant || isEditing}
+                    className="flex-1 flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                  >
+                    {isApproving ? (
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                    )}
+                    {isLastStep ? 'Complete' : 'Approve & Continue'}
+                    {!isLastStep && !isApproving && <ChevronRight className="h-4 w-4 ml-1" />}
+                  </button>
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={isGenerating || isApproving || isEditing}
+                    className="flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-5 w-5 mr-2" />
+                    Regenerate
+                  </button>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
