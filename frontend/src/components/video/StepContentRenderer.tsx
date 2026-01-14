@@ -1,5 +1,30 @@
-import { MessageCircle } from 'lucide-react'
+import { useState } from 'react'
+import { MessageCircle, ImageOff } from 'lucide-react'
 import type { KeyMoment, PlatformAdaptation } from '@/types'
+
+// Image with placeholder fallback on error
+function ImageWithFallback({ src, alt }: { src: string; alt: string }) {
+  const [error, setError] = useState(false)
+
+  if (error) {
+    return (
+      <div className="w-full max-w-md h-64 bg-gray-100 rounded-lg shadow-lg flex flex-col items-center justify-center text-gray-400">
+        <ImageOff className="h-12 w-12 mb-2" />
+        <span className="text-sm">Image not available</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="w-full max-w-md rounded-lg shadow-lg"
+      style={{ maxHeight: '400px', objectFit: 'contain' }}
+      onError={() => setError(true)}
+    />
+  )
+}
 
 interface StepContentRendererProps {
   stepType: string
@@ -86,12 +111,7 @@ export default function StepContentRenderer({ stepType, content }: StepContentRe
         return (
           <div className="space-y-2">
             {content.image_url && (
-              <img
-                src={content.image_url}
-                alt="Generated"
-                className="w-full max-w-md rounded-lg shadow-lg"
-                style={{ maxHeight: '400px', objectFit: 'contain' }}
-              />
+              <ImageWithFallback src={content.image_url} alt="Generated" />
             )}
           </div>
         )

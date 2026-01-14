@@ -55,7 +55,6 @@ export default function StepReview({
   void completedSteps
 
   const [showHistory, setShowHistory] = useState(false)
-  const [isApproving, setIsApproving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState<string>('')
   const [feedback, setFeedback] = useState('')
@@ -85,33 +84,30 @@ export default function StepReview({
   const isAiMusicAudio = currentStep === 'audio' &&
     currentVariant?.content?.provider === 'ai_music'
 
-  // Selected hook index for ai_music (find selected variant index)
-  const [selectedHookIndex, setSelectedHookIndex] = useState(0)
+  // Get hooks from content.variants (1 StepHistory has multiple hooks)
+  const contentVariants = (currentVariant?.content as Record<string, any>)?.variants as Array<any> | undefined
+  const initialHookIndex = (currentVariant?.content as Record<string, any>)?.selected_hook ?? 0
 
-  // Convert variants to AiMusicVariant format for HookSelector
-  const aiMusicVariants: AiMusicVariant[] = isAiMusicAudio
-    ? variants
-        .filter(v => v.content?.hook)
-        .map((v, idx) => {
-          const content = v.content as Record<string, any>
-          return {
-            hook: content.hook,
-            preview_url: (content.preview_url || content.local_path || '') as string,
-            video_id: (content.video_id || video.id) as number,
-            index: idx,
-          }
-        })
+  // Selected hook index for ai_music
+  const [selectedHookIndex, setSelectedHookIndex] = useState(initialHookIndex)
+
+  // Convert content.variants to AiMusicVariant format for HookSelector
+  const aiMusicVariants: AiMusicVariant[] = isAiMusicAudio && contentVariants
+    ? contentVariants.map((hookData, idx) => ({
+        hook: hookData.hook,
+        preview_url: (hookData.preview_url || hookData.local_path || '') as string,
+        video_id: video.id,
+        index: idx,
+      }))
     : []
 
+  // Use mutation loading state (tracks actual request duration including ffmpeg merge)
+  const isApproving = workflow.approveVariantMutation.isLoading
+
   // Handle approve (move to next step)
-  const handleApprove = async () => {
+  const handleApprove = () => {
     if (!currentVariant) return
-    setIsApproving(true)
-    try {
-      workflow.approveVariant(currentVariant.id)
-    } finally {
-      setIsApproving(false)
-    }
+    workflow.approveVariant(currentVariant.id)
   }
 
   // Handle edit mode
@@ -136,8 +132,8 @@ export default function StepReview({
   }
 
   // Handle regenerate with feedback
-  const handleRegenerate = () => {
-    workflow.generateStep(currentStep, feedback || undefined)
+  const handleRegenerate = (customFeedback?: string) => {
+    workflow.generateStep(currentStep, customFeedback || feedback || undefined)
     setFeedback('')
   }
 
@@ -257,14 +253,15 @@ export default function StepReview({
                   selectedIndex={selectedHookIndex}
                   onSelect={(idx) => {
                     setSelectedHookIndex(idx)
-                    // Switch to corresponding variant
-                    const variant = variants.find(v => v.content?.index === idx)
-                    if (variant) {
-                      workflow.switchVariant(variant.id)
+                    // Update selected_hook in backend
+                    if (currentVariant) {
+                      workflow.selectHook(currentVariant.id, idx)
                     }
                   }}
                   onConfirm={handleApprove}
+                  onRegenerate={handleRegenerate}
                   isLoading={isApproving}
+                  isRegenerating={isGenerating}
                   musicPrompt={(currentVariant?.content as Record<string, any>)?.music_prompt as string | undefined}
                 />
               ) : (
@@ -353,7 +350,7 @@ export default function StepReview({
                     {!isLastStep && !isApproving && <ChevronRight className="h-4 w-4 ml-1" />}
                   </button>
                   <button
-                    onClick={handleRegenerate}
+                    onClick={() => handleRegenerate()}
                     disabled={isGenerating || isApproving || isEditing}
                     className="flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
                   >

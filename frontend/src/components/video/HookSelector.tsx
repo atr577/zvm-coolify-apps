@@ -13,10 +13,9 @@ import {
   Play,
   Pause,
   Music,
-  Zap,
-  Clock,
   CheckCircle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react'
 
 // Hook data from ai_music provider
@@ -35,6 +34,9 @@ export interface AiMusicVariant {
   preview_url: string
   video_id: number
   index: number
+  track_index?: number  // Which track (0 or 1 for Suno)
+  track_title?: string  // Track title from Suno
+  hook_index?: number   // Hook index within track (0-3)
 }
 
 interface HookSelectorProps {
@@ -43,26 +45,12 @@ interface HookSelectorProps {
   selectedIndex: number
   onSelect: (index: number) => void
   onConfirm: () => void
+  onRegenerate: (feedback?: string) => void  // Generate new music + hooks
   isLoading: boolean
+  isRegenerating?: boolean
   musicPrompt?: string
 }
 
-// Energy badge colors
-const ENERGY_COLORS = {
-  low: 'bg-blue-100 text-blue-700',
-  medium: 'bg-yellow-100 text-yellow-700',
-  high: 'bg-red-100 text-red-700',
-}
-
-// Type badge colors
-const TYPE_COLORS: Record<string, string> = {
-  chorus: 'bg-purple-100 text-purple-700',
-  drop: 'bg-pink-100 text-pink-700',
-  bridge: 'bg-green-100 text-green-700',
-  intro: 'bg-cyan-100 text-cyan-700',
-  verse: 'bg-gray-100 text-gray-700',
-  outro: 'bg-orange-100 text-orange-700',
-}
 
 export default function HookSelector({
   videoUrl,
@@ -70,15 +58,17 @@ export default function HookSelector({
   selectedIndex,
   onSelect,
   onConfirm,
+  onRegenerate,
   isLoading,
+  isRegenerating,
   musicPrompt,
 }: HookSelectorProps) {
   const [isPlaying, setIsPlaying] = useState(false)
+  const [feedback, setFeedback] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const currentVariant = variants[selectedIndex]
-  const currentHook = currentVariant?.hook
 
   // Sync video and audio playback
   const handlePlayPause = () => {
@@ -135,13 +125,6 @@ export default function HookSelector({
     }
   }, [selectedIndex])
 
-  // Format time as MM:SS.s
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = (seconds % 60).toFixed(1)
-    return `${mins}:${secs.padStart(4, '0')}`
-  }
-
   return (
     <div className="space-y-4">
       {/* Music prompt info */}
@@ -196,68 +179,98 @@ export default function HookSelector({
         </div>
       </div>
 
-      {/* Hook Tabs */}
-      <div className="flex border-b border-gray-200">
-        {variants.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => onSelect(index)}
-            className={`flex-1 py-3 px-2 text-sm font-medium transition-colors ${
-              selectedIndex === index
-                ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <Volume2 className="h-4 w-4 inline mr-1" />
-            Hook {index + 1}
-          </button>
-        ))}
+      {/* Hook Grid 2x4 */}
+      <div className="space-y-3">
+        {/* Group variants by track */}
+        {[0, 1].map((trackIdx) => {
+          const trackVariants = variants.filter(v => (v.track_index ?? 0) === trackIdx)
+          if (trackVariants.length === 0) return null
+
+          const trackTitle = trackVariants[0]?.track_title || `Track ${trackIdx + 1}`
+
+          return (
+            <div key={trackIdx} className="space-y-2">
+              {/* Track label */}
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                {trackTitle}
+              </div>
+
+              {/* Hooks row (4 columns) */}
+              <div className="grid grid-cols-4 gap-2">
+                {trackVariants.map((variant) => {
+                  const isSelected = selectedIndex === variant.index
+                  const hookNum = (variant.hook_index ?? variant.index % 4) + 1
+
+                  return (
+                    <button
+                      key={variant.index}
+                      onClick={() => onSelect(variant.index)}
+                      className={`p-3 rounded-lg border-2 transition-all ${
+                        isSelected
+                          ? 'border-purple-500 bg-purple-50 shadow-md'
+                          : 'border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50/50'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center space-y-1">
+                        <Volume2 className={`h-5 w-5 ${isSelected ? 'text-purple-600' : 'text-gray-400'}`} />
+                        <span className={`text-sm font-medium ${isSelected ? 'text-purple-700' : 'text-gray-600'}`}>
+                          Hook {hookNum}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {variant.hook.type}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
-      {/* Hook Details */}
-      {currentHook && (
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          {/* Badges */}
-          <div className="flex flex-wrap gap-2">
-            <span className={`px-2 py-1 text-xs font-medium rounded ${ENERGY_COLORS[currentHook.energy]}`}>
-              <Zap className="h-3 w-3 inline mr-1" />
-              {currentHook.energy}
-            </span>
-            <span className={`px-2 py-1 text-xs font-medium rounded ${TYPE_COLORS[currentHook.type] || 'bg-gray-100 text-gray-700'}`}>
-              {currentHook.type}
-            </span>
-            <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-700">
-              <Clock className="h-3 w-3 inline mr-1" />
-              {formatTime(currentHook.start)} - {formatTime(currentHook.end)}
-            </span>
-          </div>
+      {/* Feedback input */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Feedback (optional)
+        </label>
+        <textarea
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Describe what to change..."
+          className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
+          rows={2}
+        />
+      </div>
 
-          {/* Reason */}
-          <p className="text-sm text-gray-600">
-            <span className="font-medium">Why this hook: </span>
-            {currentHook.reason}
-          </p>
-        </div>
-      )}
-
-      {/* Confirm Button */}
-      <div className="flex justify-center pt-2">
+      {/* Action Buttons */}
+      <div className="flex space-x-3">
         <button
           onClick={onConfirm}
-          disabled={isLoading}
-          className="px-8 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition disabled:opacity-50 flex items-center"
+          disabled={isLoading || isRegenerating}
+          className="flex-1 flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition disabled:opacity-50"
         >
           {isLoading ? (
-            <>
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Merging audio...
-            </>
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
           ) : (
-            <>
-              <CheckCircle className="h-5 w-5 mr-2" />
-              Select Hook {selectedIndex + 1}
-            </>
+            <CheckCircle className="h-5 w-5 mr-2" />
           )}
+          {isLoading ? 'Merging audio...' : 'Complete'}
+        </button>
+        <button
+          onClick={() => {
+            onRegenerate(feedback || undefined)
+            setFeedback('')
+          }}
+          disabled={isLoading || isRegenerating}
+          className="flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
+        >
+          {isRegenerating ? (
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-5 w-5 mr-2" />
+          )}
+          Regenerate
         </button>
       </div>
     </div>
