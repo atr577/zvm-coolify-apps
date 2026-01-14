@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
@@ -8,6 +9,9 @@ from app.models.user import User, WorkspaceMember
 from app.schemas import VideoCreate, VideoUpdate, VideoResponse
 from app.schemas.pagination import PaginatedResponse
 from app.core.deps import get_current_user
+from app.services.openai_service import openai_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -161,3 +165,53 @@ async def delete_video(
     db.delete(video)
     db.commit()
     return {"message": "Video deleted successfully"}
+
+
+@router.post("/{video_id}/generate-meta", response_model=VideoResponse)
+async def generate_meta(
+    video_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Regenerate publishing metadata for a video."""
+    video = db.query(Video).options(
+        joinedload(Video.project),
+        joinedload(Video.publish_results)
+    ).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Verify access
+    verify_video_access(db, video, current_user.id)
+
+    project = video.project
+    if not project or not project.platforms:
+        raise HTTPException(status_code=400, detail="No platforms configured for this project")
+
+    # Get scenario data for context
+    scenario_data = video.scenario_data or {}
+
+    # Add story_template and content_variables if available
+    if project.story_template and "story_template" not in scenario_data:
+        scenario_data["story_template"] = project.story_template
+    if video.content_variables and "content_variables" not in scenario_data:
+        scenario_data["content_variables"] = video.content_variables
+
+    try:
+        # Generate publishing meta
+        publishing_meta = await openai_service.generate_publishing_meta(
+            platforms=project.platforms,
+            scenario_data=scenario_data,
+            fallback_text=scenario_data.get("image_prompt", project.story_template or "")
+        )
+
+        video.publishing_meta = publishing_meta
+        db.commit()
+        db.refresh(video)
+
+        logger.info(f"Regenerated publishing_meta for video {video.id}: {list(publishing_meta.keys())}")
+        return video
+
+    except Exception as e:
+        logger.error(f"Failed to generate publishing_meta for video {video.id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate meta: {str(e)}")

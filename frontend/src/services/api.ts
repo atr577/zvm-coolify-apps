@@ -125,6 +125,13 @@ export const workflowApi = {
   gotoStep: (videoId: number, step: StepType) =>
     api.post<{ step: string; has_data: boolean }>(`/api/workflow/${videoId}/goto/${step}`),
 
+  // Select a specific hook within an ai_music variant
+  selectHook: (videoId: number, variantId: number, hookIndex: number) =>
+    api.post<{ variant_id: number; selected_hook: number }>(
+      `/api/workflow/${videoId}/variant/${variantId}/select-hook`,
+      { hook_index: hookIndex }
+    ),
+
   // Legacy: Generate publishing metadata (TODO: implement backend endpoint)
   generateMeta: (videoId: number) =>
     api.post<{ publishing_meta: Record<string, unknown> }>(`/api/videos/${videoId}/generate-meta`),
