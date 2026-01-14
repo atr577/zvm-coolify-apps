@@ -706,6 +706,169 @@ class PiAPIClient:
 
         return audio_url
 
+    # ============ Suno Music Generation ============
+
+    async def create_suno_task(
+        self,
+        prompt: str,
+        make_instrumental: bool = False,
+        tags: str = None,
+    ) -> str:
+        """
+        Create Suno music generation task.
+
+        Args:
+            prompt: Music description (gpt_description_prompt mode)
+            make_instrumental: If True, generate instrumental only (default: False for vocals)
+            tags: Genre/style tags (strongly affects output)
+
+        Returns:
+            task_id for polling
+        """
+        input_data = {
+            "gpt_description_prompt": prompt,
+            "make_instrumental": make_instrumental,
+            "mv": "chirp-crow",  # Suno v5 (better vocals)
+        }
+
+        if tags:
+            input_data["tags"] = tags
+
+        payload = {
+            "model": "suno",
+            "task_type": "music",
+            "input": input_data
+        }
+
+        logger.info(f"Creating Suno task: {prompt[:50]}...")
+
+        response = await self._make_request(
+            "POST",
+            f"{self.task_base_url}/task",
+            headers=self._get_task_headers(),
+            data=payload
+        )
+
+        task_id = response.get("data", {}).get("task_id") or response.get("task_id")
+        if not task_id:
+            raise PiAPIError(f"No task_id in Suno response: {response}")
+
+        logger.info(f"Created Suno task: {task_id}")
+        return task_id
+
+    async def wait_for_suno(
+        self,
+        task_id: str,
+        max_wait_time: int = 300,
+        poll_interval: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Poll Suno generation until complete.
+
+        Args:
+            task_id: Task ID from create_suno_task
+            max_wait_time: Maximum wait time in seconds
+            poll_interval: Polling interval in seconds
+
+        Returns:
+            List of track dicts, each with:
+                - audio_url: str
+                - title: str
+                - duration: float (seconds)
+
+        Raises:
+            PiAPIError: On generation failure
+            TimeoutError: If max_wait_time exceeded
+        """
+        elapsed = 0
+
+        while elapsed < max_wait_time:
+            result = await self.get_task_status(task_id)
+
+            data = result.get("data", result)
+            status = data.get("status", "").lower()
+
+            logger.debug(f"Suno task {task_id} status: {status}")
+
+            if status in ["completed", "succeeded", "success"]:
+                output = data.get("output", {})
+
+                # Suno returns output as LIST of tracks (2 variations per request)
+                # Each item has: audio_url, title, metadata.duration, etc.
+                tracks = []
+                if isinstance(output, list) and output:
+                    for item in output:
+                        track = {
+                            "audio_url": item.get("audio_url"),
+                            "title": item.get("title", "Untitled"),
+                            "duration": item.get("metadata", {}).get("duration", 0),
+                        }
+                        if track["audio_url"]:
+                            tracks.append(track)
+                elif isinstance(output, dict):
+                    # Fallback: dict format with audio_url or clips
+                    audio_url = output.get("audio_url")
+                    if audio_url:
+                        tracks.append({"audio_url": audio_url, "title": "Track", "duration": 0})
+                    else:
+                        clips = output.get("clips", [])
+                        for clip in clips:
+                            if clip.get("audio_url"):
+                                tracks.append({
+                                    "audio_url": clip.get("audio_url"),
+                                    "title": clip.get("title", "Track"),
+                                    "duration": clip.get("duration", 0),
+                                })
+
+                if not tracks:
+                    raise PiAPIError(f"Suno completed but no tracks found: {result}")
+
+                logger.info(f"Suno music ready: {len(tracks)} tracks")
+                return tracks
+
+            elif status in ["failed", "error"]:
+                error_msg = data.get("error", {}).get("message", str(data))
+                raise PiAPIError(f"Suno generation failed: {error_msg}")
+
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        raise TimeoutError(f"Suno generation timed out after {max_wait_time}s")
+
+    async def generate_music_suno(
+        self,
+        prompt: str,
+        make_instrumental: bool = False,
+        tags: str = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate music tracks using Suno.
+
+        High-level method that creates task and waits for completion.
+        Suno generates 2 track variations per request.
+
+        Args:
+            prompt: Music description
+            make_instrumental: If True, generate instrumental only (default: False for vocals)
+            tags: Genre/style tags (strongly affects output)
+
+        Returns:
+            List of track dicts with audio_url, title, duration
+        """
+        task_id = await self.create_suno_task(
+            prompt=prompt,
+            make_instrumental=make_instrumental,
+            tags=tags,
+        )
+        tracks = await self.wait_for_suno(task_id)
+
+        # Cache result
+        request_data = {"prompt": prompt, "make_instrumental": make_instrumental}
+        cache_key = self._get_cache_key("suno", prompt, request_data)
+        self._save_to_cache(cache_key, "suno", request_data, {"tracks": tracks, "task_id": task_id})
+
+        return tracks
+
     # ============ Image Generation (model-agnostic) ============
 
     def _build_image_payload(

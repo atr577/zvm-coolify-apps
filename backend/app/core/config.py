@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"  # gpt-4o-mini, gpt-4o, claude-3-7-sonnet-20250219
     VIDEO_MODEL: str = "kling-2.5"  # kling-1.5, kling-2.1, kling-2.5, kling-2.6
     IMAGE_MODEL: str = "qwen-image"  # qwen-image, nano-banana-pro
+    MUSIC_MODEL: str = "suno"  # suno, music-u (Udio)
 
     # Legacy aliases
     GPT_MODEL: str = ""  # Deprecated: use LLM_MODEL
@@ -34,8 +35,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""  # Optional: enables ai_music provider
     OPENAI_AUDIO_MODEL: str = "gpt-4o-audio-preview"  # Model for audio analysis
 
-    # Temp files
-    TEMP_DIR: str = "data/temp"  # Temporary files for audio processing
+    # Storage paths (all relative to backend/)
+    DATA_DIR: str = "data"
+    TEMP_DIR: str = "data/temp"           # Temporary files (auto-cleanup)
+    MEDIA_DIR: str = "data/media"         # Persistent media storage
+    MEDIA_IMAGES_DIR: str = "data/media/images"
+    MEDIA_VIDEOS_DIR: str = "data/media/videos"
+    MEDIA_AUDIO_DIR: str = "data/media/audio"
 
     # Instagram OAuth
     INSTAGRAM_CLIENT_ID: str = ""
