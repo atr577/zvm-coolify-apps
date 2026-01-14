@@ -23,11 +23,11 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Directories
+# Directories from settings
 TEMP_DIR = Path(settings.TEMP_DIR)
-MEDIA_DIR = Path("data/media")
-AUDIO_DIR = MEDIA_DIR / "audio"
-VIDEOS_DIR = MEDIA_DIR / "videos"
+MEDIA_DIR = Path(settings.MEDIA_DIR)
+AUDIO_DIR = Path(settings.MEDIA_AUDIO_DIR)
+VIDEOS_DIR = Path(settings.MEDIA_VIDEOS_DIR)
 
 
 class MediaProcessor:

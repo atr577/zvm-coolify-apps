@@ -103,6 +103,7 @@ class VideoResponse(BaseModel):
     scenario_data: Optional[Dict[str, Any]] = None
     video_url: Optional[str] = None
     video_task_id: Optional[str] = None
+    audio_data: Optional[Dict[str, Any]] = None  # ai_music step result
     audio_variants: Optional[List[str]] = None
     video_with_audio_url: Optional[str] = None
 

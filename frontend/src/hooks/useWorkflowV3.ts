@@ -43,7 +43,13 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
         await queryClient.invalidateQueries(['variants', videoId, step])
         setGeneratingStep(null)
       },
-      onError: (err: Error) => {
+      onError: (err: Error & { response?: { status?: number } }) => {
+        // 409 = generation already in progress, not an error - just keep polling
+        if (err.response?.status === 409 || err.message?.includes('409')) {
+          console.log('Generation already in progress, polling...')
+          setGeneratingStep(null)  // Clear local state, rely on video.status
+          return
+        }
         setError(err.message)
         setGeneratingStep(null)
       },
@@ -128,6 +134,21 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
     }
   )
 
+  // Select hook mutation (for ai_music variants)
+  const selectHookMutation = useMutation(
+    ({ variantId, hookIndex }: { variantId: number; hookIndex: number }) =>
+      workflowApi.selectHook(videoId, variantId, hookIndex),
+    {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries(['video', videoId])
+        await queryClient.invalidateQueries(['variants', videoId, 'audio'])
+      },
+      onError: (err: Error) => {
+        setError(err.message)
+      },
+    }
+  )
+
   // Get variants for a step (query)
   const useVariants = (step: StepType) => {
     return useQuery(
@@ -169,6 +190,14 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
     [gotoStepMutation]
   )
 
+  // Select hook within ai_music variant
+  const selectHook = useCallback(
+    (variantId: number, hookIndex: number) => {
+      selectHookMutation.mutate({ variantId, hookIndex })
+    },
+    [selectHookMutation]
+  )
+
   // Legacy alias
   const selectVariant = approveVariant
 
@@ -203,6 +232,7 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
     switchVariant,
     approveVariant,
     gotoStep,
+    selectHook,
     selectVariant, // Legacy alias for approveVariant
     runAuto,
     updateContent,

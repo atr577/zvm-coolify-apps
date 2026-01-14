@@ -57,13 +57,8 @@ async def serve_file(file_type: str, filename: str):
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    # Build file path based on type
-    if file_type == "audio":
-        # Audio files are served from temp directory (hook previews)
-        file_path = Path(settings.TEMP_DIR) / filename
-    else:
-        # Images and videos from media directory
-        file_path = MEDIA_BASE_DIR / file_type / filename
+    # Build file path based on type (all from MEDIA_DIR now)
+    file_path = MEDIA_BASE_DIR / file_type / filename
 
     # Check if file exists
     if not file_path.exists():
@@ -76,12 +71,9 @@ async def serve_file(file_type: str, filename: str):
 
     logger.debug(f"Serving file: {file_path} as {media_type}")
 
-    # Audio previews use shorter cache (may be cleaned up)
-    cache_time = "max-age=3600" if file_type == "audio" else "max-age=31536000, immutable"
-
     return FileResponse(
         path=file_path,
         media_type=media_type,
         filename=filename,
-        headers={"Cache-Control": f"public, {cache_time}"}
+        headers={"Cache-Control": "public, max-age=31536000, immutable"}
     )

@@ -63,6 +63,9 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
   }, [isManual, video.status, isCompleted, workflow.isRunningAuto])
 
   // MANUAL mode: auto-start current step if it has no data
+  // Skip if video is already IN_PROGRESS (backend is generating)
+  const isBackendGenerating = video.status?.toLowerCase() === 'in_progress'
+
   useEffect(() => {
     if (
       isManual &&
@@ -70,11 +73,12 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
       currentStep &&
       !currentStepHasData &&
       !workflow.isGenerating &&
-      !workflow.error  // Don't retry if there's an error (user must click Retry)
+      !workflow.error &&
+      !isBackendGenerating  // Don't start if backend already generating
     ) {
       workflow.generateStep(currentStep as typeof steps[number])
     }
-  }, [isManual, isCompleted, currentStep, currentStepHasData, workflow.isGenerating, workflow.error])
+  }, [isManual, isCompleted, currentStep, currentStepHasData, workflow.isGenerating, workflow.error, isBackendGenerating])
 
   // Error display
   if (workflow.error) {
@@ -115,13 +119,16 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
     )
   }
 
+  // Combined generating state (frontend request OR backend still processing)
+  const isAnyGenerating = workflow.isGenerating || isBackendGenerating
+
   // Progress view (AUTO mode or MANUAL generating)
   return (
     <div className="bg-white rounded-xl shadow-lg border-2 border-purple-200 overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b">
         <div className="flex items-center space-x-3">
-          {workflow.isGenerating ? (
+          {isAnyGenerating ? (
             <Loader2 className="h-6 w-6 text-purple-600 animate-spin" />
           ) : isCompleted ? (
             <CheckCircle className="h-6 w-6 text-green-500" />
@@ -132,7 +139,7 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
             <h2 className="text-lg font-bold text-gray-900">
               {isCompleted
                 ? 'Generation Complete'
-                : workflow.isGenerating
+                : isAnyGenerating
                 ? `Generating ${STEP_LABELS[workflow.generatingStep || currentStep || ''] || '...'}`
                 : 'Ready to Generate'}
             </h2>
@@ -149,8 +156,9 @@ export default function WorkflowRunner({ video, videoId }: WorkflowRunnerProps) 
           {steps.map((step, index) => {
             const isStepCompleted = completedSteps.includes(step)
             const isCurrent = step === (workflow.generatingStep || currentStep)
-            // In AUTO mode, show spinner on currentStep while running
+            // Show spinner if frontend generating OR backend still processing this step
             const isGeneratingThis = workflow.generatingStep === step ||
+              (isBackendGenerating && step === currentStep && !isStepCompleted) ||
               (!isManual && workflow.isRunningAuto && step === currentStep && !isStepCompleted)
 
             return (

@@ -4,22 +4,22 @@ Media Downloader Service
 Downloads media files from CDN URLs and saves them locally.
 Provides retry logic with exponential backoff.
 """
-import os
 import time
 import httpx
 import logging
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 from urllib.parse import urlparse
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Base directory for media storage
-MEDIA_BASE_DIR = Path(__file__).parent.parent.parent.parent / "data" / "media"
-
-# Subdirectories for different media types
-IMAGES_DIR = MEDIA_BASE_DIR / "images"
-VIDEOS_DIR = MEDIA_BASE_DIR / "videos"
+# Directories from settings (absolute paths)
+_backend_dir = Path(__file__).parent.parent.parent  # backend/
+MEDIA_BASE_DIR = _backend_dir / settings.MEDIA_DIR
+IMAGES_DIR = _backend_dir / settings.MEDIA_IMAGES_DIR
+VIDEOS_DIR = _backend_dir / settings.MEDIA_VIDEOS_DIR
 
 # Retry settings
 MAX_RETRIES = 3
