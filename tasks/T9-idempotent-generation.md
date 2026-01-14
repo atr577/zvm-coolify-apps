@@ -465,3 +465,19 @@ Old flow still works for manual testing. TaskTracker is additive - if no tracker
 - Implement task timeout (auto-fail after 15 minutes)
 - Add analytics: track duplicate request frequency
 - Implement cost tracking per task
+
+## Lessons Learned
+
+1. **Check-then-act = баг** — Если между проверкой и действием может влезть другой запрос, нужен lock. Не надеяться на "быстро выполнится".
+
+2. **Lock per entity, не глобальный** — `Dict[video_id, Lock]` позволяет параллельную работу над разными видео.
+
+3. **После lock — перепроверяй** — Пока ждал lock, другой request мог уже сделать работу. Всегда re-check.
+
+4. **Pool connections × concurrent sleeps** — Если код держит DB connection во время async sleep, pool исчерпается при concurrent requests. Либо увеличивай pool, либо отпускай connection.
+
+5. **Обрабатывай ВСЕ статусы явно** — Код проверял только RUNNING и пропустил PENDING. Каждый статус enum должен иметь явную ветку.
+
+6. **Timestamps в логах обязательны** — Без них concurrent requests невозможно отладить. Добавлять сразу, не "потом".
+
+7. **409 ≠ ошибка для пользователя** — "Already running" это нормальное состояние, показывай spinner, не error.
