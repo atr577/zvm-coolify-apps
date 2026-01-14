@@ -82,3 +82,4 @@ dump.rdb
 
 # Temp audio files
 backend/data/temp/*.mp3
+backend/data/
