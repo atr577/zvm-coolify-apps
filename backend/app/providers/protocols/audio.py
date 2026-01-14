@@ -22,7 +22,7 @@ class AudioProviderProtocol(Protocol):
     - EpidemicSoundProvider: Licensed music catalog
     """
 
-    async def generate(self, video) -> Dict[str, Any]:
+    async def generate(self, video, feedback: str = None) -> Dict[str, Any]:
         """
         Generate audio for a video.
 
@@ -34,6 +34,7 @@ class AudioProviderProtocol(Protocol):
                 - video.project.duration: int (5 or 10 seconds)
                 - video.project.platforms: list[str]
                 - video.video_url: str (for merge)
+            feedback: Optional user feedback for regeneration (e.g., "more upbeat")
 
         Returns:
             Dict with provider-specific content:
