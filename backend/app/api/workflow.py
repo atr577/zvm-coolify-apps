@@ -8,6 +8,12 @@ Endpoints:
 - GET /{video_id}/variants/{step} - Get all variants for a step
 - POST /{video_id}/select/{variant_id} - Select a variant
 - POST /{video_id}/run-auto - Run all steps (AUTO mode)
+
+TaskTracker integration (T9):
+- Before calling external provider, check for active TaskTracker
+- If task already RUNNING → return 409 Conflict
+- If task COMPLETED → return cached result
+- Store external_task_id for resume after page refresh
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,18 +22,39 @@ from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 
+import asyncio
 from app.db.base import get_db
 from app.models.video import Video, WorkflowStatus
 from app.models.step_history import StepHistory, STEP_TO_VIDEO_FIELD, DISCOVER_STEPS, REMIX_STEPS, STEP_DEPENDENCIES
+from app.models.task_tracker import TaskTracker, TaskStatus
 from app.models.user import User, WorkspaceMember
 from app.core.deps import get_current_user
+from app.core.config import settings
 from app.services.openai_service import openai_service
 from app.services.kling_service import kling_service
+from app.services.piapi_client import piapi_client, PiAPIError
 from app.services import media_downloader
+from app.services.mock_data import MOCK_IMAGE_URL, MOCK_VIDEO_URL
+from app.schemas.task_tracker import TaskRunningResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# =============================================================================
+# Video Lock (T9 - Prevent concurrent generation for same video)
+# =============================================================================
+_video_locks: Dict[int, asyncio.Lock] = {}
+
+
+def get_video_lock(video_id: int) -> asyncio.Lock:
+    """Get or create asyncio lock for a specific video.
+
+    Prevents multiple concurrent requests from generating the same step.
+    """
+    if video_id not in _video_locks:
+        _video_locks[video_id] = asyncio.Lock()
+    return _video_locks[video_id]
 
 
 # =============================================================================
@@ -147,6 +174,98 @@ def validate_step(step: str, video: Video):
         )
 
 
+# =============================================================================
+# TaskTracker Helpers (T9 - Idempotent Generation)
+# =============================================================================
+
+def get_active_task_tracker(db: Session, video_id: int, step_type: str) -> Optional[TaskTracker]:
+    """Find active (PENDING or RUNNING) TaskTracker for this video/step."""
+    return db.query(TaskTracker).filter(
+        TaskTracker.video_id == video_id,
+        TaskTracker.step_type == step_type,
+        TaskTracker.status.in_([TaskStatus.PENDING, TaskStatus.RUNNING])
+    ).first()
+
+
+def get_completed_task_tracker(db: Session, video_id: int, step_type: str) -> Optional[TaskTracker]:
+    """Find most recent COMPLETED TaskTracker for this video/step.
+
+    Used to resume from completed external task without re-generating.
+    """
+    return db.query(TaskTracker).filter(
+        TaskTracker.video_id == video_id,
+        TaskTracker.step_type == step_type,
+        TaskTracker.status == TaskStatus.COMPLETED
+    ).order_by(TaskTracker.completed_at.desc()).first()
+
+
+def create_task_tracker(db: Session, video_id: int, step_type: str, provider: str) -> TaskTracker:
+    """Create new TaskTracker in PENDING state."""
+    tracker = TaskTracker(
+        video_id=video_id,
+        step_type=step_type,
+        provider=provider,
+        status=TaskStatus.PENDING,
+    )
+    db.add(tracker)
+    db.commit()
+    db.refresh(tracker)
+    logger.info(f"Created TaskTracker {tracker.id} for video {video_id}, step={step_type}")
+    return tracker
+
+
+async def check_external_task_status(tracker: TaskTracker) -> Dict[str, Any]:
+    """
+    Check status of external task via PiAPI.
+
+    Returns dict with:
+    - status: "running" | "completed" | "failed" | "unknown"
+    - result: result data if completed
+    - error: error message if failed
+    """
+    if not tracker.external_task_id:
+        return {"status": "unknown", "error": "No external_task_id"}
+
+    # Mock mode: check tracker status directly (no external call)
+    if settings.MOCK_MODE:
+        if tracker.external_task_id.startswith("mock_"):
+            # In mock mode, task is "running" until completed in our DB
+            if tracker.status == TaskStatus.COMPLETED:
+                return {"status": "completed", "result": tracker.result}
+            elif tracker.status == TaskStatus.FAILED:
+                return {"status": "failed", "error": tracker.error_message}
+            else:
+                return {"status": "running"}
+
+    try:
+        response = await piapi_client.get_task_status(tracker.external_task_id)
+        data = response.get("data", response)
+        status = data.get("status", "").lower()
+
+        if status in ["completed", "succeeded", "success"]:
+            return {"status": "completed", "result": data}
+        elif status in ["failed", "error"]:
+            error_msg = data.get("error", {}).get("message", str(data))
+            return {"status": "failed", "error": error_msg}
+        else:
+            return {"status": "running"}
+    except Exception as e:
+        logger.error(f"Failed to check task status {tracker.external_task_id}: {e}")
+        return {"status": "unknown", "error": str(e)}
+
+
+def raise_task_running(tracker: TaskTracker):
+    """Raise 409 HTTPException for already running task."""
+    raise HTTPException(
+        status_code=409,
+        detail=TaskRunningResponse(
+            task_id=tracker.id,
+            status="running",
+            message=f"Task already running for step {tracker.step_type}"
+        ).model_dump()
+    )
+
+
 async def generate_step_content(step: str, video: Video, db: Session, feedback: Optional[str] = None) -> Dict[str, Any]:
     """Generate content for a specific step.
 
@@ -201,11 +320,49 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         if feedback and prompt:
             prompt = await openai_service.refine_prompt(prompt, feedback, prompt_type="image")
 
-        image_url = await kling_service.generate_image(
-            prompt=prompt,
-            negative_prompt=video.scenario_data.get("negative_prompt") if video.scenario_data else None,
-            aspect_ratio=project.aspect_ratio or "9:16"
-        )
+        # Add negative prompt suffix if provided
+        negative_prompt = video.scenario_data.get("negative_prompt") if video.scenario_data else None
+        full_prompt = prompt
+        if negative_prompt:
+            full_prompt = f"{prompt} --no {negative_prompt}"
+
+        # T9: Create TaskTracker and call piapi_client directly
+        tracker = create_task_tracker(db, video.id, "image", "kling")
+        try:
+            if settings.MOCK_MODE:
+                # Mock mode: simulate async task with delay
+                logger.info("MOCK MODE: Simulating image generation (10s delay)")
+                tracker.external_task_id = f"mock_image_{video.id}"
+                tracker.status = TaskStatus.RUNNING
+                tracker.started_at = datetime.utcnow()
+                db.commit()
+                await asyncio.sleep(2)  # 10 sec delay for manual testing
+                image_url = MOCK_IMAGE_URL
+            else:
+                # Real mode: call piapi_client
+                task_id = await piapi_client.create_image_task(
+                    prompt=full_prompt,
+                    aspect_ratio=project.aspect_ratio or "9:16",
+                )
+                tracker.external_task_id = task_id
+                tracker.status = TaskStatus.RUNNING
+                tracker.started_at = datetime.utcnow()
+                db.commit()
+                image_url = await piapi_client.wait_for_image(task_id)
+
+            # Update tracker
+            tracker.status = TaskStatus.COMPLETED
+            tracker.completed_at = datetime.utcnow()
+            tracker.result = {"image_url": image_url}
+            db.commit()
+
+        except (PiAPIError, TimeoutError) as e:
+            tracker.status = TaskStatus.FAILED
+            tracker.error_message = str(e)
+            tracker.completed_at = datetime.utcnow()
+            db.commit()
+            raise
+
         return {
             "image_url": image_url,
             "image_prompt": prompt,
@@ -239,13 +396,46 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         if feedback and motion_prompt:
             motion_prompt = await openai_service.refine_prompt(motion_prompt, feedback, prompt_type="motion")
 
-        result = await kling_service.generate_video(
-            image_url=video.image_url,
-            prompt=motion_prompt,
-            duration=project.duration or 5,
-            return_task_id=True
-        )
-        video_url, task_id = result
+        # T9: Create TaskTracker and call piapi_client directly
+        tracker = create_task_tracker(db, video.id, "video", "kling")
+        try:
+            if settings.MOCK_MODE:
+                # Mock mode: simulate async task with delay
+                logger.info("MOCK MODE: Simulating video generation (15s delay)")
+                task_id = f"mock_video_{video.id}"
+                tracker.external_task_id = task_id
+                tracker.status = TaskStatus.RUNNING
+                tracker.started_at = datetime.utcnow()
+                db.commit()
+                await asyncio.sleep(3)  # 15 sec delay for manual testing
+                video_url = MOCK_VIDEO_URL
+            else:
+                # Real mode: call piapi_client
+                task_id = await piapi_client.create_video_task(
+                    prompt=motion_prompt,
+                    image_url=video.image_url,
+                    duration=project.duration or 5,
+                    aspect_ratio=project.aspect_ratio or "9:16",
+                )
+                tracker.external_task_id = task_id
+                tracker.status = TaskStatus.RUNNING
+                tracker.started_at = datetime.utcnow()
+                db.commit()
+                video_url = await piapi_client.wait_for_video(task_id)
+
+            # Update tracker
+            tracker.status = TaskStatus.COMPLETED
+            tracker.completed_at = datetime.utcnow()
+            tracker.result = {"video_url": video_url, "task_id": task_id}
+            db.commit()
+
+        except (PiAPIError, TimeoutError) as e:
+            tracker.status = TaskStatus.FAILED
+            tracker.error_message = str(e)
+            tracker.completed_at = datetime.utcnow()
+            db.commit()
+            raise
+
         return {
             "video_url": video_url,
             "video_task_id": task_id,
@@ -272,10 +462,88 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         else:
             scenario_data = video.scenario_data
 
-        # Use provider factory to generate audio
-        from app.providers.factory import get_audio_provider
-        provider = get_audio_provider(provider_name)
-        result = await provider.generate(video, feedback=feedback)
+        # Check if audio should be skipped
+        if project and project.audio_mode == "none":
+            return {
+                "audio_variants": [],
+                "video_with_audio_url": video.video_url,
+                "provider": "skip",
+                "skipped": True,
+                "source_video_url": video.video_url,
+                "source_image_url": video.image_url,
+                "source_scenario": scenario_data
+            }
+
+        # T9: Handle different providers with TaskTracker
+        if provider_name == "ai_music":
+            # ai_music: complex flow with Suno + hook analysis
+            # Keep using provider but wrap with TaskTracker
+            from app.providers.factory import get_audio_provider
+            tracker = create_task_tracker(db, video.id, "audio", "ai_music")
+            try:
+                tracker.status = TaskStatus.RUNNING
+                tracker.started_at = datetime.utcnow()
+                db.commit()
+
+                provider = get_audio_provider("ai_music")
+                result = await provider.generate(video, feedback=feedback)
+
+                tracker.status = TaskStatus.COMPLETED
+                tracker.completed_at = datetime.utcnow()
+                tracker.result = {"provider": "ai_music", "variant_count": len(result.get("variants", []))}
+                db.commit()
+
+            except Exception as e:
+                tracker.status = TaskStatus.FAILED
+                tracker.error_message = str(e)
+                tracker.completed_at = datetime.utcnow()
+                db.commit()
+                raise
+
+        else:
+            # kling: call piapi_client directly
+            video_task_id = video.video_task_id
+            if not video_task_id and not settings.MOCK_MODE:
+                raise HTTPException(status_code=400, detail="video_task_id not found. Run video step first.")
+
+            tracker = create_task_tracker(db, video.id, "audio", "kling")
+            try:
+                if settings.MOCK_MODE:
+                    # Mock mode: simulate async task with delay
+                    logger.info("MOCK MODE: Simulating audio generation (10s delay)")
+                    task_id = f"mock_audio_{video.id}"
+                    tracker.external_task_id = task_id
+                    tracker.status = TaskStatus.RUNNING
+                    tracker.started_at = datetime.utcnow()
+                    db.commit()
+                    await asyncio.sleep(2)  # 10 sec delay for manual testing
+                    audio_variants = [MOCK_VIDEO_URL] * 4  # 4 variants
+                else:
+                    # Real mode: call piapi_client
+                    task_id = await piapi_client.create_sound_task(origin_task_id=video_task_id)
+                    tracker.external_task_id = task_id
+                    tracker.status = TaskStatus.RUNNING
+                    tracker.started_at = datetime.utcnow()
+                    db.commit()
+                    audio_variants = await piapi_client.wait_for_sound(task_id)
+
+                tracker.status = TaskStatus.COMPLETED
+                tracker.completed_at = datetime.utcnow()
+                tracker.result = {"audio_variants": audio_variants}
+                db.commit()
+
+                result = {
+                    "audio_variants": audio_variants,
+                    "video_with_audio_url": audio_variants[0] if audio_variants else video.video_url,
+                    "provider": "kling",
+                }
+
+            except (PiAPIError, TimeoutError) as e:
+                tracker.status = TaskStatus.FAILED
+                tracker.error_message = str(e)
+                tracker.completed_at = datetime.utcnow()
+                db.commit()
+                raise
 
         # Build response with lineage data
         response = {
@@ -315,8 +583,57 @@ async def generate_step(
     video = get_video_with_auth(db, video_id, current_user)
     validate_step(step, video)
 
-    # Prevent concurrent generation for the same step
-    if video.status == WorkflowStatus.IN_PROGRESS and video.current_step == step:
+    # T9: Check TaskTracker for async steps (image, video, audio)
+    # These steps use external APIs that take minutes to complete
+    async_steps = ["image", "video", "audio"]
+    completed_content = None  # Content from completed tracker (if exists)
+
+    if step in async_steps:
+        tracker = get_active_task_tracker(db, video.id, step)
+        if tracker:
+            # Active tracker exists (PENDING or RUNNING) - handle accordingly
+            if tracker.status == TaskStatus.PENDING:
+                # Task created but not started yet - return 409
+                logger.info(f"Task {tracker.id} is PENDING for video {video.id}, step={step}")
+                raise_task_running(tracker)
+
+            elif tracker.status == TaskStatus.RUNNING:
+                # Check external task status
+                ext_status = await check_external_task_status(tracker)
+
+                if ext_status["status"] == "running":
+                    # Task still running - return 409
+                    logger.info(f"Task {tracker.id} still running for video {video.id}, step={step}")
+                    raise_task_running(tracker)
+
+                elif ext_status["status"] == "completed":
+                    # Task completed externally - update tracker and use result
+                    logger.info(f"Task {tracker.id} completed externally, using result")
+                    tracker.status = TaskStatus.COMPLETED
+                    tracker.completed_at = datetime.utcnow()
+                    db.commit()
+                    # Use result from tracker
+                    if tracker.result:
+                        completed_content = tracker.result
+
+                elif ext_status["status"] == "failed":
+                    # Task failed - mark tracker and allow retry
+                    logger.info(f"Task {tracker.id} failed externally: {ext_status.get('error')}")
+                    tracker.status = TaskStatus.FAILED
+                    tracker.error_message = ext_status.get("error", "External task failed")
+                    tracker.completed_at = datetime.utcnow()
+                    db.commit()
+                    # Fall through to create new tracker
+
+        # T9: Check for completed tracker with result (avoid duplicate generation)
+        if not tracker or tracker.status != TaskStatus.RUNNING:
+            completed_tracker = get_completed_task_tracker(db, video.id, step)
+            if completed_tracker and completed_tracker.result and not completed_content:
+                logger.info(f"Using result from completed tracker {completed_tracker.id} for step {step}")
+                completed_content = completed_tracker.result
+
+    # Legacy check for non-async steps (scenario)
+    if step not in async_steps and video.status == WorkflowStatus.IN_PROGRESS and video.current_step == step:
         raise HTTPException(
             status_code=409,
             detail=f"Generation already in progress for step {step}"
@@ -335,8 +652,32 @@ async def generate_step(
             StepHistory.is_selected == True
         ).first()
 
-        # Generate content (with optional feedback)
-        content = await generate_step_content(step, video, db, feedback=request.feedback)
+        # Generate content (with optional feedback) or use completed tracker result
+        if completed_content:
+            content = completed_content
+            logger.info(f"Using content from completed tracker for step {step}")
+
+            # T9: If using completed tracker content, check if StepHistory already exists
+            # (prevents duplicate creation from race conditions)
+            existing_history = db.query(StepHistory).filter(
+                StepHistory.video_id == video_id,
+                StepHistory.step_type == step,
+                StepHistory.is_selected == True
+            ).first()
+
+            if existing_history:
+                # StepHistory already exists - just return it
+                logger.info(f"StepHistory already exists for step {step}, returning existing")
+                _copy_to_video(video, step, existing_history.content)
+                db.commit()
+                return GenerateResponse(
+                    variant_id=existing_history.id,
+                    step_type=step,
+                    content=existing_history.content,
+                    is_selected=existing_history.is_selected
+                )
+        else:
+            content = await generate_step_content(step, video, db, feedback=request.feedback)
 
         # Deselect current variant if exists
         if current_variant:
@@ -740,105 +1081,185 @@ async def run_auto(
     """Run all steps automatically (AUTO mode). Can resume from in_progress."""
     video = get_video_with_auth(db, video_id, current_user)
 
-    # Allow pending or in_progress (resume after interruption)
-    # Block if already completed or failed
-    if video.status not in [WorkflowStatus.PENDING, WorkflowStatus.IN_PROGRESS]:
-        logger.warning(f"run_auto called but video {video_id} status is {video.status}, skipping")
+    # T9: Try to acquire lock - if already locked, return in_progress immediately
+    lock = get_video_lock(video_id)
+    if lock.locked():
+        logger.info(f"run_auto: Video {video_id} is locked, returning in_progress")
         return RunAutoResponse(
             video_id=video_id,
-            status=video.status.value if video.status else "unknown",
+            status="in_progress",
             completed_steps=[],
-            current_step=video.current_step if isinstance(video.current_step, str) else None,
+            current_step=video.current_step.value if video.current_step else None,
             error=None
         )
 
-    steps = get_steps_for_video(video)
+    async with lock:
+        # Re-fetch video after acquiring lock (state might have changed)
+        db.refresh(video)
 
-    video.status = WorkflowStatus.IN_PROGRESS
-    db.commit()
-
-    completed_steps = []
-    current_step = None
-    error = None
-
-    for step in steps:
-        current_step = step
-        video.current_step = step
-        db.commit()
-
-        try:
-            # Check if step already has selected variant
-            existing = db.query(StepHistory).filter(
-                StepHistory.video_id == video_id,
-                StepHistory.step_type == step,
-                StepHistory.is_selected == True
-            ).first()
-
-            if existing:
-                # Already done - ensure data is copied to video
-                _copy_to_video(video, step, existing.content)
-                # Download media if not already downloaded
-                if step in ["image", "video", "audio"]:
-                    await _download_media_for_step(video, step)
-                db.commit()
-                db.refresh(video)
-                completed_steps.append(step)
-                continue
-
-            # Generate
-            content = await generate_step_content(step, video, db)
-
-            # For ai_music: auto-select first hook (index 0)
-            if step == "audio" and content.get("provider") == "ai_music":
-                content["selected_hook"] = 0
-
-            # Save and auto-select
-            history = StepHistory(
+        # Allow pending or in_progress (resume after interruption)
+        # Block if already completed or failed
+        if video.status not in [WorkflowStatus.PENDING, WorkflowStatus.IN_PROGRESS]:
+            logger.warning(f"run_auto called but video {video_id} status is {video.status}, skipping")
+            return RunAutoResponse(
                 video_id=video_id,
-                step_type=step,
-                content=content,
-                is_selected=True
+                status=video.status.value if video.status else "unknown",
+                completed_steps=[],
+                current_step=video.current_step if isinstance(video.current_step, str) else None,
+                error=None
             )
-            db.add(history)
-            _copy_to_video(video, step, content)
-            # Download media locally (non-blocking, best-effort)
-            await _download_media_for_step(video, step)
 
-            # For ai_music: merge video + selected hook audio
-            if step == "audio" and content.get("provider") == "ai_music":
-                db.flush()  # Ensure history has ID
-                await _merge_audio_for_ai_music(video, history, db)
+        steps = get_steps_for_video(video)
 
-            db.commit()
-            db.refresh(video)  # Refresh to get updated data
-
-            completed_steps.append(step)
-            logger.info(f"AUTO: Completed {step} for video {video_id}")
-
-        except Exception as e:
-            logger.error(f"AUTO: Failed at {step}: {e}")
-            error = str(e)
-            video.status = WorkflowStatus.FAILED
-            db.commit()
-            break
-
-    # All done?
-    if not error and len(completed_steps) == len(steps):
-        video.status = WorkflowStatus.COMPLETED
-        current_step = None
-
-        # Generate publishing metadata
-        await _generate_publishing_meta(video, db)
-
+        video.status = WorkflowStatus.IN_PROGRESS
         db.commit()
 
-    return RunAutoResponse(
-        video_id=video_id,
-        status=video.status.value,
-        completed_steps=completed_steps,
-        current_step=current_step,
-        error=error
-    )
+        completed_steps = []
+        current_step = None
+        error = None
+
+        for step in steps:
+            current_step = step
+            video.current_step = step
+            db.commit()
+
+            try:
+                # Check if step already has selected variant
+                existing = db.query(StepHistory).filter(
+                    StepHistory.video_id == video_id,
+                    StepHistory.step_type == step,
+                    StepHistory.is_selected == True
+                ).first()
+
+                if existing:
+                    # Already done - ensure data is copied to video
+                    _copy_to_video(video, step, existing.content)
+                    # Download media if not already downloaded
+                    if step in ["image", "video", "audio"]:
+                        await _download_media_for_step(video, step)
+                    db.commit()
+                    db.refresh(video)
+                    completed_steps.append(step)
+                    continue
+
+                # T9: Check for active TaskTracker before generating
+                async_steps = ["image", "video", "audio"]
+                content = None  # Will be set by generation or from completed tracker
+
+                if step in async_steps:
+                    tracker = get_active_task_tracker(db, video.id, step)
+                    if tracker:
+                        # Active tracker exists (PENDING or RUNNING) - check status
+                        if tracker.status == TaskStatus.PENDING:
+                            # Task created but not started yet - return in_progress
+                            logger.info(f"run-auto: Task {tracker.id} is PENDING for step {step}, returning in_progress")
+                            return RunAutoResponse(
+                                video_id=video_id,
+                                status="in_progress",
+                                completed_steps=completed_steps,
+                                current_step=step,
+                                error=None
+                            )
+                        elif tracker.status == TaskStatus.RUNNING:
+                            # Check external status
+                            ext_status = await check_external_task_status(tracker)
+                            if ext_status["status"] == "running":
+                                # Task still running - return in_progress so frontend keeps polling
+                                logger.info(f"run-auto: Task {tracker.id} still running for step {step}, returning in_progress")
+                                return RunAutoResponse(
+                                    video_id=video_id,
+                                    status="in_progress",
+                                    completed_steps=completed_steps,
+                                    current_step=step,
+                                    error=None
+                                )
+                            elif ext_status["status"] == "completed":
+                                # Resume completed task
+                                tracker.status = TaskStatus.COMPLETED
+                                tracker.completed_at = datetime.utcnow()
+                                db.commit()
+                            elif ext_status["status"] == "failed":
+                                # Mark as failed, allow retry
+                                tracker.status = TaskStatus.FAILED
+                                tracker.error_message = ext_status.get("error")
+                                db.commit()
+
+                    # T9: Check for completed tracker with result (avoid duplicate generation)
+                    if not tracker or tracker.status != TaskStatus.RUNNING:
+                        completed_tracker = get_completed_task_tracker(db, video.id, step)
+                        if completed_tracker and completed_tracker.result:
+                            # Use result from completed tracker instead of re-generating
+                            logger.info(f"run-auto: Using result from completed tracker {completed_tracker.id} for step {step}")
+                            content = completed_tracker.result
+
+                # Generate only if no content from completed tracker
+                if content is None:
+                    content = await generate_step_content(step, video, db)
+
+                # For ai_music: auto-select first hook (index 0)
+                if step == "audio" and content.get("provider") == "ai_music":
+                    content["selected_hook"] = 0
+
+                # T9: Re-check for existing StepHistory before creating (prevent race condition duplicates)
+                existing_now = db.query(StepHistory).filter(
+                    StepHistory.video_id == video_id,
+                    StepHistory.step_type == step,
+                    StepHistory.is_selected == True
+                ).first()
+
+                if existing_now:
+                    # Another request already created StepHistory - use it, skip creation
+                    logger.info(f"run-auto: StepHistory already exists for step {step}, skipping creation")
+                    _copy_to_video(video, step, existing_now.content)
+                    history = existing_now
+                else:
+                    # Save and auto-select
+                    history = StepHistory(
+                        video_id=video_id,
+                        step_type=step,
+                        content=content,
+                        is_selected=True
+                    )
+                    db.add(history)
+                    _copy_to_video(video, step, content)
+                # Download media locally (non-blocking, best-effort)
+                await _download_media_for_step(video, step)
+
+                # For ai_music: merge video + selected hook audio
+                if step == "audio" and content.get("provider") == "ai_music":
+                    db.flush()  # Ensure history has ID
+                    await _merge_audio_for_ai_music(video, history, db)
+
+                db.commit()
+                db.refresh(video)  # Refresh to get updated data
+
+                completed_steps.append(step)
+                logger.info(f"AUTO: Completed {step} for video {video_id}")
+
+            except Exception as e:
+                logger.error(f"AUTO: Failed at {step}: {e}")
+                error = str(e)
+                video.status = WorkflowStatus.FAILED
+                db.commit()
+                break
+
+        # All done?
+        if not error and len(completed_steps) == len(steps):
+            video.status = WorkflowStatus.COMPLETED
+            current_step = None
+
+            # Generate publishing metadata
+            await _generate_publishing_meta(video, db)
+
+            db.commit()
+
+        return RunAutoResponse(
+            video_id=video_id,
+            status=video.status.value,
+            completed_steps=completed_steps,
+            current_step=current_step,
+            error=error
+        )
 
 
 # =============================================================================
@@ -894,21 +1315,36 @@ def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
 
 
 async def _download_media_for_step(video: Video, step: str):
-    """Download media files locally after generation (non-blocking, best-effort)."""
+    """Download media files locally after generation (non-blocking, best-effort).
+
+    Skips download if file already exists locally.
+    """
     try:
         if step == "image" and video.image_url:
+            # Skip if already downloaded
+            if video.local_image_path:
+                logger.info(f"Image already downloaded for video {video.id}, skipping")
+                return
             local_path = await media_downloader.download_image(video.image_url, video.id)
             if local_path:
                 video.local_image_path = local_path
                 logger.info(f"Downloaded image for video {video.id}: {local_path}")
 
         elif step == "video" and video.video_url:
+            # Skip if already downloaded
+            if video.local_video_path:
+                logger.info(f"Video already downloaded for video {video.id}, skipping")
+                return
             local_path = await media_downloader.download_video(video.video_url, video.id, "video")
             if local_path:
                 video.local_video_path = local_path
                 logger.info(f"Downloaded video for video {video.id}: {local_path}")
 
         elif step == "audio" and video.video_with_audio_url:
+            # Skip if already downloaded
+            if video.local_audio_path:
+                logger.info(f"Audio already downloaded for video {video.id}, skipping")
+                return
             local_path = await media_downloader.download_video(video.video_with_audio_url, video.id, "audio")
             if local_path:
                 video.local_audio_path = local_path

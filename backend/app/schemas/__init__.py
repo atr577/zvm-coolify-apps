@@ -18,6 +18,10 @@ from app.schemas.workflow import (
     PreviewPromptRequest,
     PreviewPromptResponse,
 )
+from app.schemas.task_tracker import (
+    TaskTrackerResponse,
+    TaskRunningResponse,
+)
 
 __all__ = [
     # Project
@@ -37,4 +41,7 @@ __all__ = [
     "SelectAudioVariantRequest",
     "PreviewPromptRequest",
     "PreviewPromptResponse",
+    # TaskTracker
+    "TaskTrackerResponse",
+    "TaskRunningResponse",
 ]

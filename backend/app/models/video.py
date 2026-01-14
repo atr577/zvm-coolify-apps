@@ -98,6 +98,7 @@ class Video(Base):
     publish_results = relationship("PublishResult", back_populates="video", cascade="all, delete-orphan")
     metrics = relationship("VideoMetrics", back_populates="video", cascade="all, delete-orphan")
     step_history = relationship("StepHistory", back_populates="video", cascade="all, delete-orphan")
+    task_trackers = relationship("TaskTracker", back_populates="video", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Video(id={self.id}, title='{self.title}', workflow_mode={self.workflow_mode})>"

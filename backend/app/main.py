@@ -6,6 +6,39 @@ from app.db.base import engine, Base
 from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 import os
+import logging
+import logging.config
+
+# Configure logging with timestamps (including uvicorn)
+LOG_FORMAT = "%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s"
+LOG_DATE_FORMAT = "%H:%M:%S"
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": LOG_FORMAT,
+            "datefmt": LOG_DATE_FORMAT,
+        },
+    },
+    "handlers": {
+        "default": {
+            "class": "logging.StreamHandler",
+            "formatter": "default",
+            "stream": "ext://sys.stderr",
+        },
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["default"],
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+    },
+})
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
