@@ -275,7 +275,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         # Use provider factory to generate audio
         from app.providers.factory import get_audio_provider
         provider = get_audio_provider(provider_name)
-        result = await provider.generate(video)
+        result = await provider.generate(video, feedback=feedback)
 
         # Build response with lineage data
         response = {
@@ -342,54 +342,35 @@ async def generate_step(
         if current_variant:
             current_variant.is_selected = False
 
-        # Special handling for ai_music: create separate StepHistory for each hook
+        # ai_music: 1 StepHistory with all hooks in content.variants (like image/video)
+        # Each generation = 1 variant containing 4 hooks to choose from
         if content.get('provider') == 'ai_music' and content.get('variants'):
-            variants_data = content.get('variants', [])
-            shared_data = {
-                'full_track_url': content.get('full_track_url'),
-                'music_prompt': content.get('music_prompt'),
-                'provider': 'ai_music',
-                'source_video_url': content.get('source_video_url'),
-                'source_image_url': content.get('source_image_url'),
-                'source_scenario': content.get('source_scenario'),
-            }
+            # Content already has variants array, selected_hook defaults to 0
+            content['selected_hook'] = 0
 
-            first_history = None
-            for i, variant in enumerate(variants_data):
-                # Each hook becomes a separate StepHistory
-                hook_content = {
-                    **shared_data,
-                    'hook': variant.get('hook'),
-                    'preview_url': variant.get('preview_url'),
-                    'local_path': variant.get('local_path'),
-                    'hook_index': i,
-                }
-                history = StepHistory(
-                    video_id=video_id,
-                    step_type=step,
-                    content=hook_content,
-                    is_selected=(i == 0),  # First hook selected by default
-                    feedback=request.feedback,
-                    parent_id=current_variant.id if current_variant else None
-                )
-                db.add(history)
-                if i == 0:
-                    first_history = history
-
+            history = StepHistory(
+                video_id=video_id,
+                step_type=step,
+                content=content,
+                is_selected=True,
+                feedback=request.feedback,
+                parent_id=current_variant.id if current_variant else None
+            )
+            db.add(history)
             db.commit()
-            db.refresh(first_history)
+            db.refresh(history)
 
-            # Copy first variant to video
-            _copy_to_video(video, step, first_history.content)
+            # Copy to video
+            _copy_to_video(video, step, content)
             db.commit()
 
-            logger.info(f"Generated {step} for video {video_id}, created {len(variants_data)} hook variants")
+            logger.info(f"Generated {step} for video {video_id}, variant_id={history.id} with {len(content.get('variants', []))} hooks")
 
             return GenerateResponse(
-                variant_id=first_history.id,
+                variant_id=history.id,
                 step_type=step,
-                content=first_history.content,
-                is_selected=first_history.is_selected
+                content=content,
+                is_selected=history.is_selected
             )
 
         # Standard handling for other steps
@@ -420,6 +401,12 @@ async def generate_step(
             is_selected=history.is_selected
         )
 
+    except TimeoutError as e:
+        # Timeout is retriable - don't mark as FAILED
+        logger.warning(f"Timeout generating {step}: {e}")
+        video.status = WorkflowStatus.PENDING  # Allow retry
+        db.commit()
+        raise HTTPException(status_code=504, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to generate {step}: {e}")
         video.status = WorkflowStatus.FAILED
@@ -567,6 +554,59 @@ async def switch_variant(
     )
 
 
+class SelectHookRequest(BaseModel):
+    hook_index: int
+
+
+class SelectHookResponse(BaseModel):
+    variant_id: int
+    selected_hook: int
+
+
+@router.post("/{video_id}/variant/{variant_id}/select-hook", response_model=SelectHookResponse)
+async def select_hook(
+    video_id: int,
+    variant_id: int,
+    request: SelectHookRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Select a specific hook within an ai_music variant."""
+    video = get_video_with_auth(db, video_id, current_user)
+
+    # Get variant
+    variant = db.query(StepHistory).filter(
+        StepHistory.id == variant_id,
+        StepHistory.video_id == video_id
+    ).first()
+
+    if not variant:
+        raise HTTPException(status_code=404, detail="Variant not found")
+
+    content = variant.content or {}
+    variants_list = content.get("variants", [])
+
+    if request.hook_index < 0 or request.hook_index >= len(variants_list):
+        raise HTTPException(status_code=400, detail=f"Invalid hook_index: {request.hook_index}")
+
+    # Update selected_hook in content
+    content["selected_hook"] = request.hook_index
+    variant.content = content
+
+    # Flag the variant as modified for SQLAlchemy
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(variant, "content")
+
+    db.commit()
+
+    logger.info(f"Selected hook {request.hook_index} for variant {variant_id}")
+
+    return SelectHookResponse(
+        variant_id=variant_id,
+        selected_hook=request.hook_index
+    )
+
+
 @router.post("/{video_id}/approve/{variant_id}", response_model=SelectResponse)
 async def approve_variant(
     video_id: int,
@@ -628,6 +668,8 @@ async def approve_variant(
     current_index = steps.index(step) if step in steps else -1
     if current_index < len(steps) - 1:
         video.current_step = steps[current_index + 1]
+        # Reset to PENDING so frontend can trigger next step generation
+        video.status = WorkflowStatus.PENDING
     else:
         # Last step - mark as completed
         video.status = WorkflowStatus.COMPLETED
@@ -746,6 +788,10 @@ async def run_auto(
             # Generate
             content = await generate_step_content(step, video, db)
 
+            # For ai_music: auto-select first hook (index 0)
+            if step == "audio" and content.get("provider") == "ai_music":
+                content["selected_hook"] = 0
+
             # Save and auto-select
             history = StepHistory(
                 video_id=video_id,
@@ -757,6 +803,12 @@ async def run_auto(
             _copy_to_video(video, step, content)
             # Download media locally (non-blocking, best-effort)
             await _download_media_for_step(video, step)
+
+            # For ai_music: merge video + selected hook audio
+            if step == "audio" and content.get("provider") == "ai_music":
+                db.flush()  # Ensure history has ID
+                await _merge_audio_for_ai_music(video, history, db)
+
             db.commit()
             db.refresh(video)  # Refresh to get updated data
 
@@ -912,10 +964,17 @@ async def _merge_audio_for_ai_music(video: Video, variant, db: Session):
     try:
         content = variant.content
 
-        # Get hook data from variant
-        # For ai_music, each variant is a single hook
-        hook = content.get("hook")
-        local_audio_path = content.get("local_path")
+        # Get selected hook from variants array
+        variants = content.get("variants", [])
+        selected_hook_index = content.get("selected_hook", 0)
+
+        if not variants or selected_hook_index >= len(variants):
+            logger.error(f"ai_music merge: invalid variants or selected_hook in variant {variant.id}")
+            return
+
+        selected_variant = variants[selected_hook_index]
+        hook = selected_variant.get("hook")
+        local_audio_path = selected_variant.get("local_path")
 
         if not local_audio_path:
             logger.error(f"ai_music merge: no local_path in variant {variant.id}")
@@ -949,9 +1008,9 @@ async def _merge_audio_for_ai_music(video: Video, variant, db: Session):
         final_path = VIDEOS_DIR / final_filename
         shutil.move(merged_path, final_path)
 
-        # Update video with merged URL
+        # Update video with merged URL and relative path
         video.video_with_audio_url = f"/api/files/videos/{final_filename}"
-        video.local_audio_path = str(final_path)
+        video.local_audio_path = f"videos/{final_filename}"  # Relative path for frontend
 
         logger.info(f"ai_music merge: completed for video {video.id} -> {final_path}")
 
