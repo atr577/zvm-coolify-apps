@@ -36,6 +36,11 @@ from app.services.piapi_client import piapi_client, PiAPIError
 from app.services import media_downloader
 from app.services.mock_data import MOCK_IMAGE_URL, MOCK_VIDEO_URL
 from app.schemas.task_tracker import TaskRunningResponse
+from app.core.hook_analyzer import hook_analyzer
+from app.core.media_processor import media_processor
+from app.core.music_generator import music_generator
+from pathlib import Path
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -476,22 +481,61 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
 
         # T9: Handle different providers with TaskTracker
         if provider_name == "ai_music":
-            # ai_music: complex flow with Suno + hook analysis
-            # Keep using provider but wrap with TaskTracker
-            from app.providers.factory import get_audio_provider
+            # ai_music: call piapi_client directly (like image/video)
+            # 1. Generate prompt (fast)
+            previous_prompt = video.audio_data.get("music_prompt") if video.audio_data else None
+            music_prompt, tags = await music_generator.generate_prompt(
+                video, feedback=feedback, previous_prompt=previous_prompt
+            )
+
             tracker = create_task_tracker(db, video.id, "audio", "ai_music")
             try:
-                tracker.status = TaskStatus.RUNNING
-                tracker.started_at = datetime.utcnow()
-                db.commit()
+                if settings.MOCK_MODE:
+                    # Mock mode: simulate with delay
+                    logger.info("MOCK MODE: Simulating ai_music generation")
+                    task_id = f"mock_music_{video.id}"
+                    tracker.external_task_id = task_id
+                    tracker.status = TaskStatus.RUNNING
+                    tracker.started_at = datetime.utcnow()
+                    db.commit()
+                    await asyncio.sleep(2)
+                    # Mock tracks (use real URLs in prod)
+                    tracks = [{"audio_url": MOCK_VIDEO_URL, "title": "Mock Track", "duration": 60}]
+                else:
+                    # 2. Create Suno task and SAVE task_id BEFORE polling
+                    task_id = await piapi_client.create_music_task(
+                        prompt=music_prompt,
+                        tags=tags,
+                    )
+                    tracker.external_task_id = task_id  # ← Crash recovery possible!
+                    tracker.status = TaskStatus.RUNNING
+                    tracker.started_at = datetime.utcnow()
+                    db.commit()
 
-                provider = get_audio_provider("ai_music")
-                result = await provider.generate(video, feedback=feedback)
+                    # 3. Poll for completion (long, ~3-5 min)
+                    tracks = await piapi_client.wait_for_music(task_id)
+
+                # 4. Process tracks: download, hook analysis, trim (fast, ~30 sec)
+                variants = await _process_music_tracks(video, tracks)
 
                 tracker.status = TaskStatus.COMPLETED
                 tracker.completed_at = datetime.utcnow()
-                tracker.result = {"provider": "ai_music", "variant_count": len(result.get("variants", []))}
+                tracker.result = {
+                    "provider": "ai_music",
+                    "variant_count": len(variants),
+                    "tracks": tracks,  # For crash recovery
+                    "music_prompt": music_prompt,
+                    "tags": tags,
+                }
                 db.commit()
+
+                result = {
+                    "variants": variants,
+                    "tracks": tracks,
+                    "music_prompt": music_prompt,
+                    "tags": tags,
+                    "provider": "ai_music",
+                }
 
             except Exception as e:
                 tracker.status = TaskStatus.FAILED
@@ -500,7 +544,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                 db.commit()
                 raise
 
-        else:
+        elif provider_name == "kling":
             # kling: call piapi_client directly
             video_task_id = video.video_task_id
             if not video_task_id and not settings.MOCK_MODE:
@@ -1177,6 +1221,23 @@ async def run_auto(
                                 # Resume completed task
                                 tracker.status = TaskStatus.COMPLETED
                                 tracker.completed_at = datetime.utcnow()
+
+                                # ai_music: need to process tracks after Suno completed
+                                if step == "audio" and tracker.provider == "ai_music":
+                                    ext_result = ext_status.get("result", {})
+                                    # Extract tracks from Suno output
+                                    output = ext_result.get("output", [])
+                                    if isinstance(output, list):
+                                        tracks = [{"audio_url": t.get("audio_url"), "title": t.get("title", "Track"), "duration": t.get("metadata", {}).get("duration", 0)} for t in output if t.get("audio_url")]
+                                        if tracks:
+                                            logger.info(f"run-auto: Resuming ai_music - processing {len(tracks)} tracks")
+                                            variants = await _process_music_tracks(video, tracks)
+                                            content = {
+                                                "variants": variants,
+                                                "tracks": tracks,
+                                                "provider": "ai_music",
+                                            }
+                                            tracker.result = {"provider": "ai_music", "variant_count": len(variants), "tracks": tracks}
                                 db.commit()
                             elif ext_status["status"] == "failed":
                                 # Mark as failed, allow retry
@@ -1190,7 +1251,24 @@ async def run_auto(
                         if completed_tracker and completed_tracker.result:
                             # Use result from completed tracker instead of re-generating
                             logger.info(f"run-auto: Using result from completed tracker {completed_tracker.id} for step {step}")
-                            content = completed_tracker.result
+                            tracker_result = completed_tracker.result
+
+                            # ai_music: if result has tracks but no variants, generate variants
+                            if step == "audio" and tracker_result.get("provider") == "ai_music":
+                                if tracker_result.get("tracks") and not tracker_result.get("variants"):
+                                    logger.info(f"run-auto: Generating variants from stored tracks")
+                                    variants = await _process_music_tracks(video, tracker_result["tracks"])
+                                    content = {
+                                        "variants": variants,
+                                        "tracks": tracker_result["tracks"],
+                                        "music_prompt": tracker_result.get("music_prompt"),
+                                        "tags": tracker_result.get("tags"),
+                                        "provider": "ai_music",
+                                    }
+                                else:
+                                    content = tracker_result
+                            else:
+                                content = tracker_result
 
                 # Generate only if no content from completed tracker
                 if content is None:
@@ -1312,6 +1390,96 @@ def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
             video.image_url = content["source_image_url"]
         if content.get("source_scenario"):
             video.scenario_data = content["source_scenario"]
+
+
+async def _process_music_tracks(video: Video, tracks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Process music tracks: download, analyze hooks, trim.
+
+    Args:
+        video: Video model
+        tracks: List of track dicts from Suno with audio_url, title, duration
+
+    Returns:
+        List of variant dicts with preview URLs for hook selection
+    """
+    hook_duration = video.project.duration if video.project else 5.0
+
+    # Directories
+    temp_dir = Path(settings.TEMP_DIR)
+    audio_dir = Path(settings.MEDIA_AUDIO_DIR)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    all_variants = []
+    global_index = 0
+
+    for track_index, track in enumerate(tracks):
+        track_url = track.get("audio_url")
+        track_title = track.get("title", f"Track {track_index + 1}")
+
+        if not track_url:
+            logger.warning(f"Track {track_index} has no audio_url, skipping")
+            continue
+
+        logger.info(f"Processing track {track_index + 1}/{len(tracks)}: {track_title}")
+
+        # Download track to temp storage
+        local_track_path = await media_processor.download_file(
+            url=track_url,
+            dest_path=str(temp_dir / f"track_{video.id}_{track_index}_{os.urandom(4).hex()}.mp3"),
+        )
+
+        # Find hooks using GPT-4o-audio-preview
+        logger.info(f"Analyzing track {track_index + 1} for hooks...")
+        hooks = await hook_analyzer.find_hooks(
+            audio_path=local_track_path,
+            video=video,
+            num_hooks=4,
+            hook_duration=float(hook_duration),
+        )
+
+        # Trim each hook with fade in/out
+        logger.info(f"Trimming {len(hooks)} hooks from track {track_index + 1}...")
+        for i, hook in enumerate(hooks):
+            global_idx = global_index + i
+            output_filename = f"{video.id}_t{track_index}_hook_{i}_{int(hook.start)}_{int(hook.end)}.mp3"
+            output_path = str(audio_dir / output_filename)
+
+            try:
+                trimmed_path = await media_processor.trim_audio(
+                    audio_path=local_track_path,
+                    start=hook.start,
+                    end=hook.end,
+                    fade_in=0.5,
+                    fade_out=0.5,
+                    output_path=output_path,
+                )
+
+                preview_url = f"/api/files/audio/{output_filename}"
+                all_variants.append({
+                    "hook": hook.to_dict(),
+                    "preview_url": preview_url,
+                    "local_path": trimmed_path,
+                    "video_id": video.id,
+                    "index": global_idx,
+                    "track_index": track_index,
+                    "track_title": track_title,
+                    "hook_index": i,
+                })
+
+            except Exception as e:
+                logger.error(f"Failed to trim track {track_index} hook {i}: {e}")
+
+        global_index += len(hooks)
+
+        # Cleanup temp track
+        try:
+            os.remove(local_track_path)
+        except OSError:
+            pass
+
+    logger.info(f"Generated {len(all_variants)} variants from {len(tracks)} tracks for video {video.id}")
+    return all_variants
 
 
 async def _download_media_for_step(video: Video, step: str):

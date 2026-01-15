@@ -706,16 +706,16 @@ class PiAPIClient:
 
         return audio_url
 
-    # ============ Suno Music Generation ============
+    # ============ Music Generation ============
 
-    async def create_suno_task(
+    async def create_music_task(
         self,
         prompt: str,
         make_instrumental: bool = False,
         tags: str = None,
     ) -> str:
         """
-        Create Suno music generation task.
+        Create music generation task (via Suno).
 
         Args:
             prompt: Music description (gpt_description_prompt mode)
@@ -756,17 +756,17 @@ class PiAPIClient:
         logger.info(f"Created Suno task: {task_id}")
         return task_id
 
-    async def wait_for_suno(
+    async def wait_for_music(
         self,
         task_id: str,
         max_wait_time: int = 300,
         poll_interval: int = 10,
     ) -> List[Dict[str, Any]]:
         """
-        Poll Suno generation until complete.
+        Poll music generation until complete (via Suno).
 
         Args:
-            task_id: Task ID from create_suno_task
+            task_id: Task ID from create_music_task
             max_wait_time: Maximum wait time in seconds
             poll_interval: Polling interval in seconds
 
@@ -855,12 +855,12 @@ class PiAPIClient:
         Returns:
             List of track dicts with audio_url, title, duration
         """
-        task_id = await self.create_suno_task(
+        task_id = await self.create_music_task(
             prompt=prompt,
             make_instrumental=make_instrumental,
             tags=tags,
         )
-        tracks = await self.wait_for_suno(task_id)
+        tracks = await self.wait_for_music(task_id)
 
         # Cache result
         request_data = {"prompt": prompt, "make_instrumental": make_instrumental}
