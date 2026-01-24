@@ -13,27 +13,28 @@ class Settings(BaseSettings):
     CACHE_API_RESPONSES: bool = True  # Сохранять ответы API для будущих моков
     API_CACHE_DIR: str = "data/api_cache"
 
-    # PiAPI (единый провайдер для GPT + KLING)
-    PIAPI_KEY: str = ""
-    PIAPI_LLM_URL: str = "https://api.piapi.ai/v1"
-    PIAPI_TASK_URL: str = "https://api.piapi.ai/api/v1"
+    # === AI Providers ===
 
-    # Legacy AIMLAPI support (deprecated)
-    AIMLAPI_KEY: str = ""
+    # OpenAI (for LLM - gpt-4o-mini)
+    OPENAI_API_KEY: str = ""  # Required for LLM calls
+    OPENAI_AUDIO_MODEL: str = "gpt-4o-audio-preview"  # Model for audio analysis
 
-    # Модели (model-agnostic)
-    LLM_MODEL: str = "gpt-4o-mini"  # gpt-4o-mini, gpt-4o, claude-3-7-sonnet-20250219
-    VIDEO_MODEL: str = "kling-2.5"  # kling-1.5, kling-2.1, kling-2.5, kling-2.6
-    IMAGE_MODEL: str = "qwen-image"  # qwen-image, nano-banana-pro
-    MUSIC_MODEL: str = "suno"  # suno, music-u (Udio)
+    # fal.ai (for image/video/music generation)
+    FAL_KEY: str = ""  # Required for fal.ai services
 
-    # Legacy aliases
+    # Модели
+    LLM_MODEL: str = "gpt-4o-mini"  # gpt-4o-mini, gpt-4o
+    IMAGE_MODEL: str = "fal-ai/nano-banana-pro"  # fal.ai model
+    VIDEO_MODEL: str = "fal-ai/veo3.1/image-to-video"  # fal.ai model
+    MUSIC_MODEL: str = "fal-ai/lyria2"  # fal.ai model
+
+    # === Legacy (deprecated - will be removed) ===
+    PIAPI_KEY: str = ""  # Deprecated: use OPENAI_API_KEY + FAL_KEY
+    PIAPI_LLM_URL: str = "https://api.piapi.ai/v1"  # Deprecated
+    PIAPI_TASK_URL: str = "https://api.piapi.ai/api/v1"  # Deprecated
+    AIMLAPI_KEY: str = ""  # Deprecated
     GPT_MODEL: str = ""  # Deprecated: use LLM_MODEL
     KLING_MODEL: str = ""  # Deprecated: use VIDEO_MODEL
-
-    # OpenAI Direct (for GPT-4o-audio-preview - not available via PiAPI)
-    OPENAI_API_KEY: str = ""  # Optional: enables ai_music provider
-    OPENAI_AUDIO_MODEL: str = "gpt-4o-audio-preview"  # Model for audio analysis
 
     # Storage paths (all relative to backend/)
     DATA_DIR: str = "data"

@@ -19,7 +19,8 @@ apscheduler==3.10.4
 
 # AI Services
 httpx==0.26.0  # Used by AIMLAPI client
-openai>=1.10.0  # Used by HookAnalyzer for GPT-4o-audio-preview
+openai>=1.10.0  # OpenAI SDK for LLM
+fal-client>=0.5.0  # fal.ai SDK for image/video/music generation
 
 # Image/Video processing
 pillow>=10.2.0

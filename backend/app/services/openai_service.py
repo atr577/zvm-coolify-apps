@@ -1,9 +1,9 @@
 """
-OpenAI Service - now powered by PiAPI
+OpenAI Service - Direct OpenAI SDK
 Handles text generation for 4-step workflow (SCENARIO → IMAGE → VIDEO → AUDIO)
 """
 
-from app.services.piapi_client import piapi_client, PiAPIError
+from app.services.openai_client import openai_client, OpenAIClientError
 from app.core.config import settings
 from app.schemas.workflow import CustomPrompt
 from app.services.prompts import (
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 class OpenAIService:
     def __init__(self):
-        self.client = piapi_client
-        self.model = settings.LLM_MODEL or settings.GPT_MODEL  # Legacy fallback
+        self.client = openai_client
+        self.model = settings.LLM_MODEL
         self.mock_mode = settings.MOCK_MODE
 
     async def generate_image_prompt(
@@ -62,7 +62,7 @@ class OpenAIService:
                 )
             logger.info("Image prompt generated successfully")
             return result
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to generate image prompt: {e}")
             raise
 
@@ -98,7 +98,7 @@ class OpenAIService:
                 )
             logger.info("Scenario generated successfully")
             return result
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to generate scenario: {e}")
             raise
 
@@ -137,7 +137,7 @@ class OpenAIService:
                 )
             logger.info("Scenario from description generated successfully")
             return result
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to generate scenario from description: {e}")
             raise
 
@@ -203,7 +203,7 @@ class OpenAIService:
             )
             logger.info("Scenario from template generated successfully")
             return result
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to generate scenario from template: {e}")
             raise
 
@@ -249,7 +249,7 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
             )
             logger.info(f"Prompt refined successfully: {prompt_type}")
             return result.strip()
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to refine prompt: {e}")
             raise
 
@@ -276,7 +276,7 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
             )
             logger.info(f"Validation completed for {step_type}: {result.get('status')}")
             return result
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to validate content: {e}")
             raise
 
@@ -331,7 +331,7 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
             logger.info(f"Publishing meta generated for: {', '.join(platform_data.keys())}")
             return platform_data
 
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to generate publishing meta: {e}")
             raise
 
@@ -368,7 +368,7 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
             logger.info(f"Generated {len(variants)} content variants")
             return variants
 
-        except PiAPIError as e:
+        except OpenAIClientError as e:
             logger.error(f"Failed to generate content variants: {e}")
             raise
 
