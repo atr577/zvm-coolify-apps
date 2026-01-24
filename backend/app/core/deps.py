@@ -10,41 +10,41 @@ from app.services.media.base import (
     VideoServiceProtocol,
     AudioServiceProtocol,
 )
-from app.services.providers.kling import (
-    KlingImageService,
-    KlingVideoService,
-    KlingAudioService,
+from app.services.providers.falai import (
+    FalImageService,
+    FalVideoService,
+    FalAudioService,
 )
 
 security = HTTPBearer()
 
-# Media service singletons (can be configured via settings in future)
+# Media service singletons
 _image_service: Optional[ImageServiceProtocol] = None
 _video_service: Optional[VideoServiceProtocol] = None
 _audio_service: Optional[AudioServiceProtocol] = None
 
 
 def get_image_service() -> ImageServiceProtocol:
-    """Get image generation service (currently KLING)."""
+    """Get image generation service (fal.ai nano-banana-pro)."""
     global _image_service
     if _image_service is None:
-        _image_service = KlingImageService()
+        _image_service = FalImageService()
     return _image_service
 
 
 def get_video_service() -> VideoServiceProtocol:
-    """Get video generation service (currently KLING)."""
+    """Get video generation service (fal.ai veo3.1)."""
     global _video_service
     if _video_service is None:
-        _video_service = KlingVideoService()
+        _video_service = FalVideoService()
     return _video_service
 
 
 def get_audio_service() -> AudioServiceProtocol:
-    """Get audio generation service (currently KLING)."""
+    """Get audio generation service (fal.ai Lyria2)."""
     global _audio_service
     if _audio_service is None:
-        _audio_service = KlingAudioService()
+        _audio_service = FalAudioService()
     return _audio_service
 
 
