@@ -31,8 +31,8 @@ from app.models.user import User, WorkspaceMember
 from app.core.deps import get_current_user
 from app.core.config import settings
 from app.services.openai_service import openai_service
-from app.services.kling_service import kling_service
-from app.services.piapi_client import piapi_client, PiAPIError
+from app.services.media_service import media_service
+from app.services.fal_client import fal_client_instance as fal_client, FalClientError
 from app.services import media_downloader
 from app.services.mock_data import MOCK_IMAGE_URL, MOCK_VIDEO_URL
 from app.schemas.task_tracker import TaskRunningResponse
@@ -221,7 +221,7 @@ def create_task_tracker(db: Session, video_id: int, step_type: str, provider: st
 
 async def check_external_task_status(tracker: TaskTracker) -> Dict[str, Any]:
     """
-    Check status of external task via PiAPI.
+    Check status of external task via fal.ai.
 
     Returns dict with:
     - status: "running" | "completed" | "failed" | "unknown"
@@ -243,14 +243,24 @@ async def check_external_task_status(tracker: TaskTracker) -> Dict[str, Any]:
                 return {"status": "running"}
 
     try:
-        response = await piapi_client.get_task_status(tracker.external_task_id)
-        data = response.get("data", response)
-        status = data.get("status", "").lower()
+        import fal_client as fal
 
-        if status in ["completed", "succeeded", "success"]:
-            return {"status": "completed", "result": data}
-        elif status in ["failed", "error"]:
-            error_msg = data.get("error", {}).get("message", str(data))
+        # Determine model based on step type
+        model_map = {
+            "image": settings.IMAGE_MODEL or "fal-ai/nano-banana-pro",
+            "video": settings.VIDEO_MODEL or "fal-ai/veo3.1/image-to-video",
+            "audio": settings.MUSIC_MODEL or "fal-ai/lyria2",
+        }
+        model = model_map.get(tracker.step_type, settings.VIDEO_MODEL)
+
+        status = await fal.status_async(model, tracker.external_task_id, with_logs=False)
+        status_str = str(status.status).upper() if hasattr(status, 'status') else "UNKNOWN"
+
+        if status_str == "COMPLETED":
+            result = await fal.result_async(model, tracker.external_task_id)
+            return {"status": "completed", "result": result}
+        elif status_str in ["FAILED", "ERROR"]:
+            error_msg = getattr(status, 'error', str(status))
             return {"status": "failed", "error": error_msg}
         else:
             return {"status": "running"}
@@ -331,7 +341,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         if negative_prompt:
             full_prompt = f"{prompt} --no {negative_prompt}"
 
-        # T9: Create TaskTracker and call piapi_client directly
+        # T9: Create TaskTracker and call fal_client directly
         tracker = create_task_tracker(db, video.id, "image", "kling")
         try:
             if settings.MOCK_MODE:
@@ -344,16 +354,16 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                 await asyncio.sleep(2)  # 10 sec delay for manual testing
                 image_url = MOCK_IMAGE_URL
             else:
-                # Real mode: call piapi_client
-                task_id = await piapi_client.create_image_task(
+                # Real mode: call fal.ai
+                request_id = await fal_client.submit_image(
                     prompt=full_prompt,
                     aspect_ratio=project.aspect_ratio or "9:16",
                 )
-                tracker.external_task_id = task_id
+                tracker.external_task_id = request_id
                 tracker.status = TaskStatus.RUNNING
                 tracker.started_at = datetime.utcnow()
                 db.commit()
-                image_url = await piapi_client.wait_for_image(task_id)
+                image_url = await fal_client.poll_image(request_id)
 
             # Update tracker
             tracker.status = TaskStatus.COMPLETED
@@ -361,7 +371,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
             tracker.result = {"image_url": image_url}
             db.commit()
 
-        except (PiAPIError, TimeoutError) as e:
+        except (FalClientError, TimeoutError) as e:
             tracker.status = TaskStatus.FAILED
             tracker.error_message = str(e)
             tracker.completed_at = datetime.utcnow()
@@ -401,7 +411,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
         if feedback and motion_prompt:
             motion_prompt = await openai_service.refine_prompt(motion_prompt, feedback, prompt_type="motion")
 
-        # T9: Create TaskTracker and call piapi_client directly
+        # T9: Create TaskTracker and call fal_client directly
         tracker = create_task_tracker(db, video.id, "video", "kling")
         try:
             if settings.MOCK_MODE:
@@ -415,26 +425,28 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                 await asyncio.sleep(3)  # 15 sec delay for manual testing
                 video_url = MOCK_VIDEO_URL
             else:
-                # Real mode: call piapi_client
-                task_id = await piapi_client.create_video_task(
+                # Real mode: call fal.ai
+                duration = project.duration or 5
+                duration_str = f"{duration}s"
+                request_id = await fal_client.submit_video(
                     prompt=motion_prompt,
                     image_url=video.image_url,
-                    duration=project.duration or 5,
-                    aspect_ratio=project.aspect_ratio or "9:16",
+                    duration=duration_str,
+                    generate_audio=True,  # Built-in audio by default
                 )
-                tracker.external_task_id = task_id
+                tracker.external_task_id = request_id
                 tracker.status = TaskStatus.RUNNING
                 tracker.started_at = datetime.utcnow()
                 db.commit()
-                video_url = await piapi_client.wait_for_video(task_id)
+                video_url = await fal_client.poll_video(request_id)
 
             # Update tracker
             tracker.status = TaskStatus.COMPLETED
             tracker.completed_at = datetime.utcnow()
-            tracker.result = {"video_url": video_url, "task_id": task_id}
+            tracker.result = {"video_url": video_url, "request_id": request_id if not settings.MOCK_MODE else task_id}
             db.commit()
 
-        except (PiAPIError, TimeoutError) as e:
+        except (FalClientError, TimeoutError) as e:
             tracker.status = TaskStatus.FAILED
             tracker.error_message = str(e)
             tracker.completed_at = datetime.utcnow()
@@ -481,7 +493,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
 
         # T9: Handle different providers with TaskTracker
         if provider_name == "ai_music":
-            # ai_music: call piapi_client directly (like image/video)
+            # ai_music: call fal_client directly (like image/video)
             # 1. Generate prompt (fast)
             previous_prompt = video.audio_data.get("music_prompt") if video.audio_data else None
             music_prompt, tags = await music_generator.generate_prompt(
@@ -502,18 +514,22 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                     # Mock tracks (use real URLs in prod)
                     tracks = [{"audio_url": MOCK_VIDEO_URL, "title": "Mock Track", "duration": 60}]
                 else:
-                    # 2. Create Suno task and SAVE task_id BEFORE polling
-                    task_id = await piapi_client.create_music_task(
-                        prompt=music_prompt,
-                        tags=tags,
+                    # 2. Create Lyria2 task and SAVE request_id BEFORE polling
+                    # Include tags in prompt for better results
+                    full_prompt = f"{music_prompt}. Style: {tags}" if tags else music_prompt
+                    request_id = await fal_client.submit_music(
+                        prompt=full_prompt,
+                        negative_prompt="low quality, distorted"
                     )
-                    tracker.external_task_id = task_id  # ← Crash recovery possible!
+                    tracker.external_task_id = request_id  # ← Crash recovery possible!
                     tracker.status = TaskStatus.RUNNING
                     tracker.started_at = datetime.utcnow()
                     db.commit()
 
-                    # 3. Poll for completion (long, ~3-5 min)
-                    tracks = await piapi_client.wait_for_music(task_id)
+                    # 3. Poll for completion (long, ~1-2 min)
+                    audio_url = await fal_client.poll_music(request_id)
+                    # Wrap in tracks list for compatibility
+                    tracks = [{"audio_url": audio_url, "title": "Lyria2 Track", "duration": 30}]
 
                 # 4. Process tracks: download, hook analysis, trim (fast, ~30 sec)
                 variants = await _process_music_tracks(video, tracks)
@@ -545,31 +561,39 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                 raise
 
         elif provider_name == "kling":
-            # kling: call piapi_client directly
-            video_task_id = video.video_task_id
-            if not video_task_id and not settings.MOCK_MODE:
-                raise HTTPException(status_code=400, detail="video_task_id not found. Run video step first.")
+            # DEPRECATED: Kling Sound API not available with Veo 3.1
+            # Use ai_music provider instead (Lyria2 + ffmpeg merge)
+            logger.warning("kling audio provider is deprecated. Using ai_music (Lyria2) instead.")
 
-            tracker = create_task_tracker(db, video.id, "audio", "kling")
+            # Generate music using Lyria2 via music_generator
+            tracker = create_task_tracker(db, video.id, "audio", "lyria2")
             try:
                 if settings.MOCK_MODE:
                     # Mock mode: simulate async task with delay
-                    logger.info("MOCK MODE: Simulating audio generation (10s delay)")
+                    logger.info("MOCK MODE: Simulating Lyria2 audio generation")
                     task_id = f"mock_audio_{video.id}"
                     tracker.external_task_id = task_id
                     tracker.status = TaskStatus.RUNNING
                     tracker.started_at = datetime.utcnow()
                     db.commit()
-                    await asyncio.sleep(2)  # 10 sec delay for manual testing
-                    audio_variants = [MOCK_VIDEO_URL] * 4  # 4 variants
+                    await asyncio.sleep(2)
+                    audio_variants = [MOCK_VIDEO_URL]
                 else:
-                    # Real mode: call piapi_client
-                    task_id = await piapi_client.create_sound_task(origin_task_id=video_task_id)
-                    tracker.external_task_id = task_id
+                    # Generate music prompt from video context
+                    music_prompt, tags = await music_generator.generate_prompt(video)
+                    full_prompt = f"{music_prompt}. Style: {tags}" if tags else music_prompt
+
+                    # Real mode: call fal.ai Lyria2
+                    request_id = await fal_client.submit_music(
+                        prompt=full_prompt,
+                        negative_prompt="low quality, distorted"
+                    )
+                    tracker.external_task_id = request_id
                     tracker.status = TaskStatus.RUNNING
                     tracker.started_at = datetime.utcnow()
                     db.commit()
-                    audio_variants = await piapi_client.wait_for_sound(task_id)
+                    audio_url = await fal_client.poll_music(request_id)
+                    audio_variants = [audio_url]
 
                 tracker.status = TaskStatus.COMPLETED
                 tracker.completed_at = datetime.utcnow()
@@ -578,11 +602,11 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
 
                 result = {
                     "audio_variants": audio_variants,
-                    "video_with_audio_url": audio_variants[0] if audio_variants else video.video_url,
-                    "provider": "kling",
+                    "video_with_audio_url": video.video_url,  # Note: no auto-merge with kling
+                    "provider": "lyria2",
                 }
 
-            except (PiAPIError, TimeoutError) as e:
+            except (FalClientError, TimeoutError) as e:
                 tracker.status = TaskStatus.FAILED
                 tracker.error_message = str(e)
                 tracker.completed_at = datetime.utcnow()

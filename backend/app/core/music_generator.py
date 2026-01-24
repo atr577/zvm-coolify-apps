@@ -2,18 +2,17 @@
 Music Generator - AI music generation from video context.
 
 Generates music prompts based on video scenario and creates
-full tracks using Suno or music-u (Udio) via PiAPI.
+full tracks using Lyria2 via fal.ai.
 
-Provider controlled by settings.MUSIC_MODEL:
-- "suno" (default): Suno v4
-- "music-u": Udio
+Provider: fal-ai/lyria2
 """
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
-from app.services.piapi_client import piapi_client
+from app.services.openai_client import openai_client
+from app.services.media_service import media_service
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +146,8 @@ Create a NEW music prompt that addresses the feedback while keeping the video co
 
         logger.info(f"Generating music prompt for video {video.id}")
 
-        # Call GPT via PiAPI with JSON output
-        result = await piapi_client.generate_json(
+        # Call GPT via OpenAI with JSON output
+        result = await openai_client.generate_json(
             prompt=user_prompt,
             system_prompt=MUSIC_PROMPT_SYSTEM,
             temperature=0.8,
@@ -174,40 +173,38 @@ Create a NEW music prompt that addresses the feedback while keeping the video co
         tags: str = None,
     ) -> List[Dict[str, Any]]:
         """
-        Generate music tracks using configured provider.
+        Generate music tracks using Lyria2 via fal.ai.
 
-        Provider is determined by settings.MUSIC_MODEL:
-        - "suno": Suno v5 (2 track variations per request)
-        - "music-u": Udio (1 track)
-
-        Always generates with vocals (make_instrumental=False).
+        Lyria2 generates 30-second instrumental tracks.
+        Returns single track (list for compatibility).
 
         Args:
             prompt: Music description
-            tags: Genre/style tags (Suno only, strongly affects output)
+            tags: Genre/style tags (included in prompt)
 
         Returns:
             List of track dicts with audio_url, title, duration
         """
-        provider = settings.MUSIC_MODEL
-        logger.info(f"Generating track via {provider} (tags={tags}): {prompt[:50]}...")
+        logger.info(f"Generating track via Lyria2 (tags={tags}): {prompt[:50]}...")
 
-        if provider == "suno":
-            # Suno returns list of tracks (2 variations)
-            tracks = await piapi_client.generate_music_suno(
-                prompt=prompt,
-                make_instrumental=False,  # Always vocals
-                tags=tags,
-            )
-        else:
-            # music-u (Udio) - returns single URL, wrap in list for consistency
-            audio_url = await piapi_client.generate_music(
-                prompt=prompt,
-                lyrics_type="generate",  # Always vocals
-            )
-            tracks = [{"audio_url": audio_url, "title": "Track", "duration": 0}]
+        # Combine prompt with tags for better results
+        full_prompt = prompt
+        if tags:
+            full_prompt = f"{prompt}. Style: {tags}"
 
-        logger.info(f"Generated {len(tracks)} tracks via {provider}")
+        # Lyria2 returns single audio URL
+        audio_url = await media_service.generate_music(
+            prompt=full_prompt,
+            negative_prompt="low quality, distorted"
+        )
+
+        tracks = [{
+            "audio_url": audio_url,
+            "title": "Lyria2 Track",
+            "duration": 30  # Lyria2 max duration
+        }]
+
+        logger.info(f"Generated {len(tracks)} track via Lyria2")
         return tracks
 
     async def generate_for_video(

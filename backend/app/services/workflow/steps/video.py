@@ -1,12 +1,12 @@
 """
 Video step - generates video from image using motion prompts.
 
-Uses kling_service.generate_video() with image_url and motion_prompt.
+Uses media_service.generate_video() with image_url and motion_prompt.
 """
 from typing import Dict, Any
 import logging
 
-from app.services.kling_service import kling_service
+from app.services.media_service import media_service
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +46,10 @@ async def generate(video) -> Dict[str, Any]:
     duration = video.project.duration if video.project else 5
 
     # Generate video (returns tuple with task_id)
-    video_url, task_id = await kling_service.generate_video(
+    video_url, task_id = await media_service.generate_video(
         image_url=image_url,
         prompt=motion_prompt,
         duration=duration,
-        camera_control=camera_control,
         negative_prompt=negative_prompt,
         return_task_id=True,
     )

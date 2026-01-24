@@ -1,12 +1,12 @@
 """
 Image step - generates image from scenario prompts.
 
-Uses kling_service.generate_image() with prompts from scenario_data.
+Uses media_service.generate_image() with prompts from scenario_data.
 """
 from typing import Dict, Any
 import logging
 
-from app.services.kling_service import kling_service
+from app.services.media_service import media_service
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ async def generate(video) -> Dict[str, Any]:
         negative_prompt = video.scenario_data.get("negative_prompt")
 
     # Generate image
-    image_url = await kling_service.generate_image(
+    image_url = await media_service.generate_image(
         prompt=prompt,
         aspect_ratio=aspect_ratio,
         negative_prompt=negative_prompt,
