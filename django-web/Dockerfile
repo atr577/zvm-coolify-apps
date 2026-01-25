@@ -16,11 +16,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY django-web/ .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput || true
+# Collect static files (skip if settings not configured)
+RUN python manage.py collectstatic --noinput || echo "Skipping collectstatic"
 
 # Expose port
 EXPOSE 8000
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()" || exit 1
+
 # Run migrations and start server
-CMD sh -c "python manage.py migrate --noinput || true && python manage.py runserver 0.0.0.0:8000"
+CMD sh -c "echo 'Starting Django application...' && \
+           python manage.py migrate --noinput || echo 'Migration failed, continuing...' && \
+           echo 'Starting server on 0.0.0.0:8000' && \
+           python manage.py runserver 0.0.0.0:8000"

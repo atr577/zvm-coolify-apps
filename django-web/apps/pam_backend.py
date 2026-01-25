@@ -2,7 +2,18 @@
 Custom PAM authentication backend for Django.
 Uses python-pam library for system user authentication.
 """
-import pam
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    import pam
+    PAM_AVAILABLE = True
+except ImportError:
+    PAM_AVAILABLE = False
+    logger.warning("python-pam not available. PAM authentication will be disabled.")
+
+
 from django.contrib.auth.backends import BaseBackend
 from django.contrib.auth.models import User
 
@@ -11,10 +22,17 @@ class PAMBackend(BaseBackend):
     """
     Authenticate using PAM (Pluggable Authentication Modules).
     This allows authentication against Ubuntu system users.
+    
+    Note: PAM may not work in Docker containers. In that case, 
+    authentication will fall back to Django's default backend.
     """
     
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username is None or password is None:
+            return None
+        
+        if not PAM_AVAILABLE:
+            logger.debug("PAM not available, skipping PAM authentication")
             return None
         
         try:
@@ -31,8 +49,9 @@ class PAMBackend(BaseBackend):
                     user.save()
                 
                 return user
-        except Exception:
+        except Exception as e:
             # PAM authentication failed or error occurred
+            logger.debug(f"PAM authentication failed: {e}")
             return None
         
         return None
