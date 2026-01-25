@@ -30,7 +30,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_pam',
     'apps.apps.AppsConfig',
 ]
 
@@ -124,7 +123,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
-    'django_pam.auth.backends.PAMBackend',
+    'apps.pam_backend.PAMBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
 
