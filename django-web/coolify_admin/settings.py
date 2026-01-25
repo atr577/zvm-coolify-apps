@@ -122,8 +122,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Authentication backends
+# Using Django's built-in ModelBackend for user authentication
 AUTHENTICATION_BACKENDS = [
-    'apps.pam_backend.PAMBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
 
