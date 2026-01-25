@@ -1,0 +1,25 @@
+{% extends 'apps/base.html' %}
+
+{% block content %}
+<h2>Dummy App Control</h2>
+<p>Click the button below to run the dummy Coolify app and fetch PostgreSQL table structures.</p>
+
+<form method="post" style="margin-top: 20px;">
+    {% csrf_token %}
+    <button type="submit" name="run_dummy_app" class="btn">Run Dummy App</button>
+</form>
+
+{% if result %}
+<div class="result-box">
+    <strong>Table Structures:</strong>
+    <br><br>
+    {{ result }}
+</div>
+{% endif %}
+
+{% if error %}
+<div class="error-box">
+    <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+{% endblock %}

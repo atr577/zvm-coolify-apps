@@ -1,0 +1,28 @@
+{% extends 'apps/base.html' %}
+
+{% block header %}Login - Coolify Admin{% endblock %}
+
+{% block content %}
+<h2>Login</h2>
+<p>Please log in using your Ubuntu system username and password.</p>
+
+<form method="post" style="margin-top: 20px;">
+    {% csrf_token %}
+    <div style="margin-bottom: 15px;">
+        <label for="username" style="display: block; margin-bottom: 5px; font-weight: bold;">Username:</label>
+        <input type="text" id="username" name="username" required 
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+    </div>
+    <div style="margin-bottom: 15px;">
+        <label for="password" style="display: block; margin-bottom: 5px; font-weight: bold;">Password:</label>
+        <input type="password" id="password" name="password" required 
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+    </div>
+    {% if form.errors %}
+    <div class="error-box" style="margin-bottom: 15px;">
+        Invalid username or password. Please try again.
+    </div>
+    {% endif %}
+    <button type="submit" class="btn">Login</button>
+</form>
+{% endblock %}
