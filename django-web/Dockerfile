@@ -19,15 +19,18 @@ COPY django-web/ .
 # Collect static files (skip if settings not configured)
 RUN python manage.py collectstatic --noinput || echo "Skipping collectstatic"
 
-# Expose port
+# Expose port (Coolify often uses 3000, but can be configured)
+# Using PORT environment variable if set, otherwise default to 8000
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()" || exit 1
+  CMD python -c "import urllib.request, os; port=os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://localhost:{port}/').read()" || exit 1
 
 # Run migrations and start server
-CMD sh -c "echo 'Starting Django application...' && \
+# Use PORT env var if set (Coolify may set this), otherwise use 8000
+CMD sh -c "PORT=\${PORT:-8000} && \
+           echo 'Starting Django application...' && \
            python manage.py migrate --noinput || echo 'Migration failed, continuing...' && \
-           echo 'Starting server on 0.0.0.0:8000' && \
-           python manage.py runserver 0.0.0.0:8000"
+           echo \"Starting server on 0.0.0.0:\$PORT\" && \
+           python manage.py runserver 0.0.0.0:\$PORT"
