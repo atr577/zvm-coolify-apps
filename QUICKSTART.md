@@ -57,13 +57,16 @@ In Coolify, create a PostgreSQL service or use an existing one. Note the connect
    - Build Pack: Docker
    - Dockerfile Path: `postgres-migrations/Dockerfile`
 3. **Environment Variables**:
+   - Find your PostgreSQL resource name in Coolify (e.g., `postgres`, `pg-db`)
+   - Use that name as the hostname:
    ```
-   POSTGRES_HOST=<your-postgres-host>
+   POSTGRES_HOST=<postgres-resource-name>  # e.g., "postgres" or "pg-db"
    POSTGRES_PORT=5432
    POSTGRES_DB=postgres
    POSTGRES_USER=postgres
    POSTGRES_PASSWORD=<your-password>
    ```
+   **Note:** In Coolify, services communicate via Docker network using resource names as hostnames.
 4. **Deployment**: Set as one-time job or scheduled task
 5. Deploy and verify migrations ran successfully
 
@@ -74,7 +77,7 @@ In Coolify, create a PostgreSQL service or use an existing one. Note the connect
    - Dockerfile Path: `dummy-app/Dockerfile`
 3. **Environment Variables**:
    ```
-   POSTGRES_HOST=<your-postgres-host>
+   POSTGRES_HOST=<postgres-resource-name>  # Same as migrations app
    POSTGRES_PORT=5432
    POSTGRES_DB=postgres
    POSTGRES_USER=postgres
@@ -92,12 +95,12 @@ In Coolify, create a PostgreSQL service or use an existing one. Note the connect
    - Dockerfile Path: `django-web/Dockerfile`
 3. **Environment Variables**:
    ```
-   POSTGRES_HOST=<your-postgres-host>
+   POSTGRES_HOST=<postgres-resource-name>  # Same as migrations app
    POSTGRES_PORT=5432
    POSTGRES_DB=postgres
    POSTGRES_USER=postgres
    POSTGRES_PASSWORD=<your-password>
-   DUMMY_APP_URL=http://dummy-app:8001
+   DUMMY_APP_URL=http://<dummy-app-resource-name>:8001  # Use dummy app's resource name
    DJANGO_SECRET_KEY=<generate-with-command-below>
    DEBUG=False
    ALLOWED_HOSTS=your-domain.com,localhost
