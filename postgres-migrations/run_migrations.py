@@ -13,11 +13,18 @@ import re
 from typing import List, Tuple
 
 # Database connection parameters from environment
-DB_HOST = os.getenv('POSTGRES_HOST', 'localhost')
-DB_PORT = os.getenv('POSTGRES_PORT', '5432')
-DB_NAME = os.getenv('POSTGRES_DB', 'postgres')
-DB_USER = os.getenv('POSTGRES_USER', 'postgres')
-DB_PASSWORD = os.getenv('POSTGRES_PASSWORD', '')
+# Coolify may provide these automatically for database resources
+# Check: POSTGRES_HOST, DATABASE_HOST, or resource-specific variables
+DB_HOST = (
+    os.getenv('POSTGRES_HOST') or 
+    os.getenv('DATABASE_HOST') or 
+    os.getenv('DB_HOST') or 
+    'localhost'
+)
+DB_PORT = os.getenv('POSTGRES_PORT') or os.getenv('DATABASE_PORT') or os.getenv('DB_PORT') or '5432'
+DB_NAME = os.getenv('POSTGRES_DB') or os.getenv('DATABASE_DB') or os.getenv('DB_NAME') or 'postgres'
+DB_USER = os.getenv('POSTGRES_USER') or os.getenv('DATABASE_USER') or os.getenv('DB_USER') or 'postgres'
+DB_PASSWORD = os.getenv('POSTGRES_PASSWORD') or os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD') or ''
 
 MIGRATIONS_DIR = Path(__file__).parent / 'migrations'
 MIGRATIONS_TABLE = 'schema_migrations'
@@ -26,16 +33,40 @@ MIGRATIONS_TABLE = 'schema_migrations'
 def get_connection():
     """Create database connection."""
     try:
+        # Print connection details for debugging (without password)
+        print(f"Attempting to connect to: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+        
         conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
             database=DB_NAME,
             user=DB_USER,
-            password=DB_PASSWORD
+            password=DB_PASSWORD,
+            connect_timeout=10
         )
+        print("✓ Database connection successful!")
         return conn
+    except psycopg2.OperationalError as e:
+        error_msg = str(e)
+        print(f"✗ Database connection failed: {error_msg}", file=sys.stderr)
+        
+        # Provide helpful error messages
+        if "could not translate host name" in error_msg or "name resolution" in error_msg:
+            print("\nTROUBLESHOOTING:", file=sys.stderr)
+            print("  The hostname cannot be resolved. This usually means:", file=sys.stderr)
+            print("  1. The POSTGRES_HOST value is incorrect", file=sys.stderr)
+            print("  2. Services are not on the same Docker network", file=sys.stderr)
+            print("  3. The PostgreSQL resource name in Coolify is different", file=sys.stderr)
+            print(f"\n  Current POSTGRES_HOST value: {DB_HOST}", file=sys.stderr)
+            print("\n  To fix:", file=sys.stderr)
+            print("  - Check your PostgreSQL resource name in Coolify dashboard", file=sys.stderr)
+            print("  - Use the resource name (not the UUID) as POSTGRES_HOST", file=sys.stderr)
+            print("  - Ensure both services are in the same Coolify project", file=sys.stderr)
+            print("  - Check PostgreSQL resource connection details page", file=sys.stderr)
+        
+        sys.exit(1)
     except psycopg2.Error as e:
-        print(f"Error connecting to database: {e}", file=sys.stderr)
+        print(f"✗ Database error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -106,6 +137,11 @@ def main():
     """Main migration runner."""
     print("Starting database migrations...")
     print(f"Database: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+    print(f"Environment check:")
+    print(f"  POSTGRES_HOST: {os.getenv('POSTGRES_HOST', 'NOT SET')}")
+    print(f"  DATABASE_HOST: {os.getenv('DATABASE_HOST', 'NOT SET')}")
+    print(f"  DB_HOST: {os.getenv('DB_HOST', 'NOT SET')}")
+    print()
     
     conn = get_connection()
     
