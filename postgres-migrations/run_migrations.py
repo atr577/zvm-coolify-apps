@@ -13,18 +13,55 @@ import re
 from typing import List, Tuple
 
 # Database connection parameters from environment
-# Coolify may provide these automatically for database resources
-# Check: POSTGRES_HOST, DATABASE_HOST, or resource-specific variables
-DB_HOST = (
-    os.getenv('POSTGRES_HOST') or 
-    os.getenv('DATABASE_HOST') or 
-    os.getenv('DB_HOST') or 
-    'localhost'
-)
-DB_PORT = os.getenv('POSTGRES_PORT') or os.getenv('DATABASE_PORT') or os.getenv('DB_PORT') or '5432'
-DB_NAME = os.getenv('POSTGRES_DB') or os.getenv('DATABASE_DB') or os.getenv('DB_NAME') or 'postgres'
-DB_USER = os.getenv('POSTGRES_USER') or os.getenv('DATABASE_USER') or os.getenv('DB_USER') or 'postgres'
-DB_PASSWORD = os.getenv('POSTGRES_PASSWORD') or os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD') or ''
+# Coolify may provide DATABASE_URL or POSTGRES_URL automatically
+# Parse URL if provided, otherwise use individual variables
+
+def parse_db_url(url_string):
+    """Parse a PostgreSQL connection URL and return connection parameters."""
+    if not url_string:
+        return None
+    
+    try:
+        # Handle postgres:// and postgresql:// URLs
+        if url_string.startswith('postgres://') or url_string.startswith('postgresql://'):
+            from urllib.parse import urlparse, unquote
+            parsed = urlparse(url_string)
+            
+            return {
+                'host': parsed.hostname,
+                'port': str(parsed.port or 5432),
+                'database': parsed.path.lstrip('/') or 'postgres',
+                'user': parsed.username or 'postgres',
+                'password': unquote(parsed.password) if parsed.password else ''
+            }
+    except Exception as e:
+        print(f"Warning: Could not parse DATABASE_URL: {e}", file=sys.stderr)
+    
+    return None
+
+# Try to get connection from URL first (Coolify often provides this)
+db_url = os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL') or os.getenv('DB_URL')
+parsed_url = parse_db_url(db_url)
+
+if parsed_url:
+    # Use parsed URL values
+    DB_HOST = parsed_url['host']
+    DB_PORT = parsed_url['port']
+    DB_NAME = parsed_url['database']
+    DB_USER = parsed_url['user']
+    DB_PASSWORD = parsed_url['password']
+else:
+    # Fall back to individual environment variables
+    DB_HOST = (
+        os.getenv('POSTGRES_HOST') or 
+        os.getenv('DATABASE_HOST') or 
+        os.getenv('DB_HOST') or 
+        'localhost'
+    )
+    DB_PORT = os.getenv('POSTGRES_PORT') or os.getenv('DATABASE_PORT') or os.getenv('DB_PORT') or '5432'
+    DB_NAME = os.getenv('POSTGRES_DB') or os.getenv('DATABASE_DB') or os.getenv('DB_NAME') or 'postgres'
+    DB_USER = os.getenv('POSTGRES_USER') or os.getenv('DATABASE_USER') or os.getenv('DB_USER') or 'postgres'
+    DB_PASSWORD = os.getenv('POSTGRES_PASSWORD') or os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD') or ''
 
 MIGRATIONS_DIR = Path(__file__).parent / 'migrations'
 MIGRATIONS_TABLE = 'schema_migrations'
@@ -138,9 +175,12 @@ def main():
     print("Starting database migrations...")
     print(f"Database: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
     print(f"Environment check:")
+    if db_url:
+        print(f"  DATABASE_URL: [SET - using URL connection]")
+    else:
+        print(f"  DATABASE_URL: {os.getenv('DATABASE_URL', 'NOT SET')}")
     print(f"  POSTGRES_HOST: {os.getenv('POSTGRES_HOST', 'NOT SET')}")
     print(f"  DATABASE_HOST: {os.getenv('DATABASE_HOST', 'NOT SET')}")
-    print(f"  DB_HOST: {os.getenv('DB_HOST', 'NOT SET')}")
     print()
     
     conn = get_connection()
