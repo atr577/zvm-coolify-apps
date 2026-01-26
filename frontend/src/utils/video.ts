@@ -24,7 +24,7 @@ export function getStepLabel(stepType: string): string {
 }
 
 // API base URL for local files
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 /**
  * Get the URL for a media file, preferring local path over CDN.
