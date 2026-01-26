@@ -246,9 +246,11 @@ class MediaProcessor:
             "ffmpeg", "-y",
             "-i", video_path,
             "-i", audio_path,
-            "-c:v", "copy",  # Copy video stream (no re-encoding)
-            "-c:a", "aac",   # Encode audio to AAC
-            "-shortest",     # Use shortest stream duration
+            "-map", "0:v:0",  # Take video from first input
+            "-map", "1:a:0",  # Take audio from second input (replacing original)
+            "-c:v", "copy",   # Copy video stream (no re-encoding)
+            "-c:a", "aac",    # Encode audio to AAC
+            "-shortest",      # Use shortest stream duration
             output_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

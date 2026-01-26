@@ -68,6 +68,7 @@ def get_video_lock(video_id: int) -> asyncio.Lock:
 
 class GenerateRequest(BaseModel):
     feedback: Optional[str] = None
+    regenerate: bool = False  # True = force new generation, skip cache
 
 
 class GenerateResponse(BaseModel):
@@ -443,7 +444,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
             # Update tracker
             tracker.status = TaskStatus.COMPLETED
             tracker.completed_at = datetime.utcnow()
-            tracker.result = {"video_url": video_url, "request_id": request_id if not settings.MOCK_MODE else task_id}
+            tracker.result = {"video_url": video_url, "request_id": tracker.external_task_id}
             db.commit()
 
         except (FalClientError, TimeoutError) as e:
@@ -455,7 +456,7 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
 
         return {
             "video_url": video_url,
-            "video_task_id": task_id,
+            "video_task_id": tracker.external_task_id,
             "motion_prompt": motion_prompt,
             "source_image_url": video.image_url,  # snapshot for lineage
             "source_scenario": scenario_data  # use resolved scenario_data
@@ -721,7 +722,10 @@ async def generate_step(
         ).first()
 
         # Generate content (with optional feedback) or use completed tracker result
-        if completed_content:
+        # regenerate=True → force new generation (skip cache)
+        # regenerate=False → use cached result if available
+        # feedback is only used IF generating new content
+        if completed_content and not request.regenerate:
             content = completed_content
             logger.info(f"Using content from completed tracker for step {step}")
 
@@ -745,6 +749,9 @@ async def generate_step(
                     is_selected=existing_history.is_selected
                 )
         else:
+            # Regenerate requested or no cached content
+            if request.regenerate:
+                logger.info(f"Regenerating {step} for video {video_id} (feedback: {bool(request.feedback)})")
             content = await generate_step_content(step, video, db, feedback=request.feedback)
 
         # Deselect current variant if exists
@@ -1024,6 +1031,7 @@ async def approve_variant(
     current_user: User = Depends(get_current_user)
 ):
     """Approve a variant and move to next step. Clears dependent steps."""
+    logger.info(f"approve_variant called: video_id={video_id}, variant_id={variant_id}")
     video = get_video_with_auth(db, video_id, current_user)
 
     # Get variant
@@ -1071,6 +1079,17 @@ async def approve_variant(
             video.local_video_path = None
         elif stale_step == "audio":
             video.local_audio_path = None
+        # Deselect all variants for stale step (frontend uses is_selected)
+        db.query(StepHistory).filter(
+            StepHistory.video_id == video_id,
+            StepHistory.step_type == stale_step
+        ).update({"is_selected": False})
+        # Invalidate TaskTrackers for stale step (prevents cache from being used)
+        db.query(TaskTracker).filter(
+            TaskTracker.video_id == video_id,
+            TaskTracker.step_type == stale_step,
+            TaskTracker.status == TaskStatus.COMPLETED
+        ).update({"status": TaskStatus.FAILED, "error_message": "Invalidated: parent step changed"})
 
     # Move to next step
     steps = get_steps_for_video(video)
@@ -1381,7 +1400,9 @@ def _copy_to_video(video: Video, step: str, content: Dict[str, Any]):
         # JSON fields
         setattr(video, field, content)
     elif step == "image":
-        video.image_url = content.get("image_url")
+        new_url = content.get("image_url")
+        logger.info(f"_copy_to_video: image_url {video.image_url} -> {new_url}")
+        video.image_url = new_url
         # Restore source chain
         if content.get("source_scenario"):
             video.scenario_data = content["source_scenario"]

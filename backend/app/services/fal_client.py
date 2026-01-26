@@ -158,19 +158,21 @@ class FalClient:
                 try:
                     status = await fal_client.status_async(model, request_id, with_logs=False)
 
-                    status_str = str(status.status).upper() if hasattr(status, 'status') else "UNKNOWN"
-                    logger.debug(f"Task {request_id} status: {status_str}")
+                    # fal_client returns Completed/InProgress/Queued class instances
+                    # Check class name instead of .status attribute
+                    status_class = type(status).__name__
+                    logger.debug(f"Task {request_id} status: {status_class}")
 
-                    if status_str == "COMPLETED":
+                    if status_class == "Completed":
                         # Get the result
                         result = await fal_client.result_async(model, request_id)
                         return result
 
-                    elif status_str in ["FAILED", "ERROR"]:
+                    elif status_class in ["Failed", "Error"]:
                         error_msg = getattr(status, 'error', str(status))
                         raise FalClientError(f"Task failed: {error_msg}")
 
-                    # Still in progress, break retry loop
+                    # InProgress or Queued - still waiting, break retry loop
                     break
 
                 except FalClientError:
@@ -297,7 +299,7 @@ class FalClient:
         self,
         image_url: str,
         prompt: str,
-        duration: str = "5s",
+        duration: str = "6s",
         aspect_ratio: str = "auto",
         resolution: str = "720p",
         generate_audio: bool = True,
@@ -305,6 +307,13 @@ class FalClient:
         seed: Optional[int] = None
     ) -> str:
         """Submit video generation task, returns request_id"""
+        # Validate duration - veo3.1 only supports 4s, 6s, 8s
+        valid_durations = {"4s", "6s", "8s"}
+        if duration not in valid_durations:
+            duration_map = {"5s": "6s", "7s": "8s", "10s": "8s"}
+            duration = duration_map.get(duration, "6s")
+            logger.info(f"Adjusted duration to {duration} (veo3.1 constraint)")
+
         input_data = {
             "prompt": prompt,
             "image_url": image_url,
@@ -350,7 +359,7 @@ class FalClient:
         self,
         image_url: str,
         prompt: str,
-        duration: str = "5s",
+        duration: str = "6s",
         aspect_ratio: str = "auto",
         resolution: str = "720p",
         generate_audio: bool = True,
@@ -358,6 +367,14 @@ class FalClient:
         seed: Optional[int] = None
     ) -> str:
         """High-level: submit + poll, returns video URL"""
+        # Validate duration - veo3.1 only supports 4s, 6s, 8s
+        valid_durations = {"4s", "6s", "8s"}
+        if duration not in valid_durations:
+            # Map invalid durations to nearest valid
+            duration_map = {"5s": "6s", "7s": "8s", "10s": "8s"}
+            duration = duration_map.get(duration, "6s")
+            logger.info(f"Adjusted duration to {duration} (veo3.1 constraint)")
+
         # Mock mode
         if self.mock_mode:
             logger.info("MOCK MODE: Returning mock video URL")

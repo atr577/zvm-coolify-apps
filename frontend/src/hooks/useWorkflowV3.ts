@@ -31,8 +31,8 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
 
   // Generate step mutation
   const generateStepMutation = useMutation(
-    ({ step, feedback }: { step: StepType; feedback?: string }) =>
-      workflowApi.generateStep(videoId, step, feedback),
+    ({ step, feedback, regenerate }: { step: StepType; feedback?: string; regenerate?: boolean }) =>
+      workflowApi.generateStep(videoId, step, feedback, regenerate),
     {
       onMutate: ({ step }) => {
         setGeneratingStep(step)
@@ -160,8 +160,8 @@ export function useWorkflowV3(videoId: number, isRemix: boolean = false, include
 
   // Generate step
   const generateStep = useCallback(
-    (step: StepType, feedback?: string) => {
-      generateStepMutation.mutate({ step, feedback })
+    (step: StepType, feedback?: string, regenerate?: boolean) => {
+      generateStepMutation.mutate({ step, feedback, regenerate })
     },
     [generateStepMutation]
   )

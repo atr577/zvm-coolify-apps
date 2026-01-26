@@ -76,7 +76,7 @@ class MediaService:
         self,
         image_url: str,
         prompt: str,
-        duration: int = 5,
+        duration: int = 6,
         mode: str = "standard",
         version: Optional[str] = None,
         camera_control: Optional[Dict[str, Any]] = None,
@@ -91,7 +91,7 @@ class MediaService:
         Args:
             image_url: Source image URL
             prompt: Motion/animation description
-            duration: Duration in seconds (5, 8)
+            duration: Duration in seconds (4, 6, 8)
             mode: Generation mode (unused, kept for compatibility)
             version: Model version (unused, kept for compatibility)
             camera_control: Camera movement (unused for veo3.1)
@@ -179,12 +179,129 @@ class MediaService:
     async def add_audio_to_video(self, video_task_id: str) -> list[str]:
         """
         DEPRECATED: Kling Sound API not available with veo3.1
-        Use generate_music() + ffmpeg merge instead.
+        Use generate_music() + merge_video_with_audio() instead.
 
         Kept for backward compatibility, returns empty list.
         """
-        logger.warning("add_audio_to_video is deprecated. Use generate_music() + ffmpeg merge.")
+        logger.warning("add_audio_to_video is deprecated. Use generate_music() + merge_video_with_audio().")
         return []
+
+    async def merge_video_with_audio(
+        self,
+        video_url: str,
+        audio_url: str,
+        output_filename: Optional[str] = None
+    ) -> str:
+        """
+        Merge video with audio using ffmpeg.
+
+        Downloads both files, merges them, and returns path to merged file.
+
+        Args:
+            video_url: URL of video file (silent or with audio to replace)
+            audio_url: URL of audio file (WAV/MP3)
+            output_filename: Optional output filename
+
+        Returns:
+            Local path to merged video file
+        """
+        from app.core.media_processor import media_processor
+        import os
+        import time
+
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock merged video path")
+            await asyncio.sleep(1)
+            return "/tmp/mock_merged_video.mp4"
+
+        try:
+            logger.info(f"Merging video with audio...")
+
+            # Download video
+            video_path = await media_processor.download_file(video_url)
+            logger.info(f"Downloaded video: {video_path}")
+
+            # Download audio
+            audio_path = await media_processor.download_file(audio_url)
+            logger.info(f"Downloaded audio: {audio_path}")
+
+            # Generate output path
+            if output_filename is None:
+                output_filename = f"merged_{int(time.time())}_{os.urandom(4).hex()}.mp4"
+
+            from pathlib import Path
+            output_path = str(Path(settings.MEDIA_VIDEOS_DIR) / output_filename)
+
+            # Merge using ffmpeg
+            merged_path = await media_processor.merge_video_audio(
+                video_path=video_path,
+                audio_path=audio_path,
+                output_path=output_path
+            )
+
+            # Cleanup temp files
+            try:
+                os.remove(video_path)
+                os.remove(audio_path)
+            except OSError:
+                pass
+
+            logger.info(f"Video merged successfully: {merged_path}")
+            return merged_path
+
+        except Exception as e:
+            logger.error(f"Failed to merge video with audio: {e}")
+            raise
+
+    async def generate_video_with_custom_audio(
+        self,
+        image_url: str,
+        video_prompt: str,
+        music_prompt: str,
+        duration: int = 5,
+        negative_prompt: Optional[str] = None
+    ) -> str:
+        """
+        Generate video with custom Lyria2 audio (full pipeline).
+
+        1. Generate silent video via Veo 3.1
+        2. Generate music via Lyria2
+        3. Merge video + audio via ffmpeg
+
+        Args:
+            image_url: Source image URL
+            video_prompt: Motion/animation description
+            music_prompt: Music description for Lyria2
+            duration: Video duration in seconds
+            negative_prompt: What NOT to include in video
+
+        Returns:
+            Local path to merged video file
+        """
+        logger.info("Generating video with custom audio (Veo 3.1 + Lyria2 + ffmpeg)")
+
+        # Step 1: Generate silent video
+        video_url = await self.generate_video(
+            image_url=image_url,
+            prompt=video_prompt,
+            duration=duration,
+            generate_audio=False,  # No builtin audio
+            negative_prompt=negative_prompt
+        )
+        logger.info(f"Silent video generated: {video_url}")
+
+        # Step 2: Generate music
+        audio_url = await self.generate_music(
+            prompt=music_prompt,
+            negative_prompt="low quality, distorted"
+        )
+        logger.info(f"Music generated: {audio_url}")
+
+        # Step 3: Merge
+        merged_path = await self.merge_video_with_audio(video_url, audio_url)
+        logger.info(f"Merged video: {merged_path}")
+
+        return merged_path
 
 
 # Singleton instance

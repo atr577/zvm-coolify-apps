@@ -38,6 +38,10 @@ class OpenAIClient:
         # Initialize async client
         self._client: Optional[AsyncOpenAI] = None
 
+        # In-flight request deduplication
+        self._in_flight: Dict[str, asyncio.Future] = {}
+        self._dedup_lock = asyncio.Lock()
+
         # Create cache directory if enabled
         if self.cache_enabled:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -47,9 +51,11 @@ class OpenAIClient:
     def client(self) -> AsyncOpenAI:
         """Lazy initialization of OpenAI client"""
         if self._client is None:
-            if not self.api_key:
+            if not settings.OPENAI_API_KEY:
                 raise OpenAIClientError("OPENAI_API_KEY not configured")
-            self._client = AsyncOpenAI(api_key=self.api_key)
+            self._client = AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY
+            )
         return self._client
 
     # ============ Caching Methods ============
@@ -97,6 +103,11 @@ class OpenAIClient:
 
     # ============ LLM Methods ============
 
+    def _get_request_key(self, messages: List[Dict[str, Any]], model: str, temperature: float) -> str:
+        """Generate unique key for request deduplication"""
+        data = json.dumps({"messages": messages, "model": model, "temp": temperature}, sort_keys=True)
+        return hashlib.sha256(data.encode()).hexdigest()[:16]
+
     async def _make_request_with_retry(
         self,
         messages: List[Dict[str, Any]],
@@ -106,9 +117,61 @@ class OpenAIClient:
         max_tokens: Optional[int] = None,
         max_retries: int = 3
     ) -> Dict[str, Any]:
-        """Make chat completion request with retry logic"""
+        """Make chat completion request with retry logic and deduplication"""
         model = model or self.model
 
+        # Deduplication: check if identical request is in flight
+        request_key = self._get_request_key(messages, model, temperature)
+
+        async with self._dedup_lock:
+            if request_key in self._in_flight:
+                logger.info(f"Dedup: waiting for in-flight request {request_key[:8]}")
+                existing_future = self._in_flight[request_key]
+                # Release lock while waiting
+
+        # Check again after releasing lock
+        if request_key in self._in_flight:
+            try:
+                return await self._in_flight[request_key]
+            except Exception:
+                pass  # If the original failed, we'll retry below
+
+        # Create future for this request
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+
+        async with self._dedup_lock:
+            # Double-check after acquiring lock
+            if request_key in self._in_flight:
+                existing = self._in_flight[request_key]
+                # Release lock and wait
+                try:
+                    return await existing
+                except Exception:
+                    pass
+            self._in_flight[request_key] = future
+
+        try:
+            result = await self._do_request(messages, model, temperature, response_format, max_tokens, max_retries)
+            future.set_result(result)
+            return result
+        except Exception as e:
+            future.set_exception(e)
+            raise
+        finally:
+            async with self._dedup_lock:
+                self._in_flight.pop(request_key, None)
+
+    async def _do_request(
+        self,
+        messages: List[Dict[str, Any]],
+        model: str,
+        temperature: float,
+        response_format: Optional[Dict[str, str]],
+        max_tokens: Optional[int],
+        max_retries: int
+    ) -> Dict[str, Any]:
+        """Actually perform the request with retries"""
         for attempt in range(max_retries):
             try:
                 kwargs = {
@@ -122,7 +185,9 @@ class OpenAIClient:
                 if max_tokens:
                     kwargs["max_tokens"] = max_tokens
 
-                logger.info(f"OpenAI request with model: {model}")
+                import traceback
+                caller = traceback.extract_stack()[-4]  # Get caller info
+                logger.info(f"OpenAI request with model: {model} from {caller.filename.split('/')[-1]}:{caller.lineno} ({caller.name})")
 
                 response = await self.client.chat.completions.create(**kwargs)
 

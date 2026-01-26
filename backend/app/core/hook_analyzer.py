@@ -1,17 +1,16 @@
 """
-Hook Analyzer - Find best audio hooks using GPT-4o-audio-preview.
+Hook Analyzer - Find best audio hooks using FFmpeg beat/energy detection.
 
-Analyzes music tracks to find the most impactful segments
-for short-form video content.
+Analyzes music tracks to find high-energy segments for short-form video content.
+No AI required - uses audio signal analysis.
 """
 
-import base64
+import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, asdict
-from typing import List, Optional
-
-from openai import AsyncOpenAI
+from typing import List, Optional, Tuple
 
 from app.core.config import settings
 from app.core.media_processor import media_processor
@@ -35,58 +34,12 @@ class Hook:
         return asdict(self)
 
 
-# System prompt for hook analysis
-HOOK_ANALYSIS_PROMPT = """You are an expert music editor for viral short-form videos.
-Analyze this audio track and find the BEST hooks for a {duration}-second video.
-
-A good hook should:
-1. Have instant impact (grab attention in first 0.5 seconds)
-2. Be energetic and memorable
-3. Work well when trimmed to exactly {duration} seconds
-4. Match the video mood: {mood}
-
-Video context:
-{context}
-
-Find {num_hooks} different hooks at different parts of the track.
-For each hook, provide:
-- start: exact start time in seconds (e.g., 73.5)
-- end: exact end time in seconds (start + {duration})
-- reason: why this segment works as a hook (1 sentence)
-- energy: "low", "medium", or "high"
-- type: "chorus", "drop", "bridge", "intro", "verse", or "outro"
-
-IMPORTANT:
-- Timestamps must be precise (to 0.1 second)
-- Each hook must be exactly {duration} seconds
-- Hooks should be from different parts of the track
-- Prefer high-energy sections with clear beats
-
-Respond in JSON format:
-{{
-    "hooks": [
-        {{"start": 73.0, "end": 78.0, "reason": "...", "energy": "high", "type": "chorus"}},
-        ...
-    ]
-}}
-"""
-
-
 class HookAnalyzer:
-    """Analyzes audio to find best hooks using GPT-4o-audio-preview."""
+    """Analyzes audio to find best hooks using FFmpeg energy detection."""
 
     def __init__(self):
-        """Initialize with OpenAI client."""
-        self.client: Optional[AsyncOpenAI] = None
-        self._init_client()
-
-    def _init_client(self):
-        """Initialize OpenAI client if API key is available."""
-        if settings.OPENAI_API_KEY:
-            self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            logger.info("HookAnalyzer: OpenAI client initialized")
-        else:
-            logger.warning("HookAnalyzer: OPENAI_API_KEY not set, hook analysis unavailable")
+        """Initialize hook analyzer."""
+        logger.info("HookAnalyzer: Using FFmpeg beat detection")
 
     async def find_hooks(
         self,
@@ -96,175 +49,204 @@ class HookAnalyzer:
         hook_duration: float = 5.0,
     ) -> List[Hook]:
         """
-        Find best hooks in an audio track.
+        Find best hooks in an audio track using energy analysis.
 
         Args:
-            audio_path: Path to audio file (mp3)
-            video: Video model for context
-            num_hooks: Number of hooks to find (default 4)
-            hook_duration: Duration of each hook in seconds (default 5)
+            audio_path: Path to the audio file
+            video: Video model instance (for context)
+            num_hooks: Number of hooks to find
+            hook_duration: Duration of each hook in seconds
 
         Returns:
             List of Hook objects sorted by energy (highest first)
-
-        Raises:
-            RuntimeError: If OpenAI client not initialized
-            ValueError: If audio analysis fails
         """
-        if not self.client:
-            raise RuntimeError(
-                "HookAnalyzer not available: OPENAI_API_KEY not configured"
-            )
-
-        # Get audio duration for context
-        total_duration = await media_processor.get_audio_duration(audio_path)
-        logger.info(f"Analyzing audio: {audio_path} ({total_duration:.1f}s)")
-
-        # Read and encode audio
-        with open(audio_path, "rb") as f:
-            audio_data = f.read()
-        audio_b64 = base64.b64encode(audio_data).decode()
-
-        # Build context from video
-        scenario = video.scenario_data or {}
-        context = self._build_context(video, scenario)
-        mood = scenario.get("mood", "energetic")
-
-        # Build prompt
-        prompt = HOOK_ANALYSIS_PROMPT.format(
-            duration=hook_duration,
-            mood=mood,
-            context=context,
-            num_hooks=num_hooks,
-        )
-
-        logger.info(f"Sending audio to GPT-4o-audio-preview ({len(audio_data)} bytes)")
-
         try:
-            # Note: gpt-4o-audio-preview doesn't support response_format parameter
-            # JSON parsing is handled via prompt instructions
-            response = await self.client.chat.completions.create(
-                model=settings.OPENAI_AUDIO_MODEL,
-                modalities=["text"],  # Only text output, no audio response
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_audio",
-                                "input_audio": {
-                                    "data": audio_b64,
-                                    "format": "mp3",
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt,
-                            },
-                        ],
-                    }
-                ],
+            # Get total duration
+            total_duration = await media_processor.get_audio_duration(audio_path)
+            logger.info(f"Analyzing audio: {audio_path} ({total_duration:.1f}s)")
+
+            # Find high-energy moments using FFmpeg
+            energy_peaks = await self._find_energy_peaks(
+                audio_path, total_duration, num_hooks, hook_duration
             )
 
-            # Parse response - handle potential markdown code blocks
-            content = response.choices[0].message.content
-            # Strip markdown code blocks if present
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            content = content.strip()
-            result = json.loads(content)
-            hooks_data = result.get("hooks", [])
+            if not energy_peaks:
+                logger.warning("No energy peaks found, using fallback")
+                return self._create_fallback_hooks(total_duration, hook_duration, num_hooks)
 
-            if not hooks_data:
-                logger.warning("No hooks found in response, using fallback")
-                return self._create_fallback_hook(total_duration, hook_duration)
-
-            # Convert to Hook objects
+            # Convert peaks to hooks
             hooks = []
-            for h in hooks_data:
-                hook = Hook(
-                    start=float(h["start"]),
-                    end=float(h["end"]),
-                    duration=float(h["end"]) - float(h["start"]),
-                    reason=h.get("reason", "Good hook segment"),
-                    energy=h.get("energy", "medium"),
-                    type=h.get("type", "unknown"),
-                )
-                # Validate hook is within track bounds
-                if hook.start >= 0 and hook.end <= total_duration:
-                    hooks.append(hook)
+            for i, (start_time, energy_level) in enumerate(energy_peaks):
+                end_time = min(start_time + hook_duration, total_duration)
 
-            if not hooks:
-                logger.warning("All hooks out of bounds, using fallback")
-                return self._create_fallback_hook(total_duration, hook_duration)
+                # Determine energy label
+                if energy_level > 0.7:
+                    energy = "high"
+                    hook_type = "drop" if i == 0 else "chorus"
+                elif energy_level > 0.4:
+                    energy = "medium"
+                    hook_type = "verse"
+                else:
+                    energy = "low"
+                    hook_type = "bridge"
 
-            # Sort by energy (high first)
+                hooks.append(Hook(
+                    start=start_time,
+                    end=end_time,
+                    duration=end_time - start_time,
+                    reason=f"High energy segment (peak {i+1})",
+                    energy=energy,
+                    type=hook_type,
+                ))
+
+            # Sort by energy level (high first)
             energy_order = {"high": 0, "medium": 1, "low": 2}
             hooks.sort(key=lambda h: energy_order.get(h.energy, 1))
 
-            logger.info(f"Found {len(hooks)} hooks")
+            logger.info(f"Found {len(hooks)} hooks via beat detection")
             for i, h in enumerate(hooks):
                 logger.debug(f"  Hook {i+1}: {h.start:.1f}-{h.end:.1f}s ({h.type}, {h.energy})")
 
             return hooks
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse hook response: {e}")
-            return self._create_fallback_hook(total_duration, hook_duration)
         except Exception as e:
             logger.error(f"Hook analysis failed: {e}")
-            raise ValueError(f"Audio analysis failed: {e}")
+            return self._create_fallback_hooks(total_duration, hook_duration, num_hooks)
 
-    def _build_context(self, video, scenario: dict) -> str:
-        """Build context string from video data."""
-        parts = []
+    async def _find_energy_peaks(
+        self,
+        audio_path: str,
+        total_duration: float,
+        num_peaks: int,
+        hook_duration: float,
+    ) -> List[Tuple[float, float]]:
+        """
+        Find high-energy moments in audio using FFmpeg.
 
-        if scenario.get("scene_description"):
-            parts.append(f"Scene: {scenario['scene_description']}")
-        elif video.description_data:
-            desc = video.description_data
-            if isinstance(desc, dict):
-                parts.append(f"Scene: {desc.get('description', '')}")
-            else:
-                parts.append(f"Scene: {desc}")
+        Uses astats filter to measure RMS energy in segments.
 
-        if scenario.get("visual_style"):
-            parts.append(f"Style: {scenario['visual_style']}")
+        Returns:
+            List of (start_time, normalized_energy) tuples
+        """
+        # Analyze audio in segments
+        segment_duration = 2.0  # Analyze 2-second windows
+        segments = []
 
-        if video.project:
-            parts.append(f"Platforms: {', '.join(video.project.platforms or [])}")
-            parts.append(f"Video duration: {video.project.duration}s")
+        # Calculate RMS for each segment
+        for start in range(0, int(total_duration - hook_duration), int(segment_duration)):
+            try:
+                # Use FFmpeg to get RMS level for this segment
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", str(start),
+                    "-t", str(segment_duration),
+                    "-i", audio_path,
+                    "-af", "astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level",
+                    "-f", "null", "-"
+                ]
 
-        return "\n".join(parts) if parts else "Short viral video"
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, stderr = await process.communicate()
 
-    def _create_fallback_hook(
+                # Parse RMS level from output
+                stderr_text = stderr.decode()
+                rms_match = re.search(r'RMS_level=(-?[\d.]+)', stderr_text)
+
+                if rms_match:
+                    rms_db = float(rms_match.group(1))
+                    # Convert dB to linear (0-1 range, roughly)
+                    # RMS typically -60 to 0 dB
+                    normalized = max(0, min(1, (rms_db + 60) / 60))
+                    segments.append((float(start), normalized))
+
+            except Exception as e:
+                logger.debug(f"Error analyzing segment at {start}s: {e}")
+                continue
+
+        if not segments:
+            return []
+
+        # Sort by energy (highest first) and pick top N
+        segments.sort(key=lambda x: x[1], reverse=True)
+
+        # Filter to avoid overlapping hooks
+        selected = []
+        for start, energy in segments:
+            # Check if this segment overlaps with already selected
+            overlaps = False
+            for sel_start, _ in selected:
+                if abs(start - sel_start) < hook_duration:
+                    overlaps = True
+                    break
+
+            if not overlaps:
+                selected.append((start, energy))
+                if len(selected) >= num_peaks:
+                    break
+
+        return selected
+
+    def _create_fallback_hooks(
         self,
         total_duration: float,
         hook_duration: float,
+        num_hooks: int = 1,
     ) -> List[Hook]:
         """
-        Create fallback hook using full track if analysis fails.
-
-        Returns single hook from beginning of track.
+        Create fallback hooks evenly distributed across the track.
         """
-        logger.info("Creating fallback hook (full track start)")
+        logger.info("Creating fallback hooks (distributed)")
 
-        # Use beginning of track
-        start = 0.0
-        end = min(hook_duration, total_duration)
+        hooks = []
 
-        return [
-            Hook(
-                start=start,
-                end=end,
-                duration=end - start,
-                reason="Fallback: start of track",
+        if total_duration <= hook_duration:
+            # Track shorter than hook - use whole track
+            hooks.append(Hook(
+                start=0.0,
+                end=total_duration,
+                duration=total_duration,
+                reason="Full track (short audio)",
                 energy="medium",
-                type="intro",
-            )
-        ]
+                type="full",
+            ))
+        else:
+            # Distribute hooks across the track
+            # Start from 10% into the track (skip intro)
+            usable_duration = total_duration - hook_duration
+            start_offset = min(usable_duration * 0.1, 5.0)  # Skip first 10% or 5s
+
+            if num_hooks == 1:
+                # Single hook - start from beginning or slight offset
+                start = start_offset
+                hooks.append(Hook(
+                    start=start,
+                    end=start + hook_duration,
+                    duration=hook_duration,
+                    reason="Start of track",
+                    energy="medium",
+                    type="intro",
+                ))
+            else:
+                # Multiple hooks - distribute evenly
+                interval = usable_duration / num_hooks
+                for i in range(num_hooks):
+                    start = start_offset + (i * interval)
+                    start = min(start, total_duration - hook_duration)
+
+                    hooks.append(Hook(
+                        start=start,
+                        end=start + hook_duration,
+                        duration=hook_duration,
+                        reason=f"Segment {i+1}",
+                        energy="medium",
+                        type="verse" if i > 0 else "intro",
+                    ))
+
+        return hooks
 
 
 # Singleton instance

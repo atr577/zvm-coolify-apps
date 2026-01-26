@@ -133,7 +133,7 @@ export default function StepReview({
 
   // Handle regenerate with feedback
   const handleRegenerate = (customFeedback?: string) => {
-    workflow.generateStep(currentStep, customFeedback || feedback || undefined)
+    workflow.generateStep(currentStep, customFeedback || feedback || undefined, true)
     setFeedback('')
   }
 

@@ -96,8 +96,8 @@ export const workflowApi = {
     api.post<RunAutoResponse>(`/api/workflow/${videoId}/run-auto`),
 
   // Generate a single step (MANUAL mode)
-  generateStep: (videoId: number, step: StepType, feedback?: string) =>
-    api.post<GenerateStepResponse>(`/api/workflow/${videoId}/generate/${step}`, { feedback }),
+  generateStep: (videoId: number, step: StepType, feedback?: string, regenerate?: boolean) =>
+    api.post<GenerateStepResponse>(`/api/workflow/${videoId}/generate/${step}`, { feedback, regenerate: regenerate ?? false }),
 
   // Get all variants for a step
   getVariants: (videoId: number, step: StepType) =>
