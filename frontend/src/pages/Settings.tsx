@@ -90,7 +90,17 @@ export default function Settings() {
   const copyInviteLink = async (invite: Invite) => {
     const baseUrl = window.location.origin
     const link = `${baseUrl}/register?invite=${invite.token}`
-    await navigator.clipboard.writeText(link)
+    try {
+      await navigator.clipboard.writeText(link)
+    } catch {
+      // Fallback for HTTP (clipboard API requires HTTPS)
+      const textarea = document.createElement('textarea')
+      textarea.value = link
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
     setCopiedId(invite.id)
     setTimeout(() => setCopiedId(null), 2000)
   }
@@ -319,7 +329,7 @@ export default function Settings() {
                           Expires {formatDate(invite.expires_at)}
                         </span>
                       )}
-                      {' | Created {formatDate(invite.created_at)}'}
+                      {' | Created '}{formatDate(invite.created_at)}
                     </div>
                   </div>
 
