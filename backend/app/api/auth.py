@@ -16,13 +16,80 @@ from app.schemas.auth import (
     WorkspaceCreate,
     WorkspaceUpdate,
     WorkspaceDetailResponse,
-    WorkspaceMemberResponse
+    WorkspaceMemberResponse,
+    SetupRequest,
+    SetupResponse,
 )
 from app.models.user import User, Invite, InviteType, Workspace, WorkspaceMember, WorkspaceRole, UserRole
 from app.core.security import hash_password, verify_password, create_access_token, needs_rehash
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.post("/setup", response_model=SetupResponse, status_code=status.HTTP_201_CREATED)
+def setup(
+    request: SetupRequest,
+    db: Session = Depends(get_db)
+):
+    """Create first admin user + workspace. Works only when DB has 0 users."""
+    user_count = db.query(User).count()
+    if user_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Database already initialized"
+        )
+
+    admin = User(
+        email=request.email,
+        hashed_password=hash_password(request.password),
+        full_name=request.full_name,
+        is_active=True,
+        is_verified=True,
+        role=UserRole.ADMIN.value,
+        can_create_workspace=True,
+    )
+    db.add(admin)
+    db.flush()
+
+    workspace = Workspace(
+        name=f"{request.full_name or request.email}'s Workspace",
+        owner_id=admin.id,
+    )
+    db.add(workspace)
+    db.flush()
+
+    member = WorkspaceMember(
+        workspace_id=workspace.id,
+        user_id=admin.id,
+        role=WorkspaceRole.OWNER.value,
+    )
+    db.add(member)
+
+    db.commit()
+    db.refresh(admin)
+    db.refresh(workspace)
+
+    return SetupResponse(
+        user=UserResponse(
+            id=admin.id,
+            email=admin.email,
+            full_name=admin.full_name,
+            is_active=admin.is_active,
+            is_verified=admin.is_verified,
+            role=admin.role,
+            can_create_workspace=admin.can_create_workspace,
+            created_at=admin.created_at,
+        ),
+        workspace=WorkspaceResponse(
+            id=workspace.id,
+            name=workspace.name,
+            owner_id=workspace.owner_id,
+            created_at=workspace.created_at,
+            member_count=1,
+            is_owner=True,
+        ),
+    )
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

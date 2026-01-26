@@ -149,3 +149,16 @@ class InviteValidateResponse(BaseModel):
     workspace_name: Optional[str] = None
     expires_at: Optional[datetime] = None
     error: Optional[str] = None
+
+
+# Setup schemas (first admin creation)
+class SetupRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=100)
+    full_name: Optional[str] = None
+
+
+class SetupResponse(BaseModel):
+    user: UserResponse
+    workspace: WorkspaceResponse
+    message: str = "Admin user created and workspace initialized"

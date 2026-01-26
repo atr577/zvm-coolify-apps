@@ -1,67 +1,46 @@
-version: '3.8'
-
 services:
+  migrations:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    restart: "no"
+
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/generator
-      - REDIS_URL=redis://redis:6379/0
-    env_file:
-      - ./backend/.env
-    depends_on:
-      - db
-      - redis
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FAL_KEY: ${FAL_KEY}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      IMAGE_MODEL: ${IMAGE_MODEL:-fal-ai/nano-banana-pro}
+      VIDEO_MODEL: ${VIDEO_MODEL:-fal-ai/veo3.1/image-to-video}
+      MUSIC_MODEL: ${MUSIC_MODEL:-fal-ai/lyria2}
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
     volumes:
-      - ./backend:/app
-      - ./data:/app/data
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-  celery:
-    build: ./backend
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/generator
-      - REDIS_URL=redis://redis:6379/0
-    env_file:
-      - ./backend/.env
+      - media_data:/app/data
     depends_on:
-      - db
-      - redis
-    volumes:
-      - ./backend:/app
-      - ./data:/app/data
-    command: celery -A app.core.celery worker --loglevel=info
+      migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm start
-
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=generator
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
-  redis_data:
+  media_data:
