@@ -30,8 +30,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-reggy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-reggy}
       SECRET_KEY: ${SECRET_KEY}
