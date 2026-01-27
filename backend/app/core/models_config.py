@@ -4,6 +4,7 @@ Model configurations for external AI services.
 Add new models by adding entries to the respective config dictionaries.
 No code changes required in service classes.
 """
+from app.services.prompts.music_prompt import LYRIA2_MUSIC_PROMPT, SUNO_MUSIC_PROMPT, SAFETY_REWRITE_PROMPT
 
 # Image generation models configuration
 IMAGE_MODEL_CONFIGS = {
@@ -77,10 +78,12 @@ MUSIC_MODEL_CONFIGS = {
         "provider": "fal.ai",
         "model": "fal-ai/lyria2",
         "max_duration": 30,
-        "format": "wav"
+        "format": "wav",
+        "system_prompt": LYRIA2_MUSIC_PROMPT,
+        "safety_rewrite_prompt": SAFETY_REWRITE_PROMPT,
     },
     # Legacy PiAPI models (deprecated)
-    "suno": {"provider": "piapi", "model": "suno", "deprecated": True},
+    "suno": {"provider": "piapi", "model": "suno", "deprecated": True, "system_prompt": SUNO_MUSIC_PROMPT},
     "music-u": {"provider": "piapi", "model": "music-u", "deprecated": True},
 }
 

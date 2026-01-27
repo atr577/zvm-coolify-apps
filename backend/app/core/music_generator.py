@@ -8,73 +8,35 @@ Provider: fal-ai/lyria2
 """
 
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
+from app.core.models_config import MUSIC_MODEL_CONFIGS
 from app.services.openai_client import openai_client
 from app.services.media_service import media_service
+from app.services.prompts.music_prompt import LYRIA2_MUSIC_PROMPT, UNSAFE_WORDS_MAP
 
 logger = logging.getLogger(__name__)
 
-# System prompt for music prompt generation
-MUSIC_PROMPT_SYSTEM = """ЧТО ТЫ ДЕЛАЕШЬ:
-Ты получаешь описание видео-сцены.
-Ты пишешь промпт для Suno AI чтобы он сгенерировал музыкальный трек с вокалом.
-Музыка будет наложена на это видео.
-Вокал должен петь про то, что происходит в видео.
 
-ТВОЯ ЗАДАЧА:
-1. Понять историю/настроение сцены из описания
-2. Описать какой трек нужен — жанр, вокал, энергия
-3. Указать контекст (о чём сцена)
-4. Придумать короткую фразу-хук которая застрянет в голове
+def _get_system_prompt() -> str:
+    """Get system prompt for current music model from MUSIC_MODEL_CONFIGS."""
+    model = settings.MUSIC_MODEL or "fal-ai/lyria2"
+    config = MUSIC_MODEL_CONFIGS.get(model, {})
+    return config.get("system_prompt", LYRIA2_MUSIC_PROMPT)
 
-РЕЗУЛЬТАТ — JSON:
-{
-  "music_prompt": "описание трека для Suno (1-2 предложения)",
-  "tags": "3-5 тегов через запятую"
-}
 
-ЦЕЛЬ МУЗЫКИ:
-- Зацепить с первой секунды — у зрителя палец на скролле
-- Earworm — фраза хука застревает в голове
-- Вокал усиливает то, что происходит на видео
+def sanitize_prompt(prompt: str) -> str:
+    """Replace unsafe words with safe synonyms before sending to fal.ai.
 
-ФОРМУЛА ДЛЯ music_prompt:
-[жанр] + [вокал] + [контекст] + [фраза хука] + [энергия]
-
-Где:
-- жанр: поджанр (synth-pop, indie pop, trap, drill, house, edm)
-- вокал: характер + пол (breathy female, raspy male, powerful female, soft male)
-- контекст: сеттинг из видео (about dancing at night, about running through city)
-- фраза хука: короткая earworm в кавычках (hook: 'let it go', hook: 'never stop')
-- энергия: темп или ощущение (high energy, pulsing, 110 BPM, atmospheric)
-
-ПРАВИЛА ДЛЯ tags:
-3-5 тегов через запятую: жанр, энергия, тип вокала, настроение
-
-НЕ ИСПОЛЬЗОВАТЬ в tags: "viral", "tiktok", "hook" — Suno не понимает эти слова.
-
-ПРИМЕРЫ:
-
-Вход: woman dancing alone in neon club, slow motion, 5 sec
-{
-  "music_prompt": "Dark synth-pop with breathy female vocals about dancing at night. Catchy hook: 'lose yourself'. Pulsing, 100 BPM.",
-  "tags": "synth-pop, dark, breathy female vocals, pulsing, emotional"
-}
-
-Вход: man running through city at sunrise, fast dynamic, 5 sec
-{
-  "music_prompt": "Aggressive trap with confident male vocals about chasing the moment. Hook: 'never stop'. 808s, high energy.",
-  "tags": "trap, aggressive, male vocals, 808s, motivational"
-}
-
-Вход: couple watching sunset on beach, slow romantic, 10 sec
-{
-  "music_prompt": "Dreamy indie pop with soft male vocals about endless summer love. Hook: 'stay with me'. Atmospheric, gentle.",
-  "tags": "indie pop, dreamy, soft male vocals, romantic, atmospheric"
-}
-"""
+    Case-insensitive word boundary replacement.
+    Called AFTER GPT generates the prompt, BEFORE sending to fal.ai.
+    """
+    result = prompt
+    for unsafe, safe in UNSAFE_WORDS_MAP.items():
+        result = re.sub(rf'\b{re.escape(unsafe)}\b', safe, result, flags=re.IGNORECASE)
+    return result
 
 
 class MusicGenerator:
@@ -149,7 +111,7 @@ Create a NEW music prompt that addresses the feedback while keeping the video co
         # Call GPT via OpenAI with JSON output
         result = await openai_client.generate_json(
             prompt=user_prompt,
-            system_prompt=MUSIC_PROMPT_SYSTEM,
+            system_prompt=_get_system_prompt(),
             temperature=0.8,
         )
 
@@ -160,7 +122,7 @@ Create a NEW music prompt that addresses the feedback while keeping the video co
             logger.warning(f"Unexpected GPT response format: {type(result)}, using defaults")
             result = {}
 
-        music_prompt = result.get("music_prompt", "Powerful vocal hook with catchy melody")
+        music_prompt = result.get("music_prompt", "Bold vocal hook with catchy melody")
         tags = result.get("tags", "pop, energetic, female vocals, catchy")
 
         logger.info(f"Generated music prompt: {music_prompt[:80]}... (tags={tags})")
@@ -191,6 +153,9 @@ Create a NEW music prompt that addresses the feedback while keeping the video co
         full_prompt = prompt
         if tags:
             full_prompt = f"{prompt}. Style: {tags}"
+
+        # Sanitize before sending to fal.ai
+        full_prompt = sanitize_prompt(full_prompt)
 
         # Lyria2 returns single audio URL
         audio_url = await media_service.generate_music(

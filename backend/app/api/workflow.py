@@ -32,13 +32,15 @@ from app.core.deps import get_current_user
 from app.core.config import settings
 from app.services.openai_service import openai_service
 from app.services.media_service import media_service
-from app.services.fal_client import fal_client_instance as fal_client, FalClientError
+from app.services.fal_client import fal_client_instance as fal_client, FalClientError, ContentPolicyError
 from app.services import media_downloader
 from app.services.mock_data import MOCK_IMAGE_URL, MOCK_VIDEO_URL
 from app.schemas.task_tracker import TaskRunningResponse
 from app.core.hook_analyzer import hook_analyzer
 from app.core.media_processor import media_processor
-from app.core.music_generator import music_generator
+from app.core.music_generator import music_generator, sanitize_prompt
+from app.services.prompts.music_prompt import SAFETY_REWRITE_PROMPT
+from app.services.openai_client import openai_client
 from pathlib import Path
 import os
 
@@ -518,17 +520,43 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                     # 2. Create Lyria2 task and SAVE request_id BEFORE polling
                     # Include tags in prompt for better results
                     full_prompt = f"{music_prompt}. Style: {tags}" if tags else music_prompt
-                    request_id = await fal_client.submit_music(
-                        prompt=full_prompt,
-                        negative_prompt="low quality, distorted"
-                    )
-                    tracker.external_task_id = request_id  # ← Crash recovery possible!
-                    tracker.status = TaskStatus.RUNNING
-                    tracker.started_at = datetime.utcnow()
-                    db.commit()
+                    full_prompt = sanitize_prompt(full_prompt)
 
-                    # 3. Poll for completion (long, ~1-2 min)
-                    audio_url = await fal_client.poll_music(request_id)
+                    try:
+                        request_id = await fal_client.submit_music(
+                            prompt=full_prompt,
+                            negative_prompt="low quality, distorted"
+                        )
+                        tracker.external_task_id = request_id  # ← Crash recovery possible!
+                        tracker.status = TaskStatus.RUNNING
+                        tracker.started_at = datetime.utcnow()
+                        db.commit()
+
+                        # 3. Poll for completion (long, ~1-2 min)
+                        audio_url = await fal_client.poll_music(request_id)
+
+                    except ContentPolicyError as e:
+                        logger.warning(f"Content policy violation, rephrasing: {e}")
+
+                        # Auto-rephrase via GPT
+                        rephrased = await openai_client.generate_text(
+                            prompt=SAFETY_REWRITE_PROMPT.replace("{rejected_prompt}", full_prompt),
+                            temperature=0.3,
+                        )
+                        rephrased = sanitize_prompt(rephrased)
+                        logger.info(f"Rephrased prompt: {rephrased[:80]}...")
+
+                        # Retry once with rephrased prompt
+                        request_id = await fal_client.submit_music(
+                            prompt=rephrased,
+                            negative_prompt="low quality, distorted"
+                        )
+                        tracker.external_task_id = request_id
+                        tracker.status = TaskStatus.RUNNING
+                        tracker.started_at = datetime.utcnow()
+                        db.commit()
+                        audio_url = await fal_client.poll_music(request_id)
+
                     # Wrap in tracks list for compatibility
                     tracks = [{"audio_url": audio_url, "title": "Lyria2 Track", "duration": 30}]
 
@@ -583,17 +611,39 @@ async def generate_step_content(step: str, video: Video, db: Session, feedback: 
                     # Generate music prompt from video context
                     music_prompt, tags = await music_generator.generate_prompt(video)
                     full_prompt = f"{music_prompt}. Style: {tags}" if tags else music_prompt
+                    full_prompt = sanitize_prompt(full_prompt)
 
                     # Real mode: call fal.ai Lyria2
-                    request_id = await fal_client.submit_music(
-                        prompt=full_prompt,
-                        negative_prompt="low quality, distorted"
-                    )
-                    tracker.external_task_id = request_id
-                    tracker.status = TaskStatus.RUNNING
-                    tracker.started_at = datetime.utcnow()
-                    db.commit()
-                    audio_url = await fal_client.poll_music(request_id)
+                    try:
+                        request_id = await fal_client.submit_music(
+                            prompt=full_prompt,
+                            negative_prompt="low quality, distorted"
+                        )
+                        tracker.external_task_id = request_id
+                        tracker.status = TaskStatus.RUNNING
+                        tracker.started_at = datetime.utcnow()
+                        db.commit()
+                        audio_url = await fal_client.poll_music(request_id)
+
+                    except ContentPolicyError as e:
+                        logger.warning(f"Content policy violation (kling fallback), rephrasing: {e}")
+
+                        rephrased = await openai_client.generate_text(
+                            prompt=SAFETY_REWRITE_PROMPT.replace("{rejected_prompt}", full_prompt),
+                            temperature=0.3,
+                        )
+                        rephrased = sanitize_prompt(rephrased)
+                        logger.info(f"Rephrased prompt: {rephrased[:80]}...")
+
+                        request_id = await fal_client.submit_music(
+                            prompt=rephrased,
+                            negative_prompt="low quality, distorted"
+                        )
+                        tracker.external_task_id = request_id
+                        tracker.status = TaskStatus.RUNNING
+                        db.commit()
+                        audio_url = await fal_client.poll_music(request_id)
+
                     audio_variants = [audio_url]
 
                 tracker.status = TaskStatus.COMPLETED

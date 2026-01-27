@@ -26,6 +26,11 @@ class RateLimitError(FalClientError):
     pass
 
 
+class ContentPolicyError(FalClientError):
+    """Content rejected by safety filter — do not retry"""
+    pass
+
+
 class TimeoutError(FalClientError):
     """Operation timed out"""
     pass
@@ -127,6 +132,10 @@ class FalClient:
             except Exception as e:
                 error_str = str(e).lower()
 
+                # Content policy — don't retry, raise immediately
+                if "content_policy" in error_str:
+                    raise ContentPolicyError(f"Content rejected by safety filter: {e}")
+
                 # Rate limit handling
                 if "429" in error_str or "rate limit" in error_str:
                     retry_after = 60  # Default
@@ -170,6 +179,8 @@ class FalClient:
 
                     elif status_class in ["Failed", "Error"]:
                         error_msg = getattr(status, 'error', str(status))
+                        if "content_policy" in str(error_msg).lower():
+                            raise ContentPolicyError(f"Content rejected by safety filter: {error_msg}")
                         raise FalClientError(f"Task failed: {error_msg}")
 
                     # InProgress or Queued - still waiting, break retry loop
@@ -179,6 +190,10 @@ class FalClient:
                     raise
                 except Exception as e:
                     error_str = str(e).lower()
+
+                    # Content policy — don't retry, raise immediately
+                    if "content_policy" in error_str:
+                        raise ContentPolicyError(f"Content rejected by safety filter: {e}")
 
                     # Rate limit
                     if "429" in error_str or "rate limit" in error_str:
