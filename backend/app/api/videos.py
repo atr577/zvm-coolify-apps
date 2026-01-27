@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, subqueryload
 from typing import List, Optional
 from app.db.base import get_db
 from app.models import Video, Project
@@ -87,7 +87,7 @@ async def list_videos_by_project(
     videos = db.query(Video).filter(
         Video.project_id == project_id
     ).options(
-        joinedload(Video.project),
+        joinedload(Video.project).subqueryload(Project.social_accounts),
         joinedload(Video.publish_results)
     ).order_by(Video.created_at.desc()).offset(offset).limit(limit).all()
 
@@ -107,7 +107,7 @@ async def get_video(
 ):
     """Получить видео по ID"""
     video = db.query(Video).options(
-        joinedload(Video.project),
+        joinedload(Video.project).subqueryload(Project.social_accounts),
         joinedload(Video.publish_results)
     ).filter(Video.id == video_id).first()
     if not video:
@@ -128,7 +128,7 @@ async def update_video(
 ):
     """Обновить видео"""
     video = db.query(Video).options(
-        joinedload(Video.project),
+        joinedload(Video.project).subqueryload(Project.social_accounts),
         joinedload(Video.publish_results)
     ).filter(Video.id == video_id).first()
     if not video:
@@ -154,7 +154,7 @@ async def delete_video(
 ):
     """Удалить видео (и все его workflow steps через cascade)"""
     video = db.query(Video).options(
-        joinedload(Video.project)
+        joinedload(Video.project).subqueryload(Project.social_accounts)
     ).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -175,7 +175,7 @@ async def generate_meta(
 ):
     """Regenerate publishing metadata for a video."""
     video = db.query(Video).options(
-        joinedload(Video.project),
+        joinedload(Video.project).subqueryload(Project.social_accounts),
         joinedload(Video.publish_results)
     ).filter(Video.id == video_id).first()
     if not video:
