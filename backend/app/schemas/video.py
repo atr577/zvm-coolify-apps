@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
+from app.schemas.auth import SocialAccountResponse
 
 
 class VideoBase(BaseModel):
@@ -31,6 +32,7 @@ class ProjectBrief(BaseModel):
     project_type: str = "discover"
     audio_mode: str = "auto"  # none, scene, music, voiceover, auto
     require_image_approval: bool = False
+    social_accounts: List[SocialAccountResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

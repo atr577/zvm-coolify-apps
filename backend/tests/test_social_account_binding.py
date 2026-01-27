@@ -8,6 +8,7 @@ Covers:
 4. get_project_platforms() — fallback logic
 5. Duplicate bind → 409
 6. Unbind non-bound account → 404
+7. GET /api/videos/{id} returns project.social_accounts
 """
 import pytest
 from sqlalchemy.orm import Session
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.models.user import User, SocialAccount
 from app.models.project import Project
+from app.models.video import Video
 from app.api.projects import get_project_platforms
 
 
@@ -100,6 +102,29 @@ class TestProjectResponseIncludesSocialAccounts:
         assert len(data["social_accounts"]) == 1
         assert data["social_accounts"][0]["username"] == "test_instagram"
         assert data["social_accounts"][0]["platform"] == "instagram"
+
+
+class TestVideoResponseIncludesSocialAccounts:
+    """GET /api/videos/{id} returns project.social_accounts via ProjectBrief."""
+
+    def test_video_response_has_project_social_accounts(
+        self, client: TestClient, auth_headers: dict,
+        test_project: Project, test_video: Video, test_social_account: SocialAccount
+    ):
+        # Bind account to project
+        client.post(
+            f"/api/projects/{test_project.id}/social-accounts",
+            json={"social_account_id": test_social_account.id},
+            headers=auth_headers,
+        )
+        # Fetch video — project.social_accounts must be populated
+        response = client.get(f"/api/videos/{test_video.id}", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["project"] is not None
+        assert "social_accounts" in data["project"]
+        assert len(data["project"]["social_accounts"]) == 1
+        assert data["project"]["social_accounts"][0]["platform"] == "instagram"
 
 
 class TestBindSocialAccount:
