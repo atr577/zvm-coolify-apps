@@ -396,13 +396,13 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
         if isinstance(result, list):
             return result
         elif isinstance(result, dict):
-            return (
-                result.get("variants") or
-                result.get("concepts") or
-                result.get("items") or
-                result.get("data") or
-                list(result.values())[0] if result else []
-            )
+            for key in ["variants", "concepts", "items", "data"]:
+                value = result.get(key)
+                if isinstance(value, list):
+                    return value
+            for value in result.values():
+                if isinstance(value, list):
+                    return value
         return []
 
 
