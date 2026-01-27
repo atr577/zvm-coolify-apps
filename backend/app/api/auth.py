@@ -20,7 +20,8 @@ from app.schemas.auth import (
     SetupRequest,
     SetupResponse,
 )
-from app.models.user import User, Invite, InviteType, Workspace, WorkspaceMember, WorkspaceRole, UserRole
+from app.models.user import User, Invite, InviteType, Workspace, WorkspaceMember, WorkspaceRole, UserRole, SocialAccount
+from app.schemas.auth import SocialAccountResponse
 from app.core.security import hash_password, verify_password, create_access_token, needs_rehash
 from app.core.deps import get_current_user
 
@@ -594,3 +595,33 @@ def remove_workspace_member(
     db.commit()
 
     return {"message": "Member removed"}
+
+
+@workspaces_router.get("/{workspace_id}/social-accounts", response_model=List[SocialAccountResponse])
+def list_workspace_social_accounts(
+    workspace_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all social accounts from all members of a workspace.
+    Used in ProjectForm for binding accounts to projects."""
+    # Check workspace membership
+    membership = db.query(WorkspaceMember).filter(
+        WorkspaceMember.workspace_id == workspace_id,
+        WorkspaceMember.user_id == current_user.id
+    ).first()
+    if not membership and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="No access to this workspace")
+
+    # Get all user IDs in workspace
+    member_user_ids = [
+        m.user_id for m in
+        db.query(WorkspaceMember).filter(WorkspaceMember.workspace_id == workspace_id).all()
+    ]
+
+    # Get all social accounts from workspace members
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id.in_(member_user_ids)
+    ).order_by(SocialAccount.platform, SocialAccount.username).all()
+
+    return accounts

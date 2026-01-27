@@ -1622,8 +1622,14 @@ async def _generate_publishing_meta(video: Video, db: Session):
     """Generate publishing metadata when workflow completes."""
     try:
         project = video.project
-        if not project or not project.platforms:
-            logger.info(f"Skipping publishing_meta: no project or platforms for video {video.id}")
+        if not project:
+            logger.info(f"Skipping publishing_meta: no project for video {video.id}")
+            return
+
+        from app.api.projects import get_project_platforms
+        platforms = get_project_platforms(project)
+        if not platforms:
+            logger.info(f"Skipping publishing_meta: no platforms for video {video.id}")
             return
 
         # Get scenario data for context
@@ -1637,7 +1643,7 @@ async def _generate_publishing_meta(video: Video, db: Session):
 
         # Generate publishing meta
         publishing_meta = await openai_service.generate_publishing_meta(
-            platforms=project.platforms,
+            platforms=platforms,
             scenario_data=scenario_data,
             fallback_text=scenario_data.get("image_prompt", project.story_template or "")
         )

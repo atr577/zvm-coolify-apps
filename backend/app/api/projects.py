@@ -1,15 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from app.db.base import get_db
 from app.models import Project
-from app.models.user import User, WorkspaceMember
+from app.models.user import User, SocialAccount, WorkspaceMember
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
+from app.schemas.project import BindSocialAccountRequest
 from app.schemas.pagination import PaginatedResponse
 from app.core.deps import get_current_user
 from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def get_project_platforms(project: Project) -> List[str]:
+    """Derive platforms from bound social accounts with fallback to project.platforms.
+
+    Rules:
+    - Active bound accounts take priority over project.platforms
+    - is_active=False accounts are excluded
+    - If all accounts inactive → fallback to project.platforms
+    - If both empty → return empty list (graceful skip)
+    """
+    if project.social_accounts:
+        active_platforms = list(set(
+            acc.platform for acc in project.social_accounts
+            if acc.is_active
+        ))
+        if active_platforms:
+            return active_platforms
+    return project.platforms or []
 
 
 def get_user_workspace_ids(db: Session, user_id: int) -> List[int]:
@@ -137,7 +160,9 @@ async def get_project(
 ):
     """Получить проект по ID"""
     workspace_ids = get_user_workspace_ids(db, current_user.id)
-    project = db.query(Project).filter(
+    project = db.query(Project).options(
+        joinedload(Project.social_accounts)
+    ).filter(
         Project.id == project_id,
         Project.workspace_id.in_(workspace_ids)
     ).first()
@@ -206,3 +231,80 @@ async def get_audio_options_endpoint():
     from app.core.audio_config import get_audio_options
 
     return get_audio_options()
+
+
+# --- Social Account Binding ---
+
+
+@router.post("/{project_id}/social-accounts", response_model=ProjectResponse)
+async def bind_social_account(
+    project_id: int,
+    request: BindSocialAccountRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Bind a social account to a project. Workspace-level access: any member can bind any account in the workspace."""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+
+    project = db.query(Project).options(
+        joinedload(Project.social_accounts)
+    ).filter(
+        Project.id == project_id,
+        Project.workspace_id.in_(workspace_ids)
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Find social account — must belong to a user in the same workspace
+    social_account = db.query(SocialAccount).join(
+        WorkspaceMember, WorkspaceMember.user_id == SocialAccount.user_id
+    ).filter(
+        SocialAccount.id == request.social_account_id,
+        WorkspaceMember.workspace_id == project.workspace_id
+    ).first()
+    if not social_account:
+        raise HTTPException(status_code=404, detail="Social account not found in this workspace")
+
+    # Check if already bound
+    if social_account in project.social_accounts:
+        raise HTTPException(status_code=409, detail="Account already bound to project")
+
+    project.social_accounts.append(social_account)
+    db.commit()
+    db.refresh(project)
+
+    logger.info(f"Bound social account {social_account.id} (@{social_account.username}) to project {project.id}")
+    return project
+
+
+@router.delete("/{project_id}/social-accounts/{account_id}")
+async def unbind_social_account(
+    project_id: int,
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Unbind a social account from a project. Workspace-level access."""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+
+    project = db.query(Project).options(
+        joinedload(Project.social_accounts)
+    ).filter(
+        Project.id == project_id,
+        Project.workspace_id.in_(workspace_ids)
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    social_account = next(
+        (acc for acc in project.social_accounts if acc.id == account_id),
+        None
+    )
+    if not social_account:
+        raise HTTPException(status_code=404, detail="Account not bound to this project")
+
+    project.social_accounts.remove(social_account)
+    db.commit()
+
+    logger.info(f"Unbound social account {account_id} from project {project.id}")
+    return {"message": "Social account unbound successfully"}

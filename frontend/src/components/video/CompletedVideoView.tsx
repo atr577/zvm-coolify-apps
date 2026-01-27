@@ -63,6 +63,7 @@ export default function CompletedVideoView({
                 adaptationData={video.publishing_meta || video.adaptation_data || {}}
                 platforms={video.project?.platforms || []}
                 videoUrl={getBestVideoUrl(video) || ''}
+                projectSocialAccounts={video.project?.social_accounts}
               />
             </div>
           </div>

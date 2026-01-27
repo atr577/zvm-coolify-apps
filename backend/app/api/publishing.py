@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 from typing import List
 import logging
 from app.db.base import get_db
 from app.models.video import Video
-from app.models.project import PublishResult
+from app.models.project import PublishResult, Project
 from app.models.user import User, SocialAccount, WorkspaceMember
 from app.schemas.publishing import PublishRequest, PublishResponse
 from app.services.social_service import social_publisher
@@ -30,6 +30,47 @@ def verify_video_ownership(db: Session, video: Video, current_user: User):
         raise HTTPException(status_code=403, detail="Access denied")
 
 
+def get_social_account_for_publish(
+    db: Session, social_account_id: int, platform: str,
+    video: Video, current_user: User
+) -> SocialAccount:
+    """Get and validate social account for publishing.
+
+    Workspace-level access: account must belong to a user in the same workspace.
+    Auto-bind: if account is not bound to project, bind it automatically.
+    """
+    workspace_id = video.project.workspace_id
+
+    # Find account — must belong to a workspace member (not just current user)
+    social_account = db.query(SocialAccount).join(
+        WorkspaceMember, WorkspaceMember.user_id == SocialAccount.user_id
+    ).filter(
+        SocialAccount.id == social_account_id,
+        SocialAccount.platform == platform,
+        WorkspaceMember.workspace_id == workspace_id
+    ).first()
+    if not social_account:
+        raise HTTPException(status_code=404, detail=f"{platform.capitalize()} account not found in this workspace")
+
+    if not social_account.is_active:
+        raise HTTPException(status_code=400, detail=f"{platform.capitalize()} account is inactive")
+
+    if social_account.is_token_expired:
+        raise HTTPException(status_code=400, detail="Token expired. Please reconnect your account.")
+
+    # Auto-bind: if not bound to project, bind automatically
+    project = db.query(Project).options(
+        joinedload(Project.social_accounts)
+    ).filter(Project.id == video.project_id).first()
+
+    if social_account not in project.social_accounts:
+        project.social_accounts.append(social_account)
+        db.commit()
+        logger.info(f"Auto-bound social account {social_account.id} (@{social_account.username}) to project {project.id}")
+
+    return social_account
+
+
 @router.post("/instagram", response_model=PublishResponse)
 async def publish_to_instagram(
     request: PublishRequest,
@@ -44,17 +85,7 @@ async def publish_to_instagram(
 
     verify_video_ownership(db, video, current_user)
 
-    # Get SocialAccount
-    social_account = db.query(SocialAccount).filter(
-        SocialAccount.id == social_account_id,
-        SocialAccount.user_id == current_user.id,
-        SocialAccount.platform == "instagram"
-    ).first()
-    if not social_account:
-        raise HTTPException(status_code=404, detail="Instagram account not connected")
-
-    if not social_account.is_active:
-        raise HTTPException(status_code=400, detail="Instagram account is inactive")
+    social_account = get_social_account_for_publish(db, social_account_id, "instagram", video, current_user)
 
     # Create publish record
     publish_record = PublishResult(
@@ -130,16 +161,7 @@ async def publish_to_tiktok(
 
     verify_video_ownership(db, video, current_user)
 
-    social_account = db.query(SocialAccount).filter(
-        SocialAccount.id == social_account_id,
-        SocialAccount.user_id == current_user.id,
-        SocialAccount.platform == "tiktok"
-    ).first()
-    if not social_account:
-        raise HTTPException(status_code=404, detail="TikTok account not connected")
-
-    if not social_account.is_active:
-        raise HTTPException(status_code=400, detail="TikTok account is inactive")
+    social_account = get_social_account_for_publish(db, social_account_id, "tiktok", video, current_user)
 
     publish_record = PublishResult(
         video_id=video.id,
@@ -211,16 +233,7 @@ async def publish_to_youtube(
 
     verify_video_ownership(db, video, current_user)
 
-    social_account = db.query(SocialAccount).filter(
-        SocialAccount.id == social_account_id,
-        SocialAccount.user_id == current_user.id,
-        SocialAccount.platform == "youtube"
-    ).first()
-    if not social_account:
-        raise HTTPException(status_code=404, detail="YouTube account not connected")
-
-    if not social_account.is_active:
-        raise HTTPException(status_code=400, detail="YouTube account is inactive")
+    social_account = get_social_account_for_publish(db, social_account_id, "youtube", video, current_user)
 
     # Check if already published to YouTube
     existing_publish = db.query(PublishResult).filter(

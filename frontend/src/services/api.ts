@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -18,6 +18,10 @@ export const projectsApi = {
   update: (id: number, data: UpdateProjectDto) =>
     api.patch<Project>(`/api/projects/${id}`, data),
   delete: (id: number) => api.delete(`/api/projects/${id}`),
+  bindSocialAccount: (projectId: number, accountId: number) =>
+    api.post<Project>(`/api/projects/${projectId}/social-accounts`, { social_account_id: accountId }),
+  unbindSocialAccount: (projectId: number, accountId: number) =>
+    api.delete(`/api/projects/${projectId}/social-accounts/${accountId}`),
 }
 
 // Videos API
@@ -141,19 +145,13 @@ export const workflowApi = {
     api.patch(`/api/videos/${videoId}`, { publishing_meta: meta }),
 }
 
-export interface SocialAccount {
-  id: number
-  platform: string
-  platform_user_id: string
-  username?: string
-  display_name?: string
-  profile_picture?: string
-  is_active: boolean
-}
+// Re-export for backward compatibility
+export type { SocialAccount } from '@/types'
 
 export const socialAccountsApi = {
   list: () => api.get<SocialAccount[]>('/api/social-accounts'),
   getByPlatform: (platform: string) => api.get<SocialAccount[]>(`/api/social-accounts/platform/${platform}`),
+  listByWorkspace: (workspaceId: number) => api.get<SocialAccount[]>(`/api/workspaces/${workspaceId}/social-accounts`),
 }
 
 export const publishingApi = {

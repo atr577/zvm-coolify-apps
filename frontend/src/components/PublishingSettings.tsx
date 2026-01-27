@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
-import { CheckCircle, Instagram, Youtube, AlertCircle, Loader2 } from 'lucide-react'
+import { CheckCircle, Instagram, Youtube, AlertCircle, Loader2, Lock } from 'lucide-react'
 import { publishingApi, socialAccountsApi, SocialAccount } from '@/services/api'
 import type { AdaptationData, PlatformAdaptation } from '@/types'
 import { getErrorMessage } from '@/types'
@@ -11,6 +11,7 @@ interface PublishingSettingsProps {
   adaptationData: AdaptationData | null
   platforms: string[]
   videoUrl: string
+  projectSocialAccounts?: SocialAccount[]  // Bound accounts from project
 }
 
 interface PublishResult {
@@ -24,15 +25,18 @@ export default function PublishingSettings({
   videoId,
   adaptationData,
   platforms,
-  videoUrl
+  videoUrl,
+  projectSocialAccounts
 }: PublishingSettingsProps) {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(platforms || [])
   const [publishResults, setPublishResults] = useState<PublishResult[]>([])
   const [isPublishing, setIsPublishing] = useState(false)
   const [youtubePrivacy, setYoutubePrivacy] = useState<'public' | 'private' | 'unlisted'>('private')
+  // Per-platform selected account (for unbound platforms where user picks from dropdown)
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Record<string, number>>({})
   const queryClient = useQueryClient()
 
-  // Fetch connected social accounts
+  // Fetch user's social accounts (fallback for unbound platforms)
   const { data: socialAccounts, isLoading: loadingAccounts } = useQuery(
     'socialAccounts',
     () => socialAccountsApi.list().then(res => res.data),
@@ -73,12 +77,33 @@ export default function PublishingSettings({
     return adaptationData?.[platform] || {}
   }
 
-  const getConnectedAccount = (platform: string): SocialAccount | undefined => {
-    return socialAccounts?.find(acc => acc.platform === platform && acc.is_active)
+  // Get bound account for platform (from project binding)
+  const getBoundAccount = (platform: string): SocialAccount | undefined => {
+    return projectSocialAccounts?.find(acc => acc.platform === platform && acc.is_active)
+  }
+
+  // Get available accounts for platform (user's own accounts, for dropdown fallback)
+  const getAvailableAccounts = (platform: string): SocialAccount[] => {
+    return (socialAccounts || []).filter(acc => acc.platform === platform && acc.is_active)
+  }
+
+  // Resolve which account to publish to:
+  // 1. Bound account (locked) → always use it
+  // 2. User-selected from dropdown → use selectedAccountIds
+  // 3. Fallback to first available
+  const getPublishAccount = (platform: string): SocialAccount | undefined => {
+    const bound = getBoundAccount(platform)
+    if (bound) return bound
+    const selectedId = selectedAccountIds[platform]
+    if (selectedId) {
+      return socialAccounts?.find(acc => acc.id === selectedId)
+    }
+    const available = getAvailableAccounts(platform)
+    return available[0]
   }
 
   const publishToPlatform = async (platform: string): Promise<PublishResult> => {
-    const account = getConnectedAccount(platform)
+    const account = getPublishAccount(platform)
     if (!account) {
       return { platform, success: false, error: 'Аккаунт не подключен' }
     }
@@ -143,7 +168,7 @@ export default function PublishingSettings({
     setIsPublishing(false)
   }
 
-  const hasUnconnectedPlatforms = selectedPlatforms.some(p => !getConnectedAccount(p))
+  const hasUnconnectedPlatforms = selectedPlatforms.some(p => !getPublishAccount(p))
 
   return (
     <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-300 p-6 rounded-lg shadow-lg">
@@ -168,7 +193,8 @@ export default function PublishingSettings({
             {platforms.map(platform => {
               const isSelected = selectedPlatforms.includes(platform)
               const meta = getPlatformMeta(platform)
-              const account = getConnectedAccount(platform)
+              const boundAccount = getBoundAccount(platform)
+              const availableAccounts = getAvailableAccounts(platform)
               const result = publishResults.find(r => r.platform === platform)
 
               return (
@@ -199,12 +225,35 @@ export default function PublishingSettings({
                           </span>
                         </div>
 
-                        {/* Account status */}
-                        {account ? (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                            @{account.username || account.display_name || 'Connected'}
+                        {/* Account status: 3 states */}
+                        {boundAccount ? (
+                          // State 1: Bound account — locked
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center">
+                            <Lock className="h-3 w-3 mr-1" />
+                            @{boundAccount.username || boundAccount.display_name || 'Connected'}
                           </span>
+                        ) : availableAccounts.length > 0 ? (
+                          // State 2: Not bound but accounts available — dropdown
+                          <select
+                            value={selectedAccountIds[platform] || availableAccounts[0]?.id || ''}
+                            onChange={(e) => {
+                              e.stopPropagation()
+                              setSelectedAccountIds(prev => ({
+                                ...prev,
+                                [platform]: parseInt(e.target.value)
+                              }))
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          >
+                            {availableAccounts.map(acc => (
+                              <option key={acc.id} value={acc.id}>
+                                @{acc.username || acc.display_name || acc.platform_user_id}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
+                          // State 3: No accounts — prompt to connect
                           <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
                             Не подключен
                           </span>
