@@ -44,6 +44,18 @@ export interface SystemPrompts {
   adaptation?: string
 }
 
+export interface SocialAccount {
+  id: number
+  platform: string
+  platform_user_id: string
+  username: string | null
+  display_name: string | null
+  profile_picture: string | null
+  is_active: boolean
+  created_at: string
+  is_token_expired: boolean
+}
+
 export interface Project {
   id: number
   workspace_id: number
@@ -52,6 +64,7 @@ export interface Project {
   story_template: string
   motion_template: string | null  // Motion prompt template (for remix)
   platforms: string[]
+  social_accounts: SocialAccount[]
   duration: number
   aspect_ratio: AspectRatio
   audio_mode: AudioMode

@@ -80,7 +80,8 @@ class PromptPreviewBuilder:
         )
 
     def _build_adaptation(self, context: Dict[str, Any]) -> PromptData:
-        platforms = context.get("platforms") or (self.project.platforms if self.project else ["instagram"])
+        from app.api.projects import get_project_platforms
+        platforms = context.get("platforms") or (get_project_platforms(self.project) if self.project else ["instagram"])
         full_context = {
             "story": self.video.story_data,
             "scenario": context.get("scenario_data") or self.video.scenario_data

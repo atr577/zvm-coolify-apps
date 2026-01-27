@@ -185,7 +185,12 @@ async def generate_meta(
     verify_video_access(db, video, current_user.id)
 
     project = video.project
-    if not project or not project.platforms:
+    if not project:
+        raise HTTPException(status_code=400, detail="No project for this video")
+
+    from app.api.projects import get_project_platforms
+    platforms = get_project_platforms(project)
+    if not platforms:
         raise HTTPException(status_code=400, detail="No platforms configured for this project")
 
     # Get scenario data for context
@@ -200,7 +205,7 @@ async def generate_meta(
     try:
         # Generate publishing meta
         publishing_meta = await openai_service.generate_publishing_meta(
-            platforms=project.platforms,
+            platforms=platforms,
             scenario_data=scenario_data,
             fallback_text=scenario_data.get("image_prompt", project.story_template or "")
         )

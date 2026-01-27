@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, model_validator
 from typing import Optional, List, Literal, Dict
 from datetime import datetime
+from app.schemas.auth import SocialAccountResponse
 
 # Audio mode options
 AudioMode = Literal["none", "scene", "music", "voiceover", "auto"]
@@ -81,7 +82,12 @@ class ProjectUpdate(BaseModel):
 class ProjectResponse(ProjectBase):
     id: int
     workspace_id: Optional[int] = None
+    social_accounts: List[SocialAccountResponse] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BindSocialAccountRequest(BaseModel):
+    social_account_id: int

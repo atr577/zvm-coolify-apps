@@ -58,8 +58,10 @@ export default function ProjectEdit() {
       {/* Form */}
       <div className="bg-white p-6 rounded-lg shadow">
         <ProjectForm
+          projectId={projectId}
           initialData={{
             ...project,
+            social_accounts: project.social_accounts,
             description: project.description ?? undefined,
             motion_template: project.motion_template ?? undefined,
             audio_provider: project.audio_provider ?? undefined,

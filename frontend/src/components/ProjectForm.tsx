@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
-import { CreateProjectDto, Workspace, AudioMode, AudioProvider, ProjectType, SystemPrompts } from '@/types'
+import { useState, useEffect, useCallback } from 'react'
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
+import { CreateProjectDto, Workspace, AudioMode, AudioProvider, ProjectType, SystemPrompts, SocialAccount } from '@/types'
+import { projectsApi, socialAccountsApi } from '@/services/api'
 
 interface ProjectFormProps {
-  initialData?: Partial<CreateProjectDto>
+  initialData?: Partial<CreateProjectDto> & { social_accounts?: SocialAccount[] }
+  projectId?: number
   workspaces?: Workspace[]
   onSubmit: (data: CreateProjectDto) => void
   onCancel: () => void
@@ -41,6 +43,7 @@ const STEP_PROMPTS: { key: keyof SystemPrompts; label: string }[] = [
 
 export default function ProjectForm({
   initialData,
+  projectId,
   workspaces,
   onSubmit,
   onCancel,
@@ -62,6 +65,55 @@ export default function ProjectForm({
     workspace_id: initialData?.workspace_id || workspaces?.[0]?.id
   })
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // Social accounts state (for edit mode)
+  const [workspaceAccounts, setWorkspaceAccounts] = useState<SocialAccount[]>([])
+  const [boundAccounts, setBoundAccounts] = useState<SocialAccount[]>(initialData?.social_accounts || [])
+  const [bindingLoading, setBindingLoading] = useState<string | null>(null)
+
+  const workspaceId = formData.workspace_id || workspaces?.[0]?.id
+
+  // Fetch workspace accounts
+  useEffect(() => {
+    if (!workspaceId || !projectId) return
+    socialAccountsApi.listByWorkspace(workspaceId)
+      .then(res => setWorkspaceAccounts(res.data))
+      .catch(() => {})
+  }, [workspaceId, projectId])
+
+  // Get bound account for a platform
+  const getBoundAccount = useCallback((platform: string) => {
+    return boundAccounts.find(acc => acc.platform === platform && acc.is_active)
+  }, [boundAccounts])
+
+  // Bind account to project
+  const handleBindAccount = async (platform: string, accountId: number | null) => {
+    if (!projectId) return
+    setBindingLoading(platform)
+    try {
+      // Unbind current account for this platform
+      const currentBound = getBoundAccount(platform)
+      if (currentBound) {
+        await projectsApi.unbindSocialAccount(projectId, currentBound.id)
+      }
+      // Bind new account
+      if (accountId) {
+        const res = await projectsApi.bindSocialAccount(projectId, accountId)
+        setBoundAccounts(res.data.social_accounts)
+        // Auto-sync: enable platform checkbox
+        if (!formData.platforms.includes(platform)) {
+          setFormData(prev => ({ ...prev, platforms: [...prev.platforms, platform] }))
+        }
+      } else {
+        // Just removed, update state
+        setBoundAccounts(prev => prev.filter(acc => acc.platform !== platform || acc.id === currentBound?.id ? acc.id !== currentBound?.id : true))
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setBindingLoading(null)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -161,6 +213,63 @@ export default function ProjectForm({
           ))}
         </div>
       </div>
+
+      {/* Social Accounts (edit mode only) */}
+      {projectId && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Социальные аккаунты
+          </label>
+          <p className="text-xs text-gray-500 mb-3">
+            Привяжите аккаунты к проекту. Видео будут публиковаться в эти аккаунты.
+          </p>
+          <div className="space-y-3">
+            {['instagram', 'tiktok', 'youtube'].map(platform => {
+              const platformAccounts = workspaceAccounts.filter(a => a.platform === platform && a.is_active)
+              const bound = getBoundAccount(platform)
+              const isLoading = bindingLoading === platform
+
+              return (
+                <div key={platform} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium capitalize">{platform}</span>
+                    {isLoading && <span className="text-xs text-gray-400">...</span>}
+                  </div>
+                  {platformAccounts.length === 0 ? (
+                    <p className="text-xs text-gray-400 mt-1">Нет подключённых аккаунтов</p>
+                  ) : (
+                    <select
+                      value={bound?.id || ''}
+                      onChange={(e) => handleBindAccount(platform, e.target.value ? Number(e.target.value) : null)}
+                      disabled={isLoading}
+                      className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                    >
+                      <option value="">Не выбрано</option>
+                      {platformAccounts.map(acc => (
+                        <option key={acc.id} value={acc.id} disabled={acc.is_token_expired}>
+                          @{acc.username || acc.display_name || acc.platform_user_id}
+                          {acc.is_token_expired ? ' (expired)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => window.open('/social-accounts', '_blank')}
+            className="mt-3 flex items-center text-sm text-primary-600 hover:text-primary-700"
+          >
+            <ExternalLink className="h-3 w-3 mr-1" />
+            Подключить новый аккаунт
+          </button>
+          <p className="text-xs text-gray-400 mt-1">
+            Откроется в новой вкладке. После подключения обновите эту страницу.
+          </p>
+        </div>
+      )}
 
       {/* Duration */}
       <div>
