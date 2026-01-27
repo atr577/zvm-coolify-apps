@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Film, Home, User, LogOut, Share2, ChevronDown, BarChart3, Settings, Users } from 'lucide-react'
+import { Home, User, LogOut, Share2, ChevronDown, BarChart3, Settings, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface LayoutProps {
@@ -17,7 +17,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <Link to="/" className="flex items-center hover:opacity-80">
-              <Film className="h-8 w-8 text-primary-600" />
+              <img src="/favicon.svg" alt="REGGY" className="h-8 w-8" />
               <span className="ml-2 text-xl font-bold text-gray-900">
                 REGGY
               </span>
