@@ -77,7 +77,10 @@ RULES:
 - Descriptions should have a call-to-action (follow, like, comment)
 - Hashtags should mix popular and niche tags
 
-Return ONLY valid JSON:
+Return ONLY a FLAT JSON object with platform names as top-level keys.
+Do NOT wrap in any parent key like "platforms", "data", or "result".
+
+EXACT FORMAT:
 {{
   "{platforms[0]}": {{
     "title": "...",

@@ -73,7 +73,11 @@ async def generate_content_variants(
         count=4
     )
 
-    return {"variants": variants}
+    # Server-side id assignment (LLM does not generate id)
+    variants_with_id = [
+        {"id": i + 1, **v} for i, v in enumerate(variants)
+    ]
+    return {"variants": variants_with_id}
 
 
 @router.post("/regenerate-variants", response_model=VariantsResponse)
@@ -94,4 +98,8 @@ async def regenerate_content_variants(
         exclude=request.exclude_variants
     )
 
-    return {"variants": variants}
+    # Server-side id assignment (LLM does not generate id)
+    variants_with_id = [
+        {"id": i + 1, **v} for i, v in enumerate(variants)
+    ]
+    return {"variants": variants_with_id}

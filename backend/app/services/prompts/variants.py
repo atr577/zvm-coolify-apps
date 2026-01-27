@@ -33,7 +33,6 @@ def build_variants_prompt(
 
 Если шаблон про СОБАКУ:
 {{
-  "id": 1,
   "description": "Бостон терьер на диване, разбросанные игрушки, довольный вид",
   "content_variables": {{
     "animal": {{"breed": "бостон терьер", "action": "лежит на диване", "expression": "довольный"}},
@@ -43,7 +42,6 @@ def build_variants_prompt(
 
 Если шаблон про ЧЕЛОВЕКА И МАШИНУ:
 {{
-  "id": 1,
   "description": "Блондинка в красном платье, Ferrari, Париж",
   "content_variables": {{
     "person": {{"appearance": "блондинка", "outfit": "красное платье", "pose": "стоит у машины"}},
@@ -54,7 +52,6 @@ def build_variants_prompt(
 
 Если шаблон про ЕДУ:
 {{
-  "id": 1,
   "description": "Сочный бургер с сыром, крупный план, пар поднимается",
   "content_variables": {{
     "food": {{"dish": "бургер", "ingredients": "говядина, сыр, салат", "style": "сочный"}},

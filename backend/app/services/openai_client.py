@@ -8,8 +8,9 @@ import json
 import hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Type
 from openai import AsyncOpenAI, APIError, RateLimitError as OpenAIRateLimitError
+from pydantic import BaseModel, ValidationError
 from app.core.config import settings
 import logging
 
@@ -301,6 +302,112 @@ class OpenAIClient:
 
         content = response["choices"][0]["message"]["content"]
         return json.loads(content)
+
+    async def generate_validated_json(
+        self,
+        prompt: str,
+        response_schema: Type[BaseModel],
+        system_prompt: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_retries: int = 1
+    ) -> BaseModel:
+        """Generate JSON response with Pydantic v2 validation.
+
+        Validation is ALWAYS applied — including custom prompts.
+
+        Flow: generate_json() → model_validate() → return model
+        On ValidationError: retry once with error context in prompt.
+
+        Args:
+            prompt: User prompt
+            response_schema: Pydantic v2 model class to validate against
+            system_prompt: Optional system prompt
+            model: LLM model override
+            temperature: Temperature for generation
+            max_retries: Number of validation retries (default 1)
+
+        Returns:
+            Validated Pydantic model instance
+
+        Raises:
+            OpenAIClientError: If validation fails after all retries
+        """
+        current_prompt = prompt
+
+        for attempt in range(max_retries + 1):
+            try:
+                raw_response = await self.generate_json(
+                    prompt=current_prompt,
+                    system_prompt=system_prompt,
+                    model=model,
+                    temperature=temperature
+                )
+
+                validated = response_schema.model_validate(raw_response)
+
+                if attempt > 0:
+                    logger.info(
+                        f"LLM validation succeeded on retry: "
+                        f"{response_schema.__name__} (attempt {attempt + 1})"
+                    )
+                else:
+                    logger.info(
+                        f"LLM response validated: {response_schema.__name__}"
+                    )
+                return validated
+
+            except ValidationError as e:
+                error_details = self._format_validation_error(e)
+
+                if attempt < max_retries:
+                    logger.warning(
+                        f"LLM validation failed (attempt {attempt + 1}), "
+                        f"retrying: {error_details}"
+                    )
+                    current_prompt = self._build_retry_prompt(
+                        original_prompt=prompt,
+                        validation_error=error_details,
+                        expected_schema=response_schema
+                    )
+                else:
+                    logger.error(
+                        f"LLM validation failed after {max_retries + 1} attempts: "
+                        f"{error_details}"
+                    )
+                    raise OpenAIClientError(
+                        f"LLM response validation failed: {error_details}"
+                    )
+
+    def _format_validation_error(self, e: ValidationError) -> str:
+        """Format Pydantic v2 validation error for logging and retry prompt."""
+        errors = []
+        for err in e.errors():
+            field = ".".join(str(x) for x in err["loc"])
+            msg = err["msg"]
+            errors.append(f"{field}: {msg}")
+        return "; ".join(errors)
+
+    def _build_retry_prompt(
+        self,
+        original_prompt: str,
+        validation_error: str,
+        expected_schema: Type[BaseModel]
+    ) -> str:
+        """Build retry prompt with validation error context and expected schema."""
+        schema_str = json.dumps(
+            expected_schema.model_json_schema(), indent=2, ensure_ascii=False
+        )
+
+        return f"""{original_prompt}
+
+IMPORTANT: Your previous response had validation errors:
+{validation_error}
+
+Expected JSON schema:
+{schema_str}
+
+Please fix the errors and return valid JSON matching this schema exactly."""
 
     async def analyze_image(
         self,

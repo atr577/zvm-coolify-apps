@@ -34,49 +34,26 @@ MOCK_DESCRIPTION = {
 
 MOCK_PROMPT = {
     "main_prompt": "A elegant young woman in a flowing indigo evening gown with sparkles dances gracefully on a rooftop terrace at golden hour sunset, long dark hair in elegant updo, mysterious smile, confident gaze, arms rising gracefully, gentle spin, cinematic circular camera movement orbiting around her, warm golden lighting, backlit silhouette with glowing halo effect, city skyline in background, romantic dreamy atmosphere, 8k, ultra detailed, fashion photography style",
+    "style_suffix": "cinematic lighting, shallow depth of field, professional fashion photography",
     "negative_prompt": "blurry, low quality, distorted, deformed, ugly, bad anatomy, extra limbs, poorly drawn face, dull colors, overexposed, underexposed, static shot, bad lighting",
-    "style_tags": ["cinematic", "fashion", "golden hour", "elegant", "dreamy"],
-    "technical_params": {
-        "aspect_ratio": "9:16",
-        "camera_movement": "orbital tracking shot",
-        "lighting_setup": "natural golden hour with backlight",
-        "color_grading": "warm, cinematic"
-    }
+    "recommended_aspect_ratio": "9:16"
 }
 
 MOCK_IMAGE_URL = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=711&fit=crop"
 
 MOCK_SCENARIO = {
-    "scenes": [
-        {
-            "timing": "0-2 секунды",
-            "action": "Камера начинает плавное движение вокруг модели. Модель стоит с закрытыми глазами, руки опущены",
-            "camera": "Начало кругового облета, средний план",
-            "audio": "Начало музыкального трека, тихое звучание",
-            "effects": "Легкий ветер развевает волосы"
-        },
-        {
-            "timing": "2-4 секунды",
-            "action": "Модель открывает глаза, начинает медленно поднимать руки и вращаться. Платье начинает светиться",
-            "camera": "Продолжение облета, камера немного приближается",
-            "audio": "Музыка усиливается, добавляется ритм",
-            "effects": "Платье начинает излучать золотистое сияние, частицы света"
-        },
-        {
-            "timing": "4-5 секунд",
-            "action": "Модель завершает вращение, широко улыбается в камеру. Платье превращается в вихрь света",
-            "camera": "Облет завершается фронтальным планом",
-            "audio": "Кульминация музыкального фрагмента",
-            "effects": "Максимальное свечение, искры и частицы света заполняют кадр"
-        }
-    ],
-    "overall_pacing": "Медленное, плавное нарастание от спокойного начала к эффектному финалу",
+    "motion_prompt": "Woman dances gracefully, arms rising, gentle spin, dress flowing with movement, glowing light effect builds",
+    "camera_movement": {
+        "type": "orbit",
+        "speed": "slow",
+        "description": "Плавный круговой облет вокруг модели"
+    },
+    "subject_action": "Модель танцует, поднимает руки и вращается",
     "key_moments": [
-        "Открытие глаз модели (2 сек)",
-        "Начало свечения платья (3 сек)",
-        "Финальная улыбка и вихрь света (5 сек)"
-    ],
-    "transitions": "Плавные, без резких переходов, все действия перетекают друг в друга"
+        {"timestamp": "0.0-2.0s", "action": "Модель стоит с закрытыми глазами, руки опущены"},
+        {"timestamp": "2.0-4.0s", "action": "Открывает глаза, начинает вращаться, платье светится"},
+        {"timestamp": "4.0-5.0s", "action": "Финальная улыбка, платье превращается в вихрь света"}
+    ]
 }
 
 MOCK_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"

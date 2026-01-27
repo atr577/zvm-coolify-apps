@@ -71,10 +71,11 @@ MOCK_SCENARIO = {
         "speed": "slow",
         "description": "Slow dolly in following the cat's movement"
     },
+    "subject_action": "Cat cautiously approaches the ocean and jumps back from a wave",
     "key_moments": [
-        {"time": 0, "action": "Cat standing, looking at ocean"},
-        {"time": 2, "action": "Cat approaches water cautiously"},
-        {"time": 4, "action": "Wave splashes, cat jumps back"}
+        {"timestamp": "0.0-2.0s", "action": "Cat standing, looking at ocean"},
+        {"timestamp": "2.0-4.0s", "action": "Cat approaches water cautiously"},
+        {"timestamp": "4.0-5.0s", "action": "Wave splashes, cat jumps back"}
     ],
     "audio_notes": "Beach ambience, wave sounds, optional comedic sound effect on splash"
 }
@@ -105,9 +106,9 @@ MOCK_VALIDATION_PASS = {
     "status": "pass",
     "score": 85,
     "criteria_results": {
-        "relevance": {"score": 90, "feedback": "Content matches theme well"},
-        "clarity": {"score": 85, "feedback": "Clear and concise"},
-        "engagement": {"score": 80, "feedback": "Good hook potential"}
+        "relevance": {"score": 90, "comment": "Content matches theme well"},
+        "clarity": {"score": 85, "comment": "Clear and concise"},
+        "engagement": {"score": 80, "comment": "Good hook potential"}
     },
     "warnings": [],
     "errors": [],
@@ -118,9 +119,9 @@ MOCK_VALIDATION_PASS_WITH_WARNINGS = {
     "status": "pass_with_warnings",
     "score": 70,
     "criteria_results": {
-        "relevance": {"score": 75, "feedback": "Generally relevant"},
-        "clarity": {"score": 65, "feedback": "Could be clearer"},
-        "engagement": {"score": 70, "feedback": "Moderate engagement potential"}
+        "relevance": {"score": 75, "comment": "Generally relevant"},
+        "clarity": {"score": 65, "comment": "Could be clearer"},
+        "engagement": {"score": 70, "comment": "Moderate engagement potential"}
     },
     "warnings": ["Hook could be stronger", "Consider faster pacing for TikTok"],
     "errors": [],
@@ -131,9 +132,9 @@ MOCK_VALIDATION_FAIL = {
     "status": "fail",
     "score": 40,
     "criteria_results": {
-        "relevance": {"score": 30, "feedback": "Does not match theme"},
-        "clarity": {"score": 50, "feedback": "Confusing structure"},
-        "engagement": {"score": 40, "feedback": "Weak hook"}
+        "relevance": {"score": 30, "comment": "Does not match theme"},
+        "clarity": {"score": 50, "comment": "Confusing structure"},
+        "engagement": {"score": 40, "comment": "Weak hook"}
     },
     "warnings": [],
     "errors": ["Content does not match the specified theme", "Missing required elements"],

@@ -6,6 +6,13 @@ Handles text generation for 4-step workflow (SCENARIO → IMAGE → VIDEO → AU
 from app.services.openai_client import openai_client, OpenAIClientError
 from app.core.config import settings
 from app.schemas.workflow import CustomPrompt
+from app.schemas.llm import (
+    LLMImagePromptResponse,
+    LLMScenarioResponse,
+    LLMValidationResponse,
+    LLMPublishingMetaResponse,
+    LLMContentVariantsResponse,
+)
 from app.services.prompts import (
     IMAGE_PROMPT_SYSTEM_PROMPT, build_image_prompt_prompt,
     SCENARIO_SYSTEM_PROMPT, build_scenario_prompt, build_scenario_from_template_prompt,
@@ -49,19 +56,21 @@ class OpenAIService:
 
         try:
             if custom_prompt:
-                result = await self.client.generate_json(
+                validated = await self.client.generate_validated_json(
                     prompt=custom_prompt.user_prompt,
+                    response_schema=LLMImagePromptResponse,
                     system_prompt=custom_prompt.system_prompt,
                     temperature=0.6
                 )
             else:
-                result = await self.client.generate_json(
+                validated = await self.client.generate_validated_json(
                     prompt=prompt,
+                    response_schema=LLMImagePromptResponse,
                     system_prompt=IMAGE_PROMPT_SYSTEM_PROMPT,
                     temperature=0.6
                 )
             logger.info("Image prompt generated successfully")
-            return result
+            return validated.model_dump()
         except OpenAIClientError as e:
             logger.error(f"Failed to generate image prompt: {e}")
             raise
@@ -85,19 +94,21 @@ class OpenAIService:
 
         try:
             if custom_prompt:
-                result = await self.client.generate_json(
+                validated = await self.client.generate_validated_json(
                     prompt=custom_prompt.user_prompt,
+                    response_schema=LLMScenarioResponse,
                     system_prompt=custom_prompt.system_prompt,
                     temperature=0.7
                 )
             else:
-                result = await self.client.generate_json(
+                validated = await self.client.generate_validated_json(
                     prompt=prompt,
+                    response_schema=LLMScenarioResponse,
                     system_prompt=SCENARIO_SYSTEM_PROMPT,
                     temperature=0.7
                 )
             logger.info("Scenario generated successfully")
-            return result
+            return validated.model_dump()
         except OpenAIClientError as e:
             logger.error(f"Failed to generate scenario: {e}")
             raise
@@ -124,19 +135,21 @@ class OpenAIService:
 
         try:
             if custom_prompt:
-                result = await self.client.generate_json(
+                validated = await self.client.generate_validated_json(
                     prompt=custom_prompt.user_prompt,
+                    response_schema=LLMScenarioResponse,
                     system_prompt=custom_prompt.system_prompt,
                     temperature=0.7
                 )
             else:
-                result = await self.client.generate_json(
+                validated = await self.client.generate_validated_json(
                     prompt=prompt,
+                    response_schema=LLMScenarioResponse,
                     system_prompt=SCENARIO_SYSTEM_PROMPT,
                     temperature=0.7
                 )
             logger.info("Scenario from description generated successfully")
-            return result
+            return validated.model_dump()
         except OpenAIClientError as e:
             logger.error(f"Failed to generate scenario from description: {e}")
             raise
@@ -196,13 +209,14 @@ class OpenAIService:
         )
 
         try:
-            result = await self.client.generate_json(
+            validated = await self.client.generate_validated_json(
                 prompt=prompt,
+                response_schema=LLMScenarioResponse,
                 system_prompt=SCENARIO_SYSTEM_PROMPT,
                 temperature=0.7
             )
             logger.info("Scenario from template generated successfully")
-            return result
+            return validated.model_dump()
         except OpenAIClientError as e:
             logger.error(f"Failed to generate scenario from template: {e}")
             raise
@@ -269,13 +283,14 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
         prompt = build_validation_prompt(content, step_type, previous_data)
 
         try:
-            result = await self.client.generate_json(
+            validated = await self.client.generate_validated_json(
                 prompt=prompt,
+                response_schema=LLMValidationResponse,
                 system_prompt=VALIDATION_SYSTEM_PROMPT,
                 temperature=0.3
             )
-            logger.info(f"Validation completed for {step_type}: {result.get('status')}")
-            return result
+            logger.info(f"Validation completed for {step_type}: {validated.status}")
+            return validated.model_dump()
         except OpenAIClientError as e:
             logger.error(f"Failed to validate content: {e}")
             raise
@@ -312,13 +327,16 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
         )
 
         try:
-            result = await self.client.generate_json(
+            validated = await self.client.generate_validated_json(
                 prompt=prompt,
+                response_schema=LLMPublishingMetaResponse,
                 system_prompt="You are an SMM expert. Create viral titles and descriptions in English.",
                 temperature=0.7
             )
 
-            platform_data = self._extract_platform_data(result, platforms)
+            # RootModel: validated.root is Dict[str, PlatformMeta]
+            platform_data = {k: v.model_dump() for k, v in validated.root.items()}
+
             # Fill missing platforms with defaults
             for platform in platforms:
                 if platform not in platform_data:
@@ -363,8 +381,12 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
         prompt = build_variants_prompt(story_template, count, exclude)
 
         try:
-            result = await self.client.generate_json(prompt=prompt, model=self.model)
-            variants = self._extract_list_from_response(result)
+            validated = await self.client.generate_validated_json(
+                prompt=prompt,
+                response_schema=LLMContentVariantsResponse,
+                model=self.model
+            )
+            variants = [v.model_dump() for v in validated.variants]
             logger.info(f"Generated {len(variants)} content variants")
             return variants
 
@@ -372,38 +394,6 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
             logger.error(f"Failed to generate content variants: {e}")
             raise
 
-    # Helper methods
-
-    def _extract_platform_data(
-        self,
-        result: Dict[str, Any],
-        platforms: List[str]
-    ) -> Dict[str, Dict[str, str]]:
-        """Extract platform data from AI response."""
-        platform_data = result
-        if isinstance(result, dict):
-            has_platform_keys = any(p in result for p in platforms)
-            if not has_platform_keys:
-                for key in ["platforms", "adaptations", "data", "result"]:
-                    if key in result and isinstance(result[key], dict):
-                        platform_data = result[key]
-                        break
-
-        return {p: platform_data[p] for p in platforms if p in platform_data}
-
-    def _extract_list_from_response(self, result: Any) -> List[Dict[str, Any]]:
-        """Extract list from AI response."""
-        if isinstance(result, list):
-            return result
-        elif isinstance(result, dict):
-            for key in ["variants", "concepts", "items", "data"]:
-                value = result.get(key)
-                if isinstance(value, list):
-                    return value
-            for value in result.values():
-                if isinstance(value, list):
-                    return value
-        return []
 
 
 # Singleton instance
