@@ -19,6 +19,7 @@ from app.schemas.auth import (
     WorkspaceMemberResponse,
     SetupRequest,
     SetupResponse,
+    WorkspaceInviteCreate,
 )
 from app.models.user import User, Invite, InviteType, Workspace, WorkspaceMember, WorkspaceRole, UserRole, SocialAccount
 from app.schemas.auth import SocialAccountResponse
@@ -625,3 +626,110 @@ def list_workspace_social_accounts(
     ).order_by(SocialAccount.platform, SocialAccount.username).all()
 
     return accounts
+
+
+# ============== Workspace Invite Endpoints ==============
+
+def _check_workspace_owner(workspace_id: int, user: User, db: Session) -> Workspace:
+    """Check if user is workspace owner. Returns workspace or raises HTTPException."""
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if workspace.owner_id != user.id and user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Only workspace owner can manage invites")
+    return workspace
+
+
+@workspaces_router.get("/{workspace_id}/invites", response_model=List[InviteResponse])
+def list_workspace_invites(
+    workspace_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all invites for a workspace (owner only)"""
+    workspace = _check_workspace_owner(workspace_id, current_user, db)
+
+    invites = db.query(Invite).filter(
+        Invite.workspace_id == workspace_id
+    ).order_by(Invite.created_at.desc()).all()
+
+    return [
+        InviteResponse(
+            id=inv.id,
+            token=inv.token,
+            type=InviteTypeEnum(inv.type.value),
+            email=inv.email,
+            workspace_id=inv.workspace_id,
+            workspace_name=workspace.name,
+            created_by_id=inv.created_by_id,
+            created_at=inv.created_at,
+            expires_at=inv.expires_at,
+            used_at=inv.used_at,
+            used_by_id=inv.used_by_id,
+            is_valid=inv.is_valid
+        )
+        for inv in invites
+    ]
+
+
+@workspaces_router.post("/{workspace_id}/invites", response_model=InviteResponse, status_code=status.HTTP_201_CREATED)
+def create_workspace_invite(
+    workspace_id: int,
+    request: WorkspaceInviteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create an invite for a workspace (owner only)"""
+    workspace = _check_workspace_owner(workspace_id, current_user, db)
+
+    invite = Invite(
+        token=Invite.generate_token(),
+        type=InviteType.WORKSPACE,
+        email=request.email,
+        workspace_id=workspace_id,
+        created_by_id=current_user.id,
+        expires_at=datetime.utcnow() + timedelta(hours=request.expires_in_hours)
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+
+    return InviteResponse(
+        id=invite.id,
+        token=invite.token,
+        type=InviteTypeEnum(invite.type.value),
+        email=invite.email,
+        workspace_id=invite.workspace_id,
+        workspace_name=workspace.name,
+        created_by_id=invite.created_by_id,
+        created_at=invite.created_at,
+        expires_at=invite.expires_at,
+        used_at=invite.used_at,
+        used_by_id=invite.used_by_id,
+        is_valid=invite.is_valid
+    )
+
+
+@workspaces_router.delete("/{workspace_id}/invites/{invite_id}")
+def delete_workspace_invite(
+    workspace_id: int,
+    invite_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete an invite from workspace (owner only)"""
+    _check_workspace_owner(workspace_id, current_user, db)
+
+    invite = db.query(Invite).filter(
+        Invite.id == invite_id,
+        Invite.workspace_id == workspace_id
+    ).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+
+    if invite.is_used:
+        raise HTTPException(status_code=400, detail="Cannot delete used invite")
+
+    db.delete(invite)
+    db.commit()
+    return {"message": "Invite deleted"}

@@ -124,6 +124,12 @@ class InviteCreateRequest(BaseModel):
     expires_in_hours: int = Field(default=72, ge=1, le=720)  # 1 hour to 30 days
 
 
+class WorkspaceInviteCreate(BaseModel):
+    """Simplified invite creation for workspace owners (type and workspace_id are implicit)"""
+    email: Optional[EmailStr] = None
+    expires_in_hours: int = Field(default=72, ge=1, le=720)
+
+
 class InviteResponse(BaseModel):
     id: int
     token: str

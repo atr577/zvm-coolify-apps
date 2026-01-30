@@ -7,7 +7,6 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import SocialAccounts from './pages/SocialAccounts'
 import Analytics from './pages/Analytics'
-import Settings from './pages/Settings'
 import Workspaces from './pages/Workspaces'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -30,7 +29,7 @@ function App() {
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/social-accounts" element={<SocialAccounts />} />
                 <Route path="/workspaces" element={<Workspaces />} />
-                <Route path="/settings" element={<Settings />} />
+                <Route path="/workspaces/:id" element={<Workspaces />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

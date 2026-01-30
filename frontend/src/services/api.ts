@@ -216,6 +216,12 @@ export const workspacesApi = {
   update: (id: number, data: CreateWorkspaceDto) => api.patch<Workspace>(`/api/workspaces/${id}`, data),
   delete: (id: number) => api.delete(`/api/workspaces/${id}`),
   removeMember: (workspaceId: number, userId: number) => api.delete(`/api/workspaces/${workspaceId}/members/${userId}`),
+  // Workspace invites (owner only)
+  listInvites: (workspaceId: number) => api.get<Invite[]>(`/api/workspaces/${workspaceId}/invites`),
+  createInvite: (workspaceId: number, data: { email?: string; expires_in_hours?: number }) =>
+    api.post<Invite>(`/api/workspaces/${workspaceId}/invites`, data),
+  deleteInvite: (workspaceId: number, inviteId: number) =>
+    api.delete(`/api/workspaces/${workspaceId}/invites/${inviteId}`),
 }
 
 // Metrics API
