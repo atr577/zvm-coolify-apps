@@ -1,10 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { ArrowLeft } from 'lucide-react'
-import { projectsApi } from '@/services/api'
+import { projectsApi, workspacesApi } from '@/services/api'
 import ProjectForm from '@/components/ProjectForm'
 import { TemplateSettingsForm } from '@/components/template'
-import type { CreateProjectDto } from '@/types'
+import type { CreateProjectDto, Workspace } from '@/types'
 
 export default function ProjectEdit() {
   const { id } = useParams<{ id: string }>()
@@ -15,6 +15,11 @@ export default function ProjectEdit() {
   const { data: project, isLoading } = useQuery(
     ['project', projectId],
     () => projectsApi.get(projectId).then(res => res.data)
+  )
+
+  const { data: workspaces } = useQuery<Workspace[]>(
+    'workspaces',
+    () => workspacesApi.list().then(res => res.data)
   )
 
   const updateMutation = useMutation(
@@ -65,6 +70,7 @@ export default function ProjectEdit() {
         ) : (
           <ProjectForm
             projectId={projectId}
+            workspaces={workspaces}
             initialData={{
               ...project,
               social_accounts: project.social_accounts,
