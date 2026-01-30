@@ -1,5 +1,15 @@
-import { useState } from 'react'
-import type { Workspace, AspectRatio, LLMModel, ImageModel, VideoModel } from '@/types'
+import { useState, useEffect } from 'react'
+import { ExternalLink } from 'lucide-react'
+import type { Workspace, AspectRatio, LLMModel, ImageModel, VideoModel, SocialAccount } from '@/types'
+import { socialAccountsApi } from '@/services/api'
+import {
+  LLM_MODELS,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+  ASPECT_RATIOS,
+  getDurationOptions,
+  getDefaultDuration,
+} from '@/constants/models'
 
 export interface TemplateProjectCreateDto {
   name: string
@@ -13,9 +23,9 @@ export interface TemplateProjectCreateDto {
   video_duration: string
   video_template_name: string
   video_template_prompt: string
-  duration: number
   platforms: string[]
   workspace_id?: number
+  social_account_ids?: number[]
 }
 
 interface TemplateProjectFormProps {
@@ -23,58 +33,6 @@ interface TemplateProjectFormProps {
   onSubmit: (data: TemplateProjectCreateDto) => void
   onCancel: () => void
   isLoading: boolean
-}
-
-const LLM_MODELS: { value: LLMModel; label: string }[] = [
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast, cheap)' },
-  { value: 'gpt-4o', label: 'GPT-4o (better quality)' },
-]
-
-const IMAGE_MODELS: { value: ImageModel; label: string }[] = [
-  { value: 'fal-ai/nano-banana-pro', label: 'Nano Banana Pro (fast)' },
-  { value: 'fal-ai/flux-pro/v1.1', label: 'Flux Pro v1.1' },
-  { value: 'fal-ai/flux-pro/v1.1-ultra', label: 'Flux Pro v1.1 Ultra' },
-  { value: 'fal-ai/ideogram/v3', label: 'Ideogram v3' },
-  { value: 'fal-ai/imagen3', label: 'Imagen 3' },
-]
-
-const VIDEO_MODELS: { value: VideoModel; label: string }[] = [
-  { value: 'fal-ai/veo3/fast/image-to-video', label: 'Veo3 Fast' },
-  { value: 'fal-ai/veo3/image-to-video', label: 'Veo3' },
-  { value: 'fal-ai/veo3.1/reference-to-video', label: 'Veo3.1 Reference' },
-  { value: 'fal-ai/kling-video/v2.1/standard/image-to-video', label: 'Kling v2.1 Standard' },
-  { value: 'fal-ai/kling-video/v2.1/pro/image-to-video', label: 'Kling v2.1 Pro' },
-  { value: 'fal-ai/minimax/video-01', label: 'Minimax Video-01' },
-]
-
-// Duration options per model type
-const getDurationOptions = (videoModel: string | undefined): { value: string; label: string }[] => {
-  if (!videoModel) return []
-  if (videoModel.includes('kling')) {
-    return [
-      { value: '5', label: '5 sec' },
-      { value: '10', label: '10 sec' },
-    ]
-  }
-  if (videoModel.includes('veo')) {
-    return [
-      { value: '4s', label: '4 sec' },
-      { value: '6s', label: '6 sec' },
-      { value: '8s', label: '8 sec' },
-    ]
-  }
-  if (videoModel.includes('minimax')) {
-    return [{ value: '5s', label: '5 sec' }]
-  }
-  return [{ value: '5', label: '5 sec' }, { value: '6s', label: '6 sec' }]
-}
-
-const getDefaultDuration = (videoModel: string | undefined): string => {
-  if (!videoModel) return '6s'
-  if (videoModel.includes('kling')) return '5'
-  if (videoModel.includes('veo')) return '6s'
-  if (videoModel.includes('minimax')) return '5s'
-  return '6s'
 }
 
 export function TemplateProjectForm({
@@ -95,23 +53,53 @@ export function TemplateProjectForm({
     video_duration: '6s',
     video_template_name: 'Default',
     video_template_prompt: '',
-    duration: 10,
     platforms: [],
-    workspace_id: workspaces?.[0]?.id
+    workspace_id: workspaces?.[0]?.id,
+    social_account_ids: []
   })
+
+  // Social accounts state
+  const [workspaceAccounts, setWorkspaceAccounts] = useState<SocialAccount[]>([])
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, number | null>>({
+    instagram: null,
+    tiktok: null,
+    youtube: null
+  })
+
+  // Load workspace accounts when workspace changes
+  useEffect(() => {
+    const workspaceId = formData.workspace_id || workspaces?.[0]?.id
+    if (workspaceId) {
+      socialAccountsApi.listByWorkspace(workspaceId)
+        .then(res => setWorkspaceAccounts(res.data))
+        .catch(() => setWorkspaceAccounts([]))
+    }
+  }, [formData.workspace_id, workspaces])
+
+  // Update social_account_ids and platforms when selection changes
+  useEffect(() => {
+    const ids = Object.values(selectedAccounts).filter((id): id is number => id !== null)
+    const platforms = Object.entries(selectedAccounts)
+      .filter(([, id]) => id !== null)
+      .map(([platform]) => platform)
+
+    setFormData(prev => ({
+      ...prev,
+      social_account_ids: ids,
+      platforms: platforms
+    }))
+  }, [selectedAccounts])
+
+  const handleSelectAccount = (platform: string, accountId: number | null) => {
+    setSelectedAccounts(prev => ({
+      ...prev,
+      [platform]: accountId
+    }))
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSubmit(formData)
-  }
-
-  const togglePlatform = (platform: string) => {
-    setFormData(prev => ({
-      ...prev,
-      platforms: prev.platforms.includes(platform)
-        ? prev.platforms.filter(p => p !== platform)
-        : [...prev.platforms, platform]
-    }))
   }
 
   return (
@@ -163,77 +151,75 @@ export function TemplateProjectForm({
         </div>
       )}
 
-      {/* Platforms */}
+      {/* Social Accounts */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Platforms *
+          Social Accounts
         </label>
-        <div className="flex space-x-4">
-          {['instagram', 'tiktok', 'youtube'].map(platform => (
-            <label key={platform} className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.platforms.includes(platform)}
-                onChange={() => togglePlatform(platform)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="capitalize">{platform}</span>
-            </label>
-          ))}
+        <p className="text-xs text-gray-500 mb-3">
+          Select accounts for publishing. Platforms will be set automatically.
+        </p>
+        <div className="space-y-3">
+          {['instagram', 'tiktok', 'youtube'].map(platform => {
+            const platformAccounts = workspaceAccounts.filter(a => a.platform === platform && a.is_active)
+            const selected = selectedAccounts[platform]
+
+            return (
+              <div key={platform} className="border rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium capitalize">{platform}</span>
+                </div>
+                {platformAccounts.length === 0 ? (
+                  <p className="text-xs text-gray-400 mt-1">No connected accounts</p>
+                ) : (
+                  <select
+                    value={selected || ''}
+                    onChange={(e) => handleSelectAccount(platform, e.target.value ? Number(e.target.value) : null)}
+                    className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Not selected</option>
+                    {platformAccounts.map(acc => (
+                      <option key={acc.id} value={acc.id} disabled={acc.is_token_expired}>
+                        @{acc.username || acc.display_name || acc.platform_user_id}
+                        {acc.is_token_expired ? ' (expired)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )
+          })}
         </div>
+        <button
+          type="button"
+          onClick={() => window.open('/social-accounts', '_blank')}
+          className="mt-3 flex items-center text-sm text-primary-600 hover:text-primary-700"
+        >
+          <ExternalLink className="h-3 w-3 mr-1" />
+          Connect new account
+        </button>
       </div>
 
-      {/* Duration & Aspect Ratio */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Duration *
-          </label>
-          <div className="flex space-x-4">
-            {[5, 10, 15].map(duration => (
-              <label key={duration} className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="duration"
-                  checked={formData.duration === duration}
-                  onChange={() => setFormData({ ...formData, duration })}
-                  className="border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span>{duration}s</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Aspect Ratio *
-          </label>
-          <div className="flex space-x-4">
-            {[
-              { value: '9:16', label: '9:16' },
-              { value: '16:9', label: '16:9' },
-              { value: '1:1', label: '1:1' }
-            ].map(ratio => (
-              <label key={ratio.value} className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="aspect_ratio"
-                  checked={formData.image_aspect_ratio === ratio.value}
-                  onChange={() => setFormData({ ...formData, image_aspect_ratio: ratio.value as AspectRatio })}
-                  className="border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span>{ratio.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+      {/* Aspect Ratio */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Aspect Ratio *
+        </label>
+        <select
+          value={formData.image_aspect_ratio}
+          onChange={(e) => setFormData({ ...formData, image_aspect_ratio: e.target.value as AspectRatio })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          {ASPECT_RATIOS.map(ratio => (
+            <option key={ratio.value} value={ratio.value}>{ratio.label}</option>
+          ))}
+        </select>
       </div>
 
       {/* Model Selection */}
       <div className="border-t pt-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">AI Models</h3>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               LLM Model

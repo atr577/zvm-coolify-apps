@@ -143,12 +143,10 @@ class TemplateGenerationService:
             variant_str = "\n".join(variant_lines)
             prompt = f"{settings.preprocessing_prompt}\n\n{variant_str}"
 
-            # Call LLM
-            system_prompt = settings.preprocessing_system_prompt or "You are a creative assistant. Analyze the input and generate a creative description. Respond with JSON containing your analysis."
-
+            # Call LLM (system prompt not needed - all instructions are in preprocessing_prompt)
             result = await self.openai.generate_json(
                 prompt=prompt,
-                system_prompt=system_prompt,
+                system_prompt=None,
                 model=generation.llm_model,
                 temperature=0.7
             )

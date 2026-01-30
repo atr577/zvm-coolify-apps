@@ -397,7 +397,6 @@ export interface TemplateSettings {
   id: number
   project_id: number
   preprocessing_prompt: string
-  preprocessing_system_prompt: string | null
   image_prompt_template: string
   llm_model: string
   image_model: string
@@ -411,7 +410,6 @@ export interface TemplateSettings {
 
 export interface TemplateSettingsUpdate {
   preprocessing_prompt?: string
-  preprocessing_system_prompt?: string
   image_prompt_template?: string
   llm_model?: LLMModel
   image_model?: ImageModel

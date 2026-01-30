@@ -54,7 +54,6 @@ class TemplateSettings(Base):
 
     # LLM Prompts (required)
     preprocessing_prompt = Column(Text, nullable=False)
-    preprocessing_system_prompt = Column(Text, nullable=True)  # System prompt for preprocessing LLM call
     image_prompt_template = Column(Text, nullable=False)
 
     # LLM Model

@@ -1,80 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { templateApi } from '@/services/api'
-import type { TemplateSettings, TemplateSettingsUpdate, LLMModel, ImageModel, VideoModel, AspectRatio } from '@/types'
+import { ExternalLink } from 'lucide-react'
+import { templateApi, projectsApi, socialAccountsApi } from '@/services/api'
+import type { TemplateSettings, TemplateSettingsUpdate, LLMModel, ImageModel, VideoModel, AspectRatio, SocialAccount } from '@/types'
+import {
+  LLM_MODELS,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+  ASPECT_RATIOS,
+  getDurationOptions,
+  getDefaultDuration,
+} from '@/constants/models'
 
 interface TemplateSettingsFormProps {
   projectId: number
 }
 
-const LLM_MODELS: { value: LLMModel; label: string }[] = [
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast, cheap)' },
-  { value: 'gpt-4o', label: 'GPT-4o (better quality)' },
-]
-
-const IMAGE_MODELS: { value: ImageModel; label: string }[] = [
-  { value: 'fal-ai/nano-banana-pro', label: 'Nano Banana Pro (fast)' },
-  { value: 'fal-ai/flux-pro/v1.1', label: 'Flux Pro v1.1' },
-  { value: 'fal-ai/flux-pro/v1.1-ultra', label: 'Flux Pro Ultra (best)' },
-  { value: 'fal-ai/ideogram/v3', label: 'Ideogram v3' },
-  { value: 'fal-ai/imagen3', label: 'Imagen 3' },
-]
-
-const VIDEO_MODELS: { value: VideoModel; label: string }[] = [
-  { value: 'fal-ai/veo3/fast/image-to-video', label: 'Veo3 Fast' },
-  { value: 'fal-ai/veo3/image-to-video', label: 'Veo3' },
-  { value: 'fal-ai/veo3.1/reference-to-video', label: 'Veo3.1 Reference' },
-  { value: 'fal-ai/kling-video/v2.1/standard/image-to-video', label: 'Kling v2.1 Standard' },
-  { value: 'fal-ai/kling-video/v2.1/pro/image-to-video', label: 'Kling v2.1 Pro' },
-  { value: 'fal-ai/minimax/video-01', label: 'Minimax Video' },
-]
-
-// Duration options per model type
-const getDurationOptions = (videoModel: string | undefined): { value: string; label: string }[] => {
-  if (!videoModel) return []
-
-  if (videoModel.includes('kling')) {
-    return [
-      { value: '5', label: '5 sec' },
-      { value: '10', label: '10 sec' },
-    ]
-  }
-
-  if (videoModel.includes('veo')) {
-    return [
-      { value: '4s', label: '4 sec' },
-      { value: '6s', label: '6 sec' },
-      { value: '8s', label: '8 sec' },
-    ]
-  }
-
-  if (videoModel.includes('minimax')) {
-    return [
-      { value: '5s', label: '5 sec' },
-    ]
-  }
-
-  // Default
-  return [
-    { value: '5', label: '5 sec' },
-    { value: '6s', label: '6 sec' },
-  ]
+interface ProjectInfo {
+  name: string
+  description: string
+  platforms: string[]
+  workspace_id?: number
 }
-
-// Get default duration for model
-const getDefaultDuration = (videoModel: string | undefined): string => {
-  if (!videoModel) return '5'
-  if (videoModel.includes('kling')) return '5'
-  if (videoModel.includes('veo')) return '6s'
-  if (videoModel.includes('minimax')) return '5s'
-  return '5'
-}
-
-const ASPECT_RATIOS: { value: AspectRatio; label: string }[] = [
-  { value: '9:16', label: '9:16 (Portrait / Reels)' },
-  { value: '16:9', label: '16:9 (Landscape)' },
-  { value: '1:1', label: '1:1 (Square)' },
-]
 
 export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
   const navigate = useNavigate()
@@ -83,28 +30,59 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [settings, setSettings] = useState<TemplateSettings | null>(null)
 
-  // Form state
+  // Project info state
+  const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
+    name: '',
+    description: '',
+    platforms: [],
+  })
+
+  // Settings form state
   const [formData, setFormData] = useState<TemplateSettingsUpdate>({})
 
+  // Social accounts state
+  const [workspaceAccounts, setWorkspaceAccounts] = useState<SocialAccount[]>([])
+  const [boundAccounts, setBoundAccounts] = useState<SocialAccount[]>([])
+  const [bindingLoading, setBindingLoading] = useState<string | null>(null)
+
   useEffect(() => {
-    loadSettings()
+    loadData()
   }, [projectId])
 
-  const loadSettings = async () => {
+  const loadData = async () => {
     try {
       setLoading(true)
-      const response = await templateApi.getSettings(projectId)
-      setSettings(response.data)
-      setFormData({
-        preprocessing_prompt: response.data.preprocessing_prompt,
-        preprocessing_system_prompt: response.data.preprocessing_system_prompt || '',
-        image_prompt_template: response.data.image_prompt_template,
-        llm_model: response.data.llm_model as LLMModel,
-        image_model: response.data.image_model as ImageModel,
-        video_model: response.data.video_model as VideoModel,
-        image_aspect_ratio: response.data.image_aspect_ratio as AspectRatio,
-        video_duration: response.data.video_duration,
+
+      // Load project and settings in parallel
+      const [settingsRes, projectRes] = await Promise.all([
+        templateApi.getSettings(projectId),
+        projectsApi.get(projectId),
+      ])
+
+      const project = projectRes.data
+      setSettings(settingsRes.data)
+      setProjectInfo({
+        name: project.name,
+        description: project.description || '',
+        platforms: project.platforms || [],
+        workspace_id: project.workspace_id,
       })
+      setFormData({
+        preprocessing_prompt: settingsRes.data.preprocessing_prompt,
+        image_prompt_template: settingsRes.data.image_prompt_template,
+        llm_model: settingsRes.data.llm_model as LLMModel,
+        image_model: settingsRes.data.image_model as ImageModel,
+        video_model: settingsRes.data.video_model as VideoModel,
+        image_aspect_ratio: settingsRes.data.image_aspect_ratio as AspectRatio,
+        video_duration: settingsRes.data.video_duration,
+      })
+      setBoundAccounts(project.social_accounts || [])
+
+      // Load workspace accounts
+      if (project.workspace_id) {
+        const accountsRes = await socialAccountsApi.listByWorkspace(project.workspace_id)
+        setWorkspaceAccounts(accountsRes.data)
+      }
     } catch (err) {
       setError('Failed to load settings')
       console.error(err)
@@ -113,12 +91,61 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
     }
   }
 
+  // Get bound account for a platform
+  const getBoundAccount = useCallback((platform: string) => {
+    return boundAccounts.find(acc => acc.platform === platform && acc.is_active)
+  }, [boundAccounts])
+
+  // Bind/unbind account
+  const handleBindAccount = async (platform: string, accountId: number | null) => {
+    setBindingLoading(platform)
+    try {
+      const currentBound = getBoundAccount(platform)
+      if (currentBound) {
+        await projectsApi.unbindSocialAccount(projectId, currentBound.id)
+      }
+      if (accountId) {
+        const res = await projectsApi.bindSocialAccount(projectId, accountId)
+        setBoundAccounts(res.data.social_accounts)
+        // Auto-enable platform
+        if (!projectInfo.platforms.includes(platform)) {
+          setProjectInfo(prev => ({ ...prev, platforms: [...prev.platforms, platform] }))
+        }
+      } else {
+        setBoundAccounts(prev => prev.filter(acc => acc.platform !== platform))
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setBindingLoading(null)
+    }
+  }
+
+  const togglePlatform = (platform: string) => {
+    setProjectInfo(prev => ({
+      ...prev,
+      platforms: prev.platforms.includes(platform)
+        ? prev.platforms.filter(p => p !== platform)
+        : [...prev.platforms, platform]
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       setSaving(true)
       setError(null)
-      await templateApi.updateSettings(projectId, formData)
+
+      // Save project info and settings in parallel
+      await Promise.all([
+        projectsApi.update(projectId, {
+          name: projectInfo.name,
+          description: projectInfo.description || undefined,
+          platforms: projectInfo.platforms,
+        }),
+        templateApi.updateSettings(projectId, formData),
+      ])
+
       navigate(`/?project=${projectId}`)
     } catch (err) {
       setError('Failed to save settings')
@@ -135,7 +162,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       </div>
     )
   }
@@ -156,6 +183,112 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
         </div>
       )}
 
+      {/* Project Info */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
+          Project Info
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Project Name
+            </label>
+            <input
+              type="text"
+              value={projectInfo.name}
+              onChange={(e) => setProjectInfo({ ...projectInfo, name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <input
+              type="text"
+              value={projectInfo.description}
+              onChange={(e) => setProjectInfo({ ...projectInfo, description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Optional description"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Platforms
+            </label>
+            <div className="flex space-x-4">
+              {['instagram', 'tiktok', 'youtube'].map(platform => (
+                <label key={platform} className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={projectInfo.platforms.includes(platform)}
+                    onChange={() => togglePlatform(platform)}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="capitalize">{platform}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Social Accounts */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
+          Social Accounts
+        </h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Bind accounts to this project for publishing videos.
+        </p>
+        <div className="space-y-3">
+          {['instagram', 'tiktok', 'youtube'].map(platform => {
+            const platformAccounts = workspaceAccounts.filter(a => a.platform === platform && a.is_active)
+            const bound = getBoundAccount(platform)
+            const isLoading = bindingLoading === platform
+
+            return (
+              <div key={platform} className="border rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium capitalize">{platform}</span>
+                  {isLoading && <span className="text-xs text-gray-400">...</span>}
+                </div>
+                {platformAccounts.length === 0 ? (
+                  <p className="text-xs text-gray-400 mt-1">No connected accounts</p>
+                ) : (
+                  <select
+                    value={bound?.id || ''}
+                    onChange={(e) => handleBindAccount(platform, e.target.value ? Number(e.target.value) : null)}
+                    disabled={isLoading}
+                    className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                  >
+                    <option value="">Not selected</option>
+                    {platformAccounts.map(acc => (
+                      <option key={acc.id} value={acc.id} disabled={acc.is_token_expired}>
+                        @{acc.username || acc.display_name || acc.platform_user_id}
+                        {acc.is_token_expired ? ' (expired)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => window.open('/social-accounts', '_blank')}
+          className="mt-3 flex items-center text-sm text-primary-600 hover:text-primary-700"
+        >
+          <ExternalLink className="h-3 w-3 mr-1" />
+          Connect new account
+        </button>
+      </section>
+
       {/* LLM Settings */}
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
@@ -170,7 +303,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
             <select
               value={formData.llm_model || ''}
               onChange={(e) => setFormData({ ...formData, llm_model: e.target.value as LLMModel })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               {LLM_MODELS.map((model) => (
                 <option key={model.value} value={model.value}>
@@ -178,22 +311,6 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Preprocessing System Prompt
-            </label>
-            <p className="text-xs text-gray-500 mb-2">
-              System prompt for preprocessing LLM call (optional)
-            </p>
-            <textarea
-              value={formData.preprocessing_system_prompt || ''}
-              onChange={(e) => setFormData({ ...formData, preprocessing_system_prompt: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
-              placeholder="You are a creative assistant..."
-            />
           </div>
 
           <div>
@@ -207,7 +324,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
               value={formData.preprocessing_prompt || ''}
               onChange={(e) => setFormData({ ...formData, preprocessing_prompt: e.target.value })}
               rows={6}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
               placeholder="Enter preprocessing prompt..."
             />
           </div>
@@ -223,7 +340,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
               value={formData.image_prompt_template || ''}
               onChange={(e) => setFormData({ ...formData, image_prompt_template: e.target.value })}
               rows={6}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
               placeholder="Enter image prompt template..."
             />
           </div>
@@ -244,7 +361,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
             <select
               value={formData.image_model || ''}
               onChange={(e) => setFormData({ ...formData, image_model: e.target.value as ImageModel })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               {IMAGE_MODELS.map((model) => (
                 <option key={model.value} value={model.value}>
@@ -261,7 +378,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
             <select
               value={formData.image_aspect_ratio || ''}
               onChange={(e) => setFormData({ ...formData, image_aspect_ratio: e.target.value as AspectRatio })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               {ASPECT_RATIOS.map((ratio) => (
                 <option key={ratio.value} value={ratio.value}>
@@ -291,7 +408,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
                 const newDuration = getDefaultDuration(newModel)
                 setFormData({ ...formData, video_model: newModel, video_duration: newDuration })
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               {VIDEO_MODELS.map((model) => (
                 <option key={model.value} value={model.value}>
@@ -308,7 +425,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
             <select
               value={formData.video_duration || getDefaultDuration(formData.video_model)}
               onChange={(e) => setFormData({ ...formData, video_duration: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               {getDurationOptions(formData.video_model).map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -353,7 +470,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save Settings'}
         </button>

@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from app.db.base import get_db
 from app.core.deps import get_current_user
-from app.models.user import User
+from app.models.user import User, SocialAccount
 from app.models.project import Project
 from app.models.template_settings import TemplateSettings
 from app.models.video_template import VideoTemplate
@@ -90,7 +90,7 @@ async def create_template_project(
         project_type="template",
         story_template="",  # Not used for template type
         platforms=data.platforms,
-        duration=data.duration,
+        duration=10,  # Default, not used for template type (video_duration is in settings)
         aspect_ratio=data.image_aspect_ratio.value,
     )
     db.add(project)
@@ -100,7 +100,6 @@ async def create_template_project(
     settings = TemplateSettings(
         project_id=project.id,
         preprocessing_prompt=data.preprocessing_prompt,
-        preprocessing_system_prompt=data.preprocessing_system_prompt,
         image_prompt_template=data.image_prompt_template,
         llm_model=data.llm_model.value,
         image_model=data.image_model.value,
@@ -118,6 +117,16 @@ async def create_template_project(
         is_default=True,
     )
     db.add(video_template)
+
+    # Bind social accounts if provided
+    if data.social_account_ids:
+        for account_id in data.social_account_ids:
+            account = db.query(SocialAccount).filter(
+                SocialAccount.id == account_id,
+                SocialAccount.user_id == current_user.id
+            ).first()
+            if account:
+                project.social_accounts.append(account)
 
     db.commit()
     db.refresh(project)

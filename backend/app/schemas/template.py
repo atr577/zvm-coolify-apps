@@ -49,7 +49,6 @@ class GenerationStatusEnum(str, Enum):
 
 class TemplateSettingsBase(BaseModel):
     preprocessing_prompt: str
-    preprocessing_system_prompt: Optional[str] = None
     image_prompt_template: str
     llm_model: LLMModelEnum = LLMModelEnum.GPT4O_MINI
     image_model: ImageModelEnum = ImageModelEnum.NANO_BANANA
@@ -64,7 +63,6 @@ class TemplateSettingsCreate(TemplateSettingsBase):
 
 class TemplateSettingsUpdate(BaseModel):
     preprocessing_prompt: Optional[str] = None
-    preprocessing_system_prompt: Optional[str] = None
     image_prompt_template: Optional[str] = None
     llm_model: Optional[LLMModelEnum] = None
     image_model: Optional[ImageModelEnum] = None
@@ -77,7 +75,6 @@ class TemplateSettingsResponse(BaseModel):
     id: int
     project_id: int
     preprocessing_prompt: str
-    preprocessing_system_prompt: Optional[str] = None
     image_prompt_template: str
     llm_model: str
     image_model: str
@@ -233,7 +230,6 @@ class TemplateProjectCreate(BaseModel):
 
     # TemplateSettings fields (required)
     preprocessing_prompt: str
-    preprocessing_system_prompt: Optional[str] = None
     image_prompt_template: str
     llm_model: LLMModelEnum = LLMModelEnum.GPT4O_MINI
     image_model: ImageModelEnum = ImageModelEnum.NANO_BANANA
@@ -246,6 +242,6 @@ class TemplateProjectCreate(BaseModel):
     video_template_prompt: str
 
     # Optional project settings
-    duration: int = 10
     platforms: List[str] = ["instagram"]
     workspace_id: Optional[int] = None
+    social_account_ids: Optional[List[int]] = None
