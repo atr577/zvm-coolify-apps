@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useSearchParams } from 'react-router-dom'
-import { projectsApi, videosApi, workspacesApi } from '@/services/api'
+import { projectsApi, videosApi, workspacesApi, templateApi } from '@/services/api'
 import type { Video, CreateProjectDto, Workspace } from '@/types'
 
 export type FilterTab = 'all' | 'in_progress' | 'ready' | 'published' | 'errors'
@@ -62,7 +62,7 @@ export function useDashboardData() {
     () => workspacesApi.list().then(res => res.data)
   )
 
-  // Fetch videos for all projects
+  // Fetch videos for all projects (and generation counts for template projects)
   const { data: allVideos } = useQuery(
     ['videos-all'],
     async () => {
@@ -70,11 +70,38 @@ export function useDashboardData() {
       const videosByProject: Record<number, Video[]> = {}
       await Promise.all(
         projects.map(async (project) => {
-          const res = await videosApi.listByProject(project.id)
-          videosByProject[project.id] = res.data.items
+          if (project.project_type === 'template') {
+            // For template projects, skip video fetch (they use generations)
+            videosByProject[project.id] = []
+          } else {
+            const res = await videosApi.listByProject(project.id)
+            videosByProject[project.id] = res.data.items
+          }
         })
       )
       return videosByProject
+    },
+    { enabled: !!projects }
+  )
+
+  // Fetch generation counts for template projects
+  const { data: templateGenerationCounts } = useQuery(
+    ['template-generation-counts'],
+    async () => {
+      if (!projects) return {}
+      const counts: Record<number, number> = {}
+      const templateProjects = projects.filter(p => p.project_type === 'template')
+      await Promise.all(
+        templateProjects.map(async (project) => {
+          try {
+            const res = await templateApi.listGenerations(project.id, { offset: 0, limit: 1 }) // Fetch just 1 to get total
+            counts[project.id] = res.data.total
+          } catch {
+            counts[project.id] = 0
+          }
+        })
+      )
+      return counts
     },
     { enabled: !!projects }
   )
@@ -137,6 +164,7 @@ export function useDashboardData() {
     projects,
     workspaces,
     allVideos,
+    templateGenerationCounts,
     filteredVideos,
     counts,
 

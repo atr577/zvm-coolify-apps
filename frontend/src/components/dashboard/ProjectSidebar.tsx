@@ -4,6 +4,7 @@ import type { Project, Video } from '@/types'
 interface ProjectSidebarProps {
   projects: Project[] | undefined
   allVideos: Record<number, Video[]> | undefined
+  templateGenerationCounts?: Record<number, number>
   selectedProjectId: number | null
   onSelectProject: (id: number | null) => void
   onCreateProject: () => void
@@ -12,6 +13,7 @@ interface ProjectSidebarProps {
 export default function ProjectSidebar({
   projects,
   allVideos,
+  templateGenerationCounts,
   selectedProjectId,
   onSelectProject,
   onCreateProject
@@ -38,7 +40,10 @@ export default function ProjectSidebar({
 
         {/* Project list */}
         {projects?.map((project: Project) => {
-          const videoCount = allVideos?.[project.id]?.length || 0
+          // Use generation count for template projects, video count for others
+          const videoCount = project.project_type === 'template'
+            ? templateGenerationCounts?.[project.id] || 0
+            : allVideos?.[project.id]?.length || 0
           const isSelected = selectedProjectId === project.id
 
           return (

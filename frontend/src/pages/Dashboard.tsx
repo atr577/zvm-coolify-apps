@@ -26,6 +26,7 @@ export default function Dashboard() {
     projects,
     workspaces,
     allVideos,
+    templateGenerationCounts,
     filteredVideos,
     counts,
     projectsLoading,
@@ -57,6 +58,7 @@ export default function Dashboard() {
       <ProjectSidebar
         projects={projects}
         allVideos={allVideos}
+        templateGenerationCounts={templateGenerationCounts}
         selectedProjectId={selectedProjectId}
         onSelectProject={setSelectedProjectId}
         onCreateProject={() => setIsCreatingProject(true)}
