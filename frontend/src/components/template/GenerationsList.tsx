@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { templateApi } from '@/services/api'
 import type { Generation } from '@/types'
 
@@ -86,6 +86,9 @@ export function GenerationsList({ projectId, refreshTrigger }: GenerationsListPr
   // Track pending rating updates
   const [savingRatings, setSavingRatings] = useState<Set<number>>(new Set())
 
+  // Debounce timeouts for comments (key: generationId-field)
+  const debounceTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
+
   const loadGenerations = useCallback(async () => {
     try {
       const response = await templateApi.listGenerations(projectId, { offset, limit })
@@ -154,21 +157,31 @@ export function GenerationsList({ projectId, refreshTrigger }: GenerationsListPr
 
     // Debounce API call for comments
     if (field.includes('comment')) {
-      // For comments, save after a short delay
+      const debounceKey = `${generationId}-${field}`
+
+      // Clear previous timeout for this field
+      if (debounceTimeouts.current[debounceKey]) {
+        clearTimeout(debounceTimeouts.current[debounceKey])
+      }
+
+      // Show saving indicator
       setSavingRatings(prev => new Set(prev).add(generationId))
-      setTimeout(async () => {
+
+      // Set new timeout (1 second debounce)
+      debounceTimeouts.current[debounceKey] = setTimeout(async () => {
         try {
           await templateApi.updateGenerationRating(projectId, generationId, { [field]: value })
         } catch (err) {
-          console.error('Failed to save rating:', err)
+          console.error('Failed to save comment:', err)
         } finally {
           setSavingRatings(prev => {
             const next = new Set(prev)
             next.delete(generationId)
             return next
           })
+          delete debounceTimeouts.current[debounceKey]
         }
-      }, 500)
+      }, 1000)
     } else {
       // For ratings, save immediately
       try {
