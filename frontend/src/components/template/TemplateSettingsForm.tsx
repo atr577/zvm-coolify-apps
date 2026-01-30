@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
-import { templateApi, projectsApi, socialAccountsApi } from '@/services/api'
-import type { TemplateSettings, TemplateSettingsUpdate, LLMModel, ImageModel, VideoModel, AspectRatio, SocialAccount } from '@/types'
+import { templateApi, projectsApi, socialAccountsApi, workspacesApi } from '@/services/api'
+import type { TemplateSettings, TemplateSettingsUpdate, LLMModel, ImageModel, VideoModel, AspectRatio, SocialAccount, Workspace } from '@/types'
 import {
   LLM_MODELS,
   IMAGE_MODELS,
@@ -40,6 +40,9 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
   // Settings form state
   const [formData, setFormData] = useState<TemplateSettingsUpdate>({})
 
+  // Workspaces state
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+
   // Social accounts state
   const [workspaceAccounts, setWorkspaceAccounts] = useState<SocialAccount[]>([])
   const [boundAccounts, setBoundAccounts] = useState<SocialAccount[]>([])
@@ -53,11 +56,13 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
     try {
       setLoading(true)
 
-      // Load project and settings in parallel
-      const [settingsRes, projectRes] = await Promise.all([
+      // Load project, settings, and workspaces in parallel
+      const [settingsRes, projectRes, workspacesRes] = await Promise.all([
         templateApi.getSettings(projectId),
         projectsApi.get(projectId),
+        workspacesApi.list(),
       ])
+      setWorkspaces(workspacesRes.data)
 
       const project = projectRes.data
       setSettings(settingsRes.data)
@@ -135,6 +140,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
           name: projectInfo.name,
           description: projectInfo.description || undefined,
           platforms: projectInfo.platforms,
+          workspace_id: projectInfo.workspace_id,
         }),
         templateApi.updateSettings(projectId, formData),
       ])
@@ -209,7 +215,23 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
             />
           </div>
 
-          {/* Platforms - HIDDEN: derived from social accounts */}
+          {/* Workspace selector */}
+          {workspaces.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Workspace
+              </label>
+              <select
+                value={projectInfo.workspace_id || ''}
+                onChange={(e) => setProjectInfo({ ...projectInfo, workspace_id: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                {workspaces.map(ws => (
+                  <option key={ws.id} value={ws.id}>{ws.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </section>
 

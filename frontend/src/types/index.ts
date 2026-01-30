@@ -115,6 +115,7 @@ export interface UpdateProjectDto {
   project_type?: ProjectType
   require_image_approval?: boolean
   system_prompts?: SystemPrompts
+  workspace_id?: number
   // Remix-specific fields
   source_video_ids?: number[]
   scenario_template?: Record<string, string>
