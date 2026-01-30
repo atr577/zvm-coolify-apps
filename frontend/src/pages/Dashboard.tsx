@@ -1,14 +1,22 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from 'react-query'
 import { Plus, Film, Settings } from 'lucide-react'
 import { useDashboardData, FilterTab } from '@/hooks/useDashboardData'
 import ProjectForm from '@/components/ProjectForm'
+import { TemplateProjectForm, TemplateProjectView, type TemplateProjectCreateDto } from '@/components/template'
+import { templateApi } from '@/services/api'
 import ProjectSidebar from '@/components/dashboard/ProjectSidebar'
 import VideoGridCard from '@/components/dashboard/VideoGridCard'
 
+type ProjectTypeSelection = 'discover' | 'remix' | 'template' | null
+
 export default function Dashboard() {
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [selectedProjectType, setSelectedProjectType] = useState<ProjectTypeSelection>(null)
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const {
     selectedProjectId,
@@ -55,6 +63,13 @@ export default function Dashboard() {
       />
 
       {/* Main content */}
+      {/* Template project view */}
+      {selectedProject?.project_type === 'template' ? (
+        <TemplateProjectView
+          projectId={selectedProjectId!}
+          projectName={selectedProject.name}
+        />
+      ) : (
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with tabs */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -139,21 +154,96 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      )}
 
-      {/* Modal: Create project */}
-      {isCreatingProject && (
+      {/* Modal: Create project - Step 1: Select type */}
+      {isCreatingProject && !selectedProjectType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <h2 className="text-xl font-semibold p-6 pb-4 border-b">Выберите тип проекта</h2>
+            <div className="p-6 space-y-3">
+              {[
+                { value: 'discover' as const, label: 'Discover', description: 'Полный воркфлоу: Story → Image → Video' },
+                { value: 'remix' as const, label: 'Remix', description: 'Быстрая генерация по шаблону' },
+                { value: 'template' as const, label: 'Template', description: 'CSV варианты → многошаговая генерация' },
+              ].map(type => (
+                <button
+                  key={type.value}
+                  onClick={() => setSelectedProjectType(type.value)}
+                  className="w-full p-4 text-left border-2 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition"
+                >
+                  <span className="font-medium text-gray-900">{type.label}</span>
+                  <p className="text-sm text-gray-500 mt-1">{type.description}</p>
+                </button>
+              ))}
+            </div>
+            <div className="p-6 pt-0">
+              <button
+                onClick={() => setIsCreatingProject(false)}
+                className="w-full py-2 text-gray-600 hover:text-gray-900"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create project - Step 2: Discover/Remix form */}
+      {isCreatingProject && (selectedProjectType === 'discover' || selectedProjectType === 'remix') && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
-            <h2 className="text-xl font-semibold p-6 pb-4 border-b">Создать проект</h2>
+            <h2 className="text-xl font-semibold p-6 pb-4 border-b">
+              Создать проект ({selectedProjectType === 'discover' ? 'Discover' : 'Remix'})
+            </h2>
             <div className="overflow-y-auto p-6 pt-4">
               <ProjectForm
+                initialData={{ project_type: selectedProjectType }}
                 workspaces={workspaces}
                 onSubmit={(data) => {
-                  createProject(data)
+                  createProject({ ...data, project_type: selectedProjectType })
                   setIsCreatingProject(false)
+                  setSelectedProjectType(null)
                 }}
-                onCancel={() => setIsCreatingProject(false)}
+                onCancel={() => {
+                  setIsCreatingProject(false)
+                  setSelectedProjectType(null)
+                }}
                 isLoading={isCreating}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create project - Step 2: Template form */}
+      {isCreatingProject && selectedProjectType === 'template' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <h2 className="text-xl font-semibold p-6 pb-4 border-b">Создать Template проект</h2>
+            <div className="overflow-y-auto p-6 pt-4">
+              <TemplateProjectForm
+                workspaces={workspaces}
+                onSubmit={async (data: TemplateProjectCreateDto) => {
+                  setIsCreatingTemplate(true)
+                  try {
+                    const res = await templateApi.createProject(data)
+                    queryClient.invalidateQueries('projects')
+                    setIsCreatingProject(false)
+                    setSelectedProjectType(null)
+                    setSelectedProjectId(res.data.id)
+                  } catch (err) {
+                    console.error('Failed to create template project:', err)
+                    alert('Failed to create project')
+                  } finally {
+                    setIsCreatingTemplate(false)
+                  }
+                }}
+                onCancel={() => {
+                  setIsCreatingProject(false)
+                  setSelectedProjectType(null)
+                }}
+                isLoading={isCreatingTemplate}
               />
             </div>
           </div>

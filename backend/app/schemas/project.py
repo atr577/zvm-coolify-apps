@@ -10,7 +10,7 @@ AudioMode = Literal["none", "scene", "music", "voiceover", "auto"]
 AudioProvider = Literal["kling", "ai_music"]
 
 # Project type options
-ProjectType = Literal["discover", "remix"]
+ProjectType = Literal["discover", "remix", "template"]
 
 # System prompts for each workflow step
 class SystemPrompts(BaseModel):

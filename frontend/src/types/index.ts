@@ -34,7 +34,7 @@ export interface PromptData {
 export type AspectRatio = '9:16' | '16:9' | '1:1'
 export type AudioMode = 'none' | 'scene' | 'music' | 'voiceover' | 'auto'
 export type AudioProvider = 'kling' | 'ai_music'
-export type ProjectType = 'discover' | 'remix'
+export type ProjectType = 'discover' | 'remix' | 'template'
 
 export interface SystemPrompts {
   story?: string
@@ -385,6 +385,134 @@ export interface AdaptationData {
   [platform: string]: PlatformAdaptation | undefined
 }
 
+
+// --- Template Project Types ---
+
+export type LLMModel = 'gpt-4o-mini' | 'gpt-4o'
+export type ImageModel = 'fal-ai/nano-banana-pro' | 'fal-ai/flux-pro/v1.1-ultra' | 'fal-ai/flux-pro/v1.1' | 'fal-ai/ideogram/v3' | 'fal-ai/imagen3'
+export type VideoModel = 'fal-ai/veo3/fast/image-to-video' | 'fal-ai/veo3/image-to-video' | 'fal-ai/veo3.1/reference-to-video' | 'fal-ai/kling-video/v2.1/standard/image-to-video' | 'fal-ai/kling-video/v2.1/pro/image-to-video' | 'fal-ai/minimax/video-01'
+export type GenerationStatus = 'pending' | 'preprocessing' | 'generating_image' | 'generating_video' | 'completed' | 'failed'
+
+export interface TemplateSettings {
+  id: number
+  project_id: number
+  preprocessing_prompt: string
+  preprocessing_system_prompt: string | null
+  image_prompt_template: string
+  llm_model: string
+  image_model: string
+  video_model: string
+  image_aspect_ratio: string
+  video_duration: string
+  csv_columns: string[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TemplateSettingsUpdate {
+  preprocessing_prompt?: string
+  preprocessing_system_prompt?: string
+  image_prompt_template?: string
+  llm_model?: LLMModel
+  image_model?: ImageModel
+  video_model?: VideoModel
+  image_aspect_ratio?: AspectRatio
+  video_duration?: string
+}
+
+export interface Variant {
+  id: number
+  project_id: number
+  row_number: number
+  data: Record<string, string>
+  usage_count: number
+  last_used_at: string | null
+  created_at: string
+}
+
+export interface VariantListResponse {
+  variants: Variant[]
+  total: number
+  csv_columns: string[] | null
+}
+
+export interface CSVUploadResponse {
+  variants_created: number
+  csv_columns: string[]
+  preview: Record<string, string>[]
+}
+
+export interface VariantUpdate {
+  data?: Record<string, string>
+}
+
+export interface VideoTemplate {
+  id: number
+  project_id: number
+  name: string
+  prompt: string
+  is_default: boolean
+  is_deleted: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface VideoTemplateCreate {
+  name: string
+  prompt: string
+  is_default?: boolean
+}
+
+export interface VideoTemplateUpdate {
+  name?: string
+  prompt?: string
+  is_default?: boolean
+}
+
+export interface GenerateRequest {
+  variant_id?: number
+  video_template_id?: number
+}
+
+export interface Generation {
+  id: number
+  project_id: number
+  variant_id: number | null
+  video_template_id: number | null
+  llm_model: string
+  image_model: string
+  video_model: string
+  preprocessing_result: Record<string, unknown> | null
+  image_prompt: string | null
+  video_prompt: string | null
+  image_url: string | null
+  video_url: string | null
+  image_path: string | null
+  video_path: string | null
+  status: GenerationStatus
+  failed_at_step: string | null
+  error_message: string | null
+  variant_data: Record<string, string> | null
+  // User ratings (0-5 scale)
+  image_rating: number | null
+  image_comment: string | null
+  video_rating: number | null
+  video_comment: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface GenerationRatingUpdate {
+  image_rating?: number
+  image_comment?: string
+  video_rating?: number
+  video_comment?: string
+}
+
+export interface GenerationListResponse {
+  generations: Generation[]
+  total: number
+}
 
 // --- API Error Type ---
 

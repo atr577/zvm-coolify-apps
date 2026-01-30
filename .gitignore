@@ -95,3 +95,5 @@ backend/scripts/
 celerybeat-schedule
 celerybeat.pid
 dump.rdb
+
+docs/analysis/T15-manual-pipeline-test

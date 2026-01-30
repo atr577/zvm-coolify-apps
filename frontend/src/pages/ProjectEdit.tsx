@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { ArrowLeft } from 'lucide-react'
 import { projectsApi } from '@/services/api'
 import ProjectForm from '@/components/ProjectForm'
+import { TemplateSettingsForm } from '@/components/template'
 import type { CreateProjectDto } from '@/types'
 
 export default function ProjectEdit() {
@@ -48,33 +49,39 @@ export default function ProjectEdit() {
         </button>
 
         <h1 className="text-3xl font-bold text-gray-900">
-          Редактирование проекта: {project.name}
+          {project.project_type === 'template' ? 'Настройки' : 'Редактирование'}: {project.name}
         </h1>
         <p className="text-sm text-gray-600 mt-2">
-          Редактирование шаблона проекта. Изменения повлияют на новые ролики.
+          {project.project_type === 'template'
+            ? 'Настройки генерации: модели, промпты, параметры.'
+            : 'Редактирование шаблона проекта. Изменения повлияют на новые ролики.'}
         </p>
       </div>
 
       {/* Form */}
       <div className="bg-white p-6 rounded-lg shadow">
-        <ProjectForm
-          projectId={projectId}
-          initialData={{
-            ...project,
-            social_accounts: project.social_accounts,
-            description: project.description ?? undefined,
-            motion_template: project.motion_template ?? undefined,
-            audio_provider: project.audio_provider ?? undefined,
-            system_prompts: project.system_prompts ?? undefined,
-            source_video_ids: project.source_video_ids ?? undefined,
-            scenario_template: project.scenario_template ?? undefined,
-            placeholders: project.placeholders ?? undefined,
-            placeholder_suggestions: project.placeholder_suggestions ?? undefined
-          }}
-          onSubmit={(data) => updateMutation.mutate(data)}
-          onCancel={() => navigate(`/?project=${projectId}`)}
-          isLoading={updateMutation.isLoading}
-        />
+        {project.project_type === 'template' ? (
+          <TemplateSettingsForm projectId={projectId} />
+        ) : (
+          <ProjectForm
+            projectId={projectId}
+            initialData={{
+              ...project,
+              social_accounts: project.social_accounts,
+              description: project.description ?? undefined,
+              motion_template: project.motion_template ?? undefined,
+              audio_provider: project.audio_provider ?? undefined,
+              system_prompts: project.system_prompts ?? undefined,
+              source_video_ids: project.source_video_ids ?? undefined,
+              scenario_template: project.scenario_template ?? undefined,
+              placeholders: project.placeholders ?? undefined,
+              placeholder_suggestions: project.placeholder_suggestions ?? undefined
+            }}
+            onSubmit={(data) => updateMutation.mutate(data)}
+            onCancel={() => navigate(`/?project=${projectId}`)}
+            isLoading={updateMutation.isLoading}
+          />
+        )}
       </div>
     </div>
   )

@@ -73,6 +73,29 @@ class Project(Base):
         back_populates="projects"
     )
 
+    # Template project type relationships
+    template_settings = relationship(
+        "TemplateSettings",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    video_templates = relationship(
+        "VideoTemplate",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+    variants = relationship(
+        "Variant",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+    template_generations = relationship(
+        "TemplateGeneration",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
         return f"<Project(id={self.id}, name='{self.name}', workspace_id={self.workspace_id})>"
 

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, GenerationRatingUpdate } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -251,6 +251,91 @@ export const metricsApi = {
     api.get<VideoMetricsSummary[]>('/api/metrics/leaderboard', {
       params: { period, sort_by: sortBy, limit }
     }),
+}
+
+// Template Project API
+export const templateApi = {
+  // Create template project
+  createProject: (data: {
+    name: string
+    description?: string
+    preprocessing_prompt: string
+    image_prompt_template: string
+    llm_model: string
+    image_model: string
+    video_model: string
+    image_aspect_ratio: string
+    video_template_name: string
+    video_template_prompt: string
+    duration?: number
+    platforms?: string[]
+    workspace_id?: number
+  }) => api.post<{ id: number; name: string; project_type: string; message: string }>('/api/projects/template', data),
+
+  // Template Settings
+  getSettings: (projectId: number) =>
+    api.get<TemplateSettings>(`/api/projects/${projectId}/template-settings`),
+
+  updateSettings: (projectId: number, data: TemplateSettingsUpdate) =>
+    api.put<TemplateSettings>(`/api/projects/${projectId}/template-settings`, data),
+
+  // Variants
+  uploadCsv: (projectId: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<CSVUploadResponse>(`/api/projects/${projectId}/variants/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  listVariants: (projectId: number, params?: { search?: string; offset?: number; limit?: number }) =>
+    api.get<VariantListResponse>(`/api/projects/${projectId}/variants`, { params }),
+
+  updateVariant: (projectId: number, variantId: number, data: VariantUpdate) =>
+    api.put<Variant>(`/api/projects/${projectId}/variants/${variantId}`, data),
+
+  deleteVariant: (projectId: number, variantId: number) =>
+    api.delete(`/api/projects/${projectId}/variants/${variantId}`),
+
+  deleteAllVariants: (projectId: number) =>
+    api.delete(`/api/projects/${projectId}/variants`),
+
+  // Video Templates
+  listVideoTemplates: (projectId: number, includeDeleted = false) =>
+    api.get<VideoTemplate[]>(`/api/projects/${projectId}/video-templates`, {
+      params: { include_deleted: includeDeleted }
+    }),
+
+  createVideoTemplate: (projectId: number, data: VideoTemplateCreate) =>
+    api.post<VideoTemplate>(`/api/projects/${projectId}/video-templates`, data),
+
+  getVideoTemplate: (projectId: number, templateId: number) =>
+    api.get<VideoTemplate>(`/api/projects/${projectId}/video-templates/${templateId}`),
+
+  updateVideoTemplate: (projectId: number, templateId: number, data: VideoTemplateUpdate) =>
+    api.put<VideoTemplate>(`/api/projects/${projectId}/video-templates/${templateId}`, data),
+
+  deleteVideoTemplate: (projectId: number, templateId: number) =>
+    api.delete(`/api/projects/${projectId}/video-templates/${templateId}`),
+
+  // Generations
+  startGeneration: (projectId: number, data: GenerateRequest = {}) =>
+    api.post<Generation>(`/api/projects/${projectId}/generate`, data),
+
+  listGenerations: (projectId: number, params?: { offset?: number; limit?: number }) =>
+    api.get<GenerationListResponse>(`/api/projects/${projectId}/generations`, { params }),
+
+  getGeneration: (projectId: number, generationId: number) =>
+    api.get<Generation>(`/api/projects/${projectId}/generations/${generationId}`),
+
+  retryGeneration: (projectId: number, generationId: number) =>
+    api.post<Generation>(`/api/projects/${projectId}/generations/${generationId}/retry`),
+
+  deleteGeneration: (projectId: number, generationId: number) =>
+    api.delete(`/api/projects/${projectId}/generations/${generationId}`),
+
+  updateGenerationRating: (projectId: number, generationId: number, data: GenerationRatingUpdate) =>
+    api.patch<Generation>(`/api/projects/${projectId}/generations/${generationId}/rating`, data),
 }
 
 export default api

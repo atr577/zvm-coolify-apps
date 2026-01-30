@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.base import engine, Base
-from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files
+from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files, template
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 import os
 import logging
@@ -61,7 +61,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG,
-    lifespan=lifespan
+    lifespan=lifespan,
+    redirect_slashes=False
 )
 
 # CORS
@@ -85,6 +86,7 @@ app.include_router(workflow.router, prefix="/api/workflow", tags=["workflow"])
 app.include_router(publishing.router, prefix="/api/publish", tags=["publish"])
 app.include_router(metrics.router, prefix="/api", tags=["metrics"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
+app.include_router(template.router, prefix="/api", tags=["template"])
 
 
 @app.get("/")

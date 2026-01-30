@@ -215,6 +215,17 @@ class FalClient:
 
     # ============ Image Generation ============
 
+    def _convert_aspect_ratio_to_image_size(self, aspect_ratio: str) -> str:
+        """Convert aspect_ratio (9:16, 16:9, 1:1) to flux image_size format."""
+        mapping = {
+            "9:16": "portrait_16_9",
+            "16:9": "landscape_16_9",
+            "1:1": "square",
+            "4:3": "landscape_4_3",
+            "3:4": "portrait_4_3",
+        }
+        return mapping.get(aspect_ratio, "portrait_16_9")
+
     async def submit_image(
         self,
         prompt: str,
@@ -222,35 +233,52 @@ class FalClient:
         negative_prompt: Optional[str] = None,
         seed: Optional[int] = None,
         resolution: str = "1K",
-        output_format: str = "jpeg"
+        output_format: str = "jpeg",
+        model: Optional[str] = None
     ) -> str:
         """Submit image generation task, returns request_id"""
-        input_data = {
-            "prompt": prompt,
-            "aspect_ratio": aspect_ratio,
-            "resolution": resolution,
-            "output_format": output_format,
-            "num_images": 1
-        }
+        use_model = model or settings.IMAGE_MODEL or self.IMAGE_MODEL
+        is_flux = "flux" in use_model.lower()
+
+        # Model-aware parameter building
+        if is_flux:
+            # Flux models use image_size instead of aspect_ratio
+            image_size = self._convert_aspect_ratio_to_image_size(aspect_ratio)
+            input_data = {
+                "prompt": prompt,
+                "image_size": image_size,
+                "output_format": output_format,
+                "num_images": 1
+            }
+            logger.info(f"Flux model: converted aspect_ratio '{aspect_ratio}' to image_size '{image_size}'")
+        else:
+            # Other models (nano-banana-pro, ideogram, imagen) use aspect_ratio
+            input_data = {
+                "prompt": prompt,
+                "aspect_ratio": aspect_ratio,
+                "resolution": resolution,
+                "output_format": output_format,
+                "num_images": 1
+            }
 
         if negative_prompt:
             input_data["negative_prompt"] = negative_prompt
         if seed is not None:
             input_data["seed"] = seed
 
-        model = settings.IMAGE_MODEL or self.IMAGE_MODEL
-        return await self._submit_task(model, input_data)
+        return await self._submit_task(use_model, input_data)
 
     async def poll_image(
         self,
         request_id: str,
-        max_wait_time: int = 120,
-        poll_interval: int = 3
+        max_wait_time: int = 300,
+        poll_interval: int = 3,
+        model: Optional[str] = None
     ) -> str:
         """Poll image generation until complete, returns image URL"""
-        model = settings.IMAGE_MODEL or self.IMAGE_MODEL
+        use_model = model or settings.IMAGE_MODEL or self.IMAGE_MODEL
         result = await self._poll_status(
-            model,
+            use_model,
             request_id,
             max_wait_time=max_wait_time,
             poll_interval=poll_interval
@@ -269,7 +297,8 @@ class FalClient:
         aspect_ratio: str = "9:16",
         negative_prompt: Optional[str] = None,
         seed: Optional[int] = None,
-        resolution: str = "1K"
+        resolution: str = "1K",
+        model: Optional[str] = None
     ) -> str:
         """High-level: submit + poll, returns image URL"""
         # Mock mode
@@ -282,7 +311,8 @@ class FalClient:
         request_data = {
             "prompt": prompt,
             "aspect_ratio": aspect_ratio,
-            "resolution": resolution
+            "resolution": resolution,
+            "model": model
         }
         cache_key = self._get_cache_key("image", request_data, seed)
         cached = self._load_from_cache(cache_key, "image")
@@ -296,9 +326,10 @@ class FalClient:
             aspect_ratio=aspect_ratio,
             negative_prompt=negative_prompt,
             seed=seed,
-            resolution=resolution
+            resolution=resolution,
+            model=model
         )
-        image_url = await self.poll_image(request_id)
+        image_url = await self.poll_image(request_id, model=model)
 
         # Cache result
         self._save_to_cache(cache_key, "image", request_data, {
@@ -319,15 +350,26 @@ class FalClient:
         resolution: str = "720p",
         generate_audio: bool = True,
         negative_prompt: Optional[str] = None,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        model: Optional[str] = None
     ) -> str:
         """Submit video generation task, returns request_id"""
-        # Validate duration - veo3.1 only supports 4s, 6s, 8s
-        valid_durations = {"4s", "6s", "8s"}
-        if duration not in valid_durations:
-            duration_map = {"5s": "6s", "7s": "8s", "10s": "8s"}
-            duration = duration_map.get(duration, "6s")
-            logger.info(f"Adjusted duration to {duration} (veo3.1 constraint)")
+        use_model = model or settings.VIDEO_MODEL or self.VIDEO_MODEL
+        is_kling = "kling" in use_model.lower()
+
+        # Model-specific duration validation
+        if is_kling:
+            # Kling supports '5' or '10' (no 's' suffix)
+            if duration not in {"5", "10"}:
+                duration = "5"
+                logger.info(f"Adjusted duration to {duration} (kling constraint)")
+        else:
+            # Veo supports 4s, 6s, 8s
+            valid_durations = {"4s", "6s", "8s"}
+            if duration not in valid_durations:
+                duration_map = {"5s": "6s", "7s": "8s", "10s": "8s", "5": "6s", "10": "8s"}
+                duration = duration_map.get(duration, "6s")
+                logger.info(f"Adjusted duration to {duration} (veo constraint)")
 
         input_data = {
             "prompt": prompt,
@@ -343,19 +385,19 @@ class FalClient:
         if seed is not None:
             input_data["seed"] = seed
 
-        model = settings.VIDEO_MODEL or self.VIDEO_MODEL
-        return await self._submit_task(model, input_data)
+        return await self._submit_task(use_model, input_data)
 
     async def poll_video(
         self,
         request_id: str,
         max_wait_time: int = 600,
-        poll_interval: int = 10
+        poll_interval: int = 10,
+        model: Optional[str] = None
     ) -> str:
         """Poll video generation until complete, returns video URL"""
-        model = settings.VIDEO_MODEL or self.VIDEO_MODEL
+        use_model = model or settings.VIDEO_MODEL or self.VIDEO_MODEL
         result = await self._poll_status(
-            model,
+            use_model,
             request_id,
             max_wait_time=max_wait_time,
             poll_interval=poll_interval
@@ -379,16 +421,24 @@ class FalClient:
         resolution: str = "720p",
         generate_audio: bool = True,
         negative_prompt: Optional[str] = None,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        model: Optional[str] = None
     ) -> str:
         """High-level: submit + poll, returns video URL"""
-        # Validate duration - veo3.1 only supports 4s, 6s, 8s
-        valid_durations = {"4s", "6s", "8s"}
-        if duration not in valid_durations:
-            # Map invalid durations to nearest valid
-            duration_map = {"5s": "6s", "7s": "8s", "10s": "8s"}
-            duration = duration_map.get(duration, "6s")
-            logger.info(f"Adjusted duration to {duration} (veo3.1 constraint)")
+        use_model = model or settings.VIDEO_MODEL or self.VIDEO_MODEL
+        is_kling = "kling" in use_model.lower()
+
+        # Model-specific duration validation
+        if is_kling:
+            if duration not in {"5", "10"}:
+                duration = "5"
+                logger.info(f"Adjusted duration to {duration} (kling constraint)")
+        else:
+            valid_durations = {"4s", "6s", "8s"}
+            if duration not in valid_durations:
+                duration_map = {"5s": "6s", "7s": "8s", "10s": "8s", "5": "6s", "10": "8s"}
+                duration = duration_map.get(duration, "6s")
+                logger.info(f"Adjusted duration to {duration} (veo constraint)")
 
         # Mock mode
         if self.mock_mode:
@@ -401,7 +451,8 @@ class FalClient:
             "image_url": image_url,
             "prompt": prompt,
             "duration": duration,
-            "generate_audio": generate_audio
+            "generate_audio": generate_audio,
+            "model": model
         }
         cache_key = self._get_cache_key("video", request_data, seed)
         cached = self._load_from_cache(cache_key, "video")
@@ -418,9 +469,10 @@ class FalClient:
             resolution=resolution,
             generate_audio=generate_audio,
             negative_prompt=negative_prompt,
-            seed=seed
+            seed=seed,
+            model=model
         )
-        video_url = await self.poll_video(request_id)
+        video_url = await self.poll_video(request_id, model=model)
 
         # Cache result
         self._save_to_cache(cache_key, "video", request_data, {

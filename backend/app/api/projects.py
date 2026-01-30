@@ -49,7 +49,7 @@ def user_has_workspace_access(db: Session, user_id: int, workspace_id: int) -> b
     ).first() is not None
 
 
-@router.post("/", response_model=ProjectResponse)
+@router.post("", response_model=ProjectResponse)
 async def create_project(
     project: ProjectCreate,
     db: Session = Depends(get_db),
@@ -113,7 +113,7 @@ async def create_project(
     return db_project
 
 
-@router.get("/")
+@router.get("")
 async def list_projects(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),

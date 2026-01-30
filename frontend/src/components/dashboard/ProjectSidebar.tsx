@@ -1,4 +1,4 @@
-import { FolderOpen, Plus, Compass, Repeat } from 'lucide-react'
+import { FolderOpen, Plus, Compass, Repeat, LayoutTemplate } from 'lucide-react'
 import type { Project, Video } from '@/types'
 
 interface ProjectSidebarProps {
@@ -52,6 +52,8 @@ export default function ProjectSidebar({
               <div className="flex items-center flex-1 min-w-0">
                 {project.project_type === 'remix' ? (
                   <Repeat className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-purple-400'}`} />
+                ) : project.project_type === 'template' ? (
+                  <LayoutTemplate className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-green-500'}`} />
                 ) : (
                   <Compass className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-blue-400'}`} />
                 )}
