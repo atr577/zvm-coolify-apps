@@ -121,14 +121,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
     }
   }
 
-  const togglePlatform = (platform: string) => {
-    setProjectInfo(prev => ({
-      ...prev,
-      platforms: prev.platforms.includes(platform)
-        ? prev.platforms.filter(p => p !== platform)
-        : [...prev.platforms, platform]
-    }))
-  }
+  // togglePlatform removed - platforms derived from social accounts
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -216,24 +209,7 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Platforms
-            </label>
-            <div className="flex space-x-4">
-              {['instagram', 'tiktok', 'youtube'].map(platform => (
-                <label key={platform} className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={projectInfo.platforms.includes(platform)}
-                    onChange={() => togglePlatform(platform)}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="capitalize">{platform}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {/* Platforms - HIDDEN: derived from social accounts */}
         </div>
       </section>
 

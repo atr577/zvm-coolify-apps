@@ -54,7 +54,7 @@ export default function ProjectForm({
     description: initialData?.description || '',
     story_template: initialData?.story_template || '',
     motion_template: initialData?.motion_template || '',
-    platforms: initialData?.platforms || [],
+    platforms: initialData?.platforms || ['youtube'],  // Default fallback, actual platforms derived from social accounts
     duration: initialData?.duration || 5,
     aspect_ratio: initialData?.aspect_ratio || '9:16',
     audio_mode: initialData?.audio_mode || 'auto',
@@ -120,14 +120,7 @@ export default function ProjectForm({
     onSubmit(formData)
   }
 
-  const togglePlatform = (platform: string) => {
-    setFormData(prev => ({
-      ...prev,
-      platforms: prev.platforms.includes(platform)
-        ? prev.platforms.filter(p => p !== platform)
-        : [...prev.platforms, platform]
-    }))
-  }
+  // togglePlatform removed - platforms derived from social accounts
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -194,7 +187,7 @@ export default function ProjectForm({
         </div>
       )}
 
-      {/* Platforms */}
+      {/* Platforms - HIDDEN: derived from social accounts
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Платформы *
@@ -213,6 +206,7 @@ export default function ProjectForm({
           ))}
         </div>
       </div>
+      */}
 
       {/* Social Accounts (edit mode only) */}
       {projectId && (
@@ -489,7 +483,7 @@ export default function ProjectForm({
       <div className="flex space-x-3">
         <button
           type="submit"
-          disabled={isLoading || !formData.name || !formData.story_template || formData.platforms.length === 0}
+          disabled={isLoading || !formData.name || !formData.story_template}
           className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? 'Сохранение...' : 'Сохранить'}

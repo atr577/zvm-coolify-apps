@@ -4,7 +4,22 @@ import PublishingMetaEditor from '@/components/PublishingMetaEditor'
 import MetricsSection from './MetricsSection'
 import StepsList from './StepsList'
 import { getBestVideoUrl } from '@/utils/video'
-import type { Video, VideoMetricsSummary } from '@/types'
+import type { Video, VideoMetricsSummary, Project } from '@/types'
+
+// Derive platforms from social_accounts (mirrors backend get_project_platforms)
+function getEffectivePlatforms(project?: Project): string[] {
+  if (!project) return []
+  // Priority: active social_accounts > project.platforms
+  if (project.social_accounts?.length) {
+    const activePlatforms = [...new Set(
+      project.social_accounts
+        .filter(acc => acc.is_active)
+        .map(acc => acc.platform)
+    )]
+    if (activePlatforms.length > 0) return activePlatforms
+  }
+  return project.platforms || []
+}
 
 interface CompletedVideoViewProps {
   video: Video
@@ -52,7 +67,7 @@ export default function CompletedVideoView({
           <div className="flex flex-col">
             <PublishingMetaEditor
               videoId={videoId}
-              platforms={video.project?.platforms || []}
+              platforms={getEffectivePlatforms(video.project)}
               initialMeta={video.publishing_meta || video.adaptation_data || null}
             />
 
@@ -61,7 +76,7 @@ export default function CompletedVideoView({
                 videoId={videoId}
                 publishingStepId={0}
                 adaptationData={video.publishing_meta || video.adaptation_data || {}}
-                platforms={video.project?.platforms || []}
+                platforms={getEffectivePlatforms(video.project)}
                 videoUrl={getBestVideoUrl(video) || ''}
                 projectSocialAccounts={video.project?.social_accounts}
               />

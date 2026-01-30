@@ -1,7 +1,21 @@
 import { AlertCircle, CheckCircle, Clock, Eye, Heart, Image, MessageCircle, Share2 } from 'lucide-react'
 import { InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PlatformIcons'
 import { getImageUrl } from '@/utils/video'
-import type { Video, StepType } from '@/types'
+import type { Video, StepType, Project } from '@/types'
+
+// Derive platforms from social_accounts (mirrors backend get_project_platforms)
+function getEffectivePlatforms(project?: Project): string[] {
+  if (!project) return []
+  if (project.social_accounts?.length) {
+    const activePlatforms = [...new Set(
+      project.social_accounts
+        .filter(acc => acc.is_active)
+        .map(acc => acc.platform)
+    )]
+    if (activePlatforms.length > 0) return activePlatforms
+  }
+  return project.platforms || []
+}
 
 const STEP_ORDER: StepType[] = ['scenario', 'image', 'video', 'audio']
 
@@ -154,13 +168,16 @@ export default function VideoGridCard({ video, onClick, showProjectName, project
         </div>
 
         {/* Platform icons (if published) */}
-        {isPublished && video.project?.platforms && (
-          <div className="flex items-center gap-2 mt-2">
-            {video.project.platforms.includes('instagram') && <InstagramIcon className="w-4 h-4 text-pink-500" />}
-            {video.project.platforms.includes('tiktok') && <TikTokIcon className="w-4 h-4 text-gray-900" />}
-            {video.project.platforms.includes('youtube') && <YouTubeIcon className="w-4 h-4 text-red-500" />}
-          </div>
-        )}
+        {isPublished && (() => {
+          const platforms = getEffectivePlatforms(video.project)
+          return platforms.length > 0 && (
+            <div className="flex items-center gap-2 mt-2">
+              {platforms.includes('instagram') && <InstagramIcon className="w-4 h-4 text-pink-500" />}
+              {platforms.includes('tiktok') && <TikTokIcon className="w-4 h-4 text-gray-900" />}
+              {platforms.includes('youtube') && <YouTubeIcon className="w-4 h-4 text-red-500" />}
+            </div>
+          )
+        })()}
 
         {/* Metrics (if published and has data) */}
         {isPublished && metrics && (

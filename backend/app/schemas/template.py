@@ -242,6 +242,6 @@ class TemplateProjectCreate(BaseModel):
     video_template_prompt: str
 
     # Optional project settings
-    platforms: List[str] = ["instagram"]
+    platforms: List[str] = ["youtube"]
     workspace_id: Optional[int] = None
     social_account_ids: Optional[List[int]] = None
