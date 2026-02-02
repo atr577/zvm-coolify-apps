@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { templateApi } from '@/services/api'
 import type { Generation } from '@/types'
+import VideoPreview from '@/components/video/VideoPreview'
 
 interface GenerationsListProps {
   projectId: number
@@ -318,10 +319,10 @@ export function GenerationsList({ projectId, refreshTrigger }: GenerationsListPr
                 {gen.video_path && (
                   <div className="space-y-2">
                     <div className="text-xs font-medium text-gray-500 uppercase">Video</div>
-                    <video
-                      src={`/api/files/${gen.video_path}`}
-                      controls
-                      className="w-full max-h-64 rounded border border-gray-200"
+                    <VideoPreview
+                      videoUrl={`/api/files/${gen.video_path}`}
+                      thumbnailUrl={gen.image_path ? `/api/files/${gen.image_path}` : null}
+                      className="w-full max-h-64"
                     />
                     <RatingInput
                       label="Rating"

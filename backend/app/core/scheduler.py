@@ -71,6 +71,33 @@ def start_scheduler():
         sched.start()
         logger.info("Scheduler started")
 
+        # Add scheduled publisher job (runs every 5 minutes)
+        _add_scheduled_publisher_job(sched)
+
+
+def _add_scheduled_publisher_job(sched: AsyncIOScheduler):
+    """Add the scheduled publisher job if not already present."""
+    from app.services.scheduled_publisher import scheduled_publish_job
+
+    job_id = "scheduled_publisher"
+
+    # Check if job already exists (from persistent store)
+    existing = sched.get_job(job_id)
+    if existing:
+        logger.info(f"Scheduled publisher job already exists, next run: {existing.next_run_time}")
+        return
+
+    # Add new job - runs every 5 minutes
+    sched.add_job(
+        scheduled_publish_job,
+        trigger="interval",
+        minutes=5,
+        id=job_id,
+        replace_existing=True,
+        misfire_grace_time=300,  # 5 minutes grace
+    )
+    logger.info("Added scheduled publisher job (every 5 minutes)")
+
 
 def shutdown_scheduler():
     """Gracefully shutdown the scheduler"""

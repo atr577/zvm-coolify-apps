@@ -56,6 +56,9 @@ class Project(Base):
     # Workflow control: pause after image generation for approval (saves tokens during dev)
     require_image_approval = Column(Integer, nullable=False, default=0)  # 0=False, 1=True (SQLite boolean)
 
+    # Timezone for scheduled publishing (IANA timezone, e.g., "Europe/Moscow")
+    timezone = Column(String(50), nullable=False, default="UTC")
+
     # System prompts for each workflow step (optional overrides)
     # JSON: {"story": "...", "description": "...", "prompt": "...", "scenario": "...", "adaptation": "..."}
     system_prompts = Column(JSON, nullable=True)
@@ -93,6 +96,26 @@ class Project(Base):
     template_generations = relationship(
         "TemplateGeneration",
         back_populates="project",
+        cascade="all, delete-orphan"
+    )
+
+    # Moderation relationships
+    approved_generations = relationship(
+        "ApprovedGeneration",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+    rejection_archive = relationship(
+        "RejectionArchive",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+
+    # Publishing config (1:1 for scheduled publishing)
+    publishing_config = relationship(
+        "PublishingConfig",
+        back_populates="project",
+        uselist=False,
         cascade="all, delete-orphan"
     )
 

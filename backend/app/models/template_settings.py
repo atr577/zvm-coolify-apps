@@ -72,6 +72,11 @@ class TemplateSettings(Base):
     # CSV Metadata (detected on import)
     csv_columns = Column(JSON, nullable=True)
 
+    # Publishing metadata prompts
+    title_prompt = Column(Text, nullable=True)  # Prompt template for title generation
+    description_prompt = Column(Text, nullable=True)  # Prompt template for description generation
+    platform_rules = Column(JSON, nullable=True)  # Per-platform rules: {"instagram": {...}, "tiktok": {...}}
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

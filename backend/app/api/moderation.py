@@ -30,6 +30,7 @@ from app.schemas.moderation import (
 from app.api.projects import user_has_workspace_access
 from app.services.openai_service import openai_service
 from app.services.template_generation_service import get_template_generation_service
+from app.utils.urls import get_local_url
 
 router = APIRouter()
 
@@ -133,8 +134,8 @@ async def get_moderation_queue(
             preprocessing_result=gen.preprocessing_result,
             image_prompt=gen.image_prompt,
             video_prompt=gen.video_prompt,
-            image_url=gen.image_url,
-            video_url=gen.video_url,
+            image_url=get_local_url(gen.image_path, gen.image_url),
+            video_url=get_local_url(gen.video_path, gen.video_url),
             created_at=gen.created_at,
             completed_at=gen.completed_at
         )
@@ -228,8 +229,8 @@ async def approve_generation(
         published_at=approved.published_at,
         created_at=approved.created_at,
         updated_at=approved.updated_at,
-        thumbnail_url=generation.image_url,
-        video_url=generation.video_url
+        thumbnail_url=get_local_url(generation.image_path, generation.image_url),
+        video_url=get_local_url(generation.video_path, generation.video_url)
     )
 
     return ApproveResponse(approved_generation=response)
@@ -293,7 +294,7 @@ async def reject_generation(
         rejected_by=rejection.rejected_by,
         rejected_at=rejection.rejected_at,
         created_at=rejection.created_at,
-        thumbnail_url=generation.image_url
+        thumbnail_url=get_local_url(generation.image_path, generation.image_url)
     )
 
     return RejectActionResponse(rejection=response)
@@ -444,7 +445,7 @@ async def get_rejection_archive(
             rejected_by=rej.rejected_by,
             rejected_by_name=rej.rejected_by_user.full_name or rej.rejected_by_user.email if rej.rejected_by_user else None,
             rejected_at=rej.rejected_at,
-            thumbnail_url=gen.image_url if gen else None,
+            thumbnail_url=get_local_url(gen.image_path, gen.image_url) if gen else None,
             variant_data=gen.variant.data if gen and gen.variant else None
         )
         items.append(item)

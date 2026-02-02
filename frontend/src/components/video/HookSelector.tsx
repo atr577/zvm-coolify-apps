@@ -150,6 +150,7 @@ export default function HookSelector({
               src={videoUrl}
               muted
               playsInline
+              preload="metadata"
               className="w-full h-full object-contain"
             />
           </div>

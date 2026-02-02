@@ -12,6 +12,8 @@ from app.services.social_service import social_publisher
 from app.core.deps import get_current_user
 from app.core.scheduler import schedule_metrics_for_video
 
+from app.utils.urls import get_local_url
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -259,7 +261,7 @@ async def publish_to_youtube(
                 access_token=social_account.access_token,
                 refresh_token=social_account.refresh_token,
                 tags=[],
-                thumbnail_url=video.image_url
+                thumbnail_url=get_local_url(video.local_image_path, video.image_url)
             )
 
             # Update existing record
@@ -300,7 +302,7 @@ async def publish_to_youtube(
                 refresh_token=social_account.refresh_token,
                 tags=[],
                 privacy_status=request.privacy_status or "public",
-                thumbnail_url=video.image_url
+                thumbnail_url=get_local_url(video.local_image_path, video.image_url)
             )
 
             publish_record.status = "published"

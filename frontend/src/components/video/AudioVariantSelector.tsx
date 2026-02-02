@@ -46,6 +46,7 @@ export default function AudioVariantSelector({
               src={variants[currentIndex]}
               controls
               autoPlay
+              preload="auto"
               className="w-full h-full object-contain"
             />
           </div>

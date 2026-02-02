@@ -450,6 +450,7 @@ function StepContentDisplay({
           <video
             src={content as string}
             controls
+            preload="metadata"
             className="max-h-96 rounded-lg shadow-lg"
           />
         </div>
@@ -461,6 +462,7 @@ function StepContentDisplay({
           <video
             src={content as string}
             controls
+            preload="metadata"
             className="max-h-96 rounded-lg shadow-lg"
           />
         </div>

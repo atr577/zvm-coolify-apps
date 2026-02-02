@@ -451,4 +451,105 @@ export interface RejectionArchiveResponse {
   total: number
 }
 
+// --- Publishing Schedule API (T21) ---
+
+export interface PublishingConfig {
+  id: number
+  project_id: number
+  enabled: boolean
+  days: string[]
+  preferred_times: string[]
+  depth_days: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface PublishingConfigUpdate {
+  enabled: boolean
+  days: string[]
+  preferred_times: string[]
+  depth_days: number
+}
+
+export interface PublishingQueueItem {
+  id: number
+  project_id: number
+  template_generation_id: number
+  position: number
+  approved_at: string
+  publishing_metadata: Record<string, { title: string; description: string; hashtags: string }> | null
+  status: string
+  platform_statuses: Record<string, string> | null
+  retry_count: number
+  last_error: string | null
+  published_at: string | null
+  created_at: string | null
+  updated_at: string | null
+  thumbnail_url: string | null
+  video_url: string | null
+}
+
+export interface PublishingQueueResponse {
+  items: PublishingQueueItem[]
+  total: number
+}
+
+export interface ScheduleSlotItem {
+  id: number
+  generation_id: number
+  thumbnail_url: string | null
+  video_url: string | null
+  publishing_metadata: Record<string, { title: string; description: string; hashtags: string }> | null
+  status: string
+  platform_statuses: Record<string, string> | null
+}
+
+export interface ScheduleSlot {
+  scheduled_at: string
+  item: ScheduleSlotItem | null
+}
+
+export interface ScheduleWarning {
+  type: 'queue_low' | 'no_platforms' | 'config_disabled'
+  message: string
+}
+
+export interface PublishingScheduleResponse {
+  config: {
+    enabled: boolean
+    days: string[]
+    preferred_times: string[]
+    timezone: string
+    depth_days: number
+  }
+  slots: ScheduleSlot[]
+  warnings: ScheduleWarning[]
+}
+
+export const publishingScheduleApi = {
+  // Get publishing config
+  getConfig: (projectId: number) =>
+    api.get<PublishingConfig>(`/api/projects/${projectId}/publishing-config`),
+
+  // Update publishing config
+  updateConfig: (projectId: number, data: PublishingConfigUpdate) =>
+    api.put<PublishingConfig>(`/api/projects/${projectId}/publishing-config`, data),
+
+  // Get publishing queue
+  getQueue: (projectId: number) =>
+    api.get<PublishingQueueResponse>(`/api/projects/${projectId}/publishing-queue`),
+
+  // Update queue item metadata
+  updateQueueItem: (projectId: number, itemId: number, data: { publishing_metadata: Record<string, { title: string; description: string; hashtags: string }> }) =>
+    api.put<PublishingQueueItem>(`/api/projects/${projectId}/publishing-queue/${itemId}`, data),
+
+  // Delete queue item
+  deleteQueueItem: (projectId: number, itemId: number) =>
+    api.delete(`/api/projects/${projectId}/publishing-queue/${itemId}`),
+
+  // Get computed schedule
+  getSchedule: (projectId: number) =>
+    api.get<PublishingScheduleResponse>(`/api/projects/${projectId}/publishing-schedule`),
+}
+
 export default api

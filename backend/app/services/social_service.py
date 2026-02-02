@@ -142,8 +142,21 @@ class YouTubeService:
         self.client_id = settings.YOUTUBE_CLIENT_ID
         self.client_secret = settings.YOUTUBE_CLIENT_SECRET
 
-    async def download_file(self, url: str, suffix: str = ".mp4") -> str:
-        """Download file from URL to temp file"""
+    async def download_file(self, url: str | None, suffix: str = ".mp4") -> str:
+        """Download file from URL to temp file, or copy from local storage."""
+        if not url:
+            raise ValueError("URL is required for download_file")
+
+        # Handle local files (e.g., /api/files/media/images/123.png)
+        if url.startswith("/api/files/"):
+            local_path = url.replace("/api/files/", "")
+            full_path = os.path.join(settings.MEDIA_DIR, local_path)
+            if os.path.exists(full_path):
+                # File is local - just return the path directly
+                return full_path
+            # Fall through to remote download if file doesn't exist locally
+
+        # Download from remote URL
         async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.get(url)
             response.raise_for_status()

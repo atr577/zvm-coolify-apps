@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
 import { moderationApi, type ModerationQueueItem } from '@/services/api'
+import VideoPreview from '@/components/video/VideoPreview'
 
 interface ModerationQueueProps {
   projectId: number
@@ -191,17 +192,11 @@ export function ModerationQueue({ projectId, onApproved }: ModerationQueueProps)
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Left: Video */}
               <div>
-                {item.video_url ? (
-                  <video
-                    src={item.video_url}
-                    controls
-                    className="w-full max-h-[28rem] rounded border border-gray-200"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-40 bg-gray-100 rounded border border-gray-200 text-gray-400">
-                    No video
-                  </div>
-                )}
+                <VideoPreview
+                  videoUrl={item.video_url}
+                  thumbnailUrl={item.image_url}
+                  className="w-full max-h-[28rem]"
+                />
               </div>
 
               {/* Right: Text info */}

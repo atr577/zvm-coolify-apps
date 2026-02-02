@@ -8,16 +8,18 @@ import { GenerationPanel } from './GenerationPanel'
 import { GenerationsList } from './GenerationsList'
 import { ModerationQueue } from './ModerationQueue'
 import { RejectionArchive } from './RejectionArchive'
+import { PublishingTab } from './PublishingTab'
 import type { CSVUploadResponse, Generation } from '@/types'
 
 interface TemplateProjectViewProps {
   projectId: number
   projectName: string
+  projectTimezone?: string
 }
 
-type TabType = 'generate' | 'variants' | 'templates' | 'moderation'
+type TabType = 'generate' | 'variants' | 'templates' | 'moderation' | 'publishing'
 
-export function TemplateProjectView({ projectId, projectName }: TemplateProjectViewProps) {
+export function TemplateProjectView({ projectId, projectName, projectTimezone = 'UTC' }: TemplateProjectViewProps) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -25,7 +27,7 @@ export function TemplateProjectView({ projectId, projectName }: TemplateProjectV
 
   // Get tab from URL or default to 'generate'
   const tabParam = searchParams.get('tab')
-  const validTabs: TabType[] = ['generate', 'moderation', 'variants', 'templates']
+  const validTabs: TabType[] = ['generate', 'moderation', 'publishing', 'variants', 'templates']
   const activeTab: TabType = validTabs.includes(tabParam as TabType) ? (tabParam as TabType) : 'generate'
 
   const handleTabChange = (tab: TabType) => {
@@ -46,6 +48,7 @@ export function TemplateProjectView({ projectId, projectName }: TemplateProjectV
   const tabs: { key: TabType; label: string }[] = [
     { key: 'generate', label: 'Generate' },
     { key: 'moderation', label: 'Moderation' },
+    { key: 'publishing', label: 'Publishing' },
     { key: 'variants', label: 'Variants' },
     { key: 'templates', label: 'Templates' },
   ]
@@ -115,6 +118,13 @@ export function TemplateProjectView({ projectId, projectName }: TemplateProjectV
               <RejectionArchive projectId={projectId} />
             </div>
           </div>
+        )}
+
+        {activeTab === 'publishing' && (
+          <PublishingTab
+            projectId={projectId}
+            projectTimezone={projectTimezone}
+          />
         )}
 
         {activeTab === 'variants' && (

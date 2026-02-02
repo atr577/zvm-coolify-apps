@@ -72,6 +72,7 @@ export interface Project {
   project_type: ProjectType
   require_image_approval: boolean
   system_prompts: SystemPrompts | null
+  timezone: string  // IANA timezone for scheduled publishing
   // Remix-specific fields
   source_video_ids: number[] | null
   scenario_template: Record<string, string> | null

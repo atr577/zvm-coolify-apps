@@ -48,6 +48,7 @@ export default function CompletedVideoView({
                 <video
                   src={getBestVideoUrl(video) ?? undefined}
                   controls
+                  preload="metadata"
                   className="w-full h-full object-contain"
                 />
                 {(video.video_with_audio_url || video.local_audio_path) &&

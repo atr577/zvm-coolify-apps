@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MessageCircle, ImageOff } from 'lucide-react'
 import type { KeyMoment, PlatformAdaptation } from '@/types'
+import VideoPreview from './VideoPreview'
 
 // Image with placeholder fallback on error
 function ImageWithFallback({ src, alt }: { src: string; alt: string }) {
@@ -145,11 +146,10 @@ export default function StepContentRenderer({ stepType, content }: StepContentRe
         return (
           <div className="space-y-2">
             {content.video_url && (
-              <video
-                src={content.video_url}
-                controls
-                className="w-full max-w-md rounded-lg shadow-lg"
-                style={{ maxHeight: '400px' }}
+              <VideoPreview
+                videoUrl={content.video_url}
+                thumbnailUrl={content.source_image_url || content.image_url}
+                className="w-full max-w-md max-h-[400px]"
               />
             )}
             {content.task_id && (
