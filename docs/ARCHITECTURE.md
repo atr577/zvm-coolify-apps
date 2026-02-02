@@ -1,7 +1,7 @@
 # Архитектура REGGY
 
-**Версия:** 2.0
-**Дата:** 2026-01-30
+**Версия:** 2.1
+**Дата:** 2026-02-02
 
 ---
 
@@ -28,6 +28,7 @@ REGGY/
 │   │   ├── services/        # Business logic & AI clients
 │   │   │   └── prompts/     # AI prompt templates
 │   │   ├── providers/       # Audio/video provider implementations
+│   │   ├── utils/           # Utility functions (urls, etc.)
 │   │   └── db/              # Database setup
 │   ├── alembic/             # Migrations
 │   └── data/media/          # Local media storage
@@ -170,6 +171,8 @@ User ─────────┬──────── Workspace
 | `TemplateSettings` | Generation settings for template project |
 | `TemplateGeneration` | Batch generation job |
 | `Variant` | Generated variant from template |
+| `PublishingConfig` | Schedule settings (days, times, depth) |
+| `ApprovedGeneration` | Publishing queue item (approved videos) |
 
 ---
 
@@ -209,7 +212,12 @@ User ─────────┬──────── Workspace
    └── For each Variant:
        IMAGE → VIDEO → AUDIO (parallel where possible)
 
-4. Variants completed → ready for review/publish
+4. User moderates (approve/regenerate/reject)
+   └── Approved → ApprovedGeneration (publishing queue)
+
+5. Scheduler publishes at configured slots
+   └── PublishingConfig: days, times, timezone
+   └── FIFO queue assignment to slots
 ```
 
 ---
@@ -275,6 +283,7 @@ nginx proxies `/api/` to backend, including file serving.
 |-----|----------|---------|
 | `fetch_video_metrics` | Every 6 hours | Update metrics from social platforms |
 | `cleanup_old_media` | Daily | Remove orphaned media files |
+| `publish_scheduled` | Every minute | Publish videos at scheduled slots |
 
 Jobs stored in PostgreSQL, survive restarts.
 

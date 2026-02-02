@@ -1,7 +1,7 @@
 # API Reference
 
-**Версия:** 2.0
-**Дата:** 2026-01-30
+**Версия:** 2.1
+**Дата:** 2026-02-02
 
 **Full API docs:** http://localhost:8000/docs (Swagger UI)
 
@@ -90,6 +90,17 @@ Authorization: Bearer <access_token>
 | POST | `/projects/{id}/generations` | Start generation |
 | GET | `/generations/{id}` | Get generation status |
 | POST | `/generations/{id}/cancel` | Cancel generation |
+
+### Publishing Schedule `/api/projects/{id}/publishing-*`
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/projects/{id}/publishing-config` | Get schedule config |
+| PUT | `/projects/{id}/publishing-config` | Update schedule config |
+| GET | `/projects/{id}/publishing-queue` | Get queue items |
+| PUT | `/projects/{id}/publishing-queue/{item_id}` | Update queue item metadata |
+| DELETE | `/projects/{id}/publishing-queue/{item_id}` | Remove from queue |
+| GET | `/projects/{id}/publishing-schedule` | Get computed schedule with slots |
 
 ### OAuth `/api/oauth`
 

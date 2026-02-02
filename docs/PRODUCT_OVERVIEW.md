@@ -1,7 +1,7 @@
 # REGGY - AI Video Generation Platform
 
-**Версия:** 2.0
-**Дата:** 2026-01-30
+**Версия:** 2.1
+**Дата:** 2026-02-02
 
 ---
 
@@ -129,6 +129,13 @@ Regenerate с текстовым feedback:
 - "Сделай более динамичным"
 - LLM использует feedback для улучшения промпта
 
+### Publishing Schedule (Template projects)
+Автоматическая публикация по расписанию:
+- Настройка дней недели и времени публикации
+- Очередь одобренных видео (FIFO)
+- Визуальный календарь слотов
+- Предпросмотр видео из расписания
+
 ---
 
 ## API
@@ -144,6 +151,7 @@ Regenerate с текстовым feedback:
 | Videos | `/api/videos` | Video CRUD |
 | Workflow | `/api/workflow` | 4-stage generation pipeline |
 | Template | `/api/template` | Template project operations |
+| Publishing Schedule | `/api/projects/{id}/publishing-*` | Schedule config, queue, calendar |
 | Publish | `/api/publish` | Social media publishing |
 | Metrics | `/api/metrics` | Analytics |
 
