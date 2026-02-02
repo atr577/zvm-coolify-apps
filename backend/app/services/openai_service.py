@@ -394,6 +394,57 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
             logger.error(f"Failed to generate content variants: {e}")
             raise
 
+    async def modify_prompts_with_feedback(
+        self,
+        original_image_prompt: str,
+        original_video_prompt: Optional[str],
+        feedback: str
+    ) -> Dict[str, str]:
+        """Modify generation prompts based on user feedback.
+
+        Args:
+            original_image_prompt: Original image prompt
+            original_video_prompt: Original video prompt (optional)
+            feedback: User feedback describing what to change
+
+        Returns:
+            Dict with modified image_prompt, video_prompt, and changes_summary
+        """
+        from app.services.prompts import build_feedback_modification_prompt
+
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock modified prompts")
+            await asyncio.sleep(0.5)
+            return {
+                "image_prompt": f"{original_image_prompt} [MODIFIED based on: {feedback[:50]}...]",
+                "video_prompt": original_video_prompt or "Smooth camera movement",
+                "changes_summary": f"Mock: применён фидбэк '{feedback[:50]}...'"
+            }
+
+        prompt = build_feedback_modification_prompt(
+            original_image_prompt=original_image_prompt,
+            original_video_prompt=original_video_prompt,
+            feedback=feedback
+        )
+
+        try:
+            response = await self.client.generate_json(
+                prompt=prompt,
+                model=self.model
+            )
+
+            result = {
+                "image_prompt": response.get("image_prompt", original_image_prompt),
+                "video_prompt": response.get("video_prompt", original_video_prompt or ""),
+                "changes_summary": response.get("changes_summary", "Промпты модифицированы")
+            }
+
+            logger.info(f"Prompts modified with feedback: {result['changes_summary']}")
+            return result
+
+        except OpenAIClientError as e:
+            logger.error(f"Failed to modify prompts with feedback: {e}")
+            raise
 
 
 # Singleton instance

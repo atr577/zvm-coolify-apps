@@ -65,6 +65,9 @@ class TemplateGeneration(Base):
     error_message = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
+    # Moderation flags
+    regenerated = Column(Boolean, default=False, nullable=False)  # True if this was replaced by regeneration
+
     # Cost tracking (populated later)
     llm_tokens_used = Column(Integer, nullable=True)
     image_cost = Column(Float, nullable=True)
@@ -84,3 +87,7 @@ class TemplateGeneration(Base):
     project = relationship("Project", back_populates="template_generations")
     variant = relationship("Variant", back_populates="generations")
     video_template = relationship("VideoTemplate", back_populates="generations")
+
+    # Moderation relationships (one-to-one, either approved or rejected)
+    approved_generation = relationship("ApprovedGeneration", back_populates="template_generation", uselist=False)
+    rejection = relationship("RejectionArchive", back_populates="template_generation", uselist=False)

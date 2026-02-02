@@ -14,6 +14,7 @@ from .validation import VALIDATION_SYSTEM_PROMPT, VALIDATION_CRITERIA, build_val
 from .publishing import build_publishing_meta_prompt
 from .variants import build_variants_prompt
 from .music_prompt import LYRIA2_MUSIC_PROMPT, SUNO_MUSIC_PROMPT, SAFETY_REWRITE_PROMPT, UNSAFE_WORDS_MAP
+from .feedback import FEEDBACK_SYSTEM_PROMPT, build_feedback_modification_prompt
 
 __all__ = [
     "IMAGE_PROMPT_SYSTEM_PROMPT", "build_image_prompt_prompt",
@@ -22,4 +23,5 @@ __all__ = [
     "build_publishing_meta_prompt",
     "build_variants_prompt",
     "LYRIA2_MUSIC_PROMPT", "SUNO_MUSIC_PROMPT", "SAFETY_REWRITE_PROMPT", "UNSAFE_WORDS_MAP",
+    "FEEDBACK_SYSTEM_PROMPT", "build_feedback_modification_prompt",
 ]

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.base import engine, Base
-from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files, template
+from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files, template, moderation
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 import os
 import logging
@@ -87,6 +87,7 @@ app.include_router(publishing.router, prefix="/api/publish", tags=["publish"])
 app.include_router(metrics.router, prefix="/api", tags=["metrics"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(template.router, prefix="/api", tags=["template"])
+app.include_router(moderation.router, prefix="/api", tags=["moderation"])
 
 
 @app.get("/")

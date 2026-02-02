@@ -15,6 +15,8 @@ from app.models.template_settings import (
 from app.models.video_template import VideoTemplate
 from app.models.variant import Variant
 from app.models.template_generation import TemplateGeneration, GenerationStatus
+from app.models.approved_generation import ApprovedGeneration
+from app.models.rejection_archive import RejectionArchive
 
 __all__ = [
     "User",
@@ -44,4 +46,6 @@ __all__ = [
     "Variant",
     "TemplateGeneration",
     "GenerationStatus",
+    "ApprovedGeneration",
+    "RejectionArchive",
 ]

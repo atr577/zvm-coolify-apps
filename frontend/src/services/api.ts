@@ -344,4 +344,111 @@ export const templateApi = {
     api.patch<Generation>(`/api/projects/${projectId}/generations/${generationId}/rating`, data),
 }
 
+// Moderation API (Template projects)
+export const moderationApi = {
+  // Get moderation queue (pending generations)
+  getQueue: (projectId: number) =>
+    api.get<ModerationQueueResponse>(`/api/projects/${projectId}/moderation-queue`),
+
+  // Approve generation (generates metadata, adds to publishing queue)
+  approve: (projectId: number, generationId: number) =>
+    api.post<ApproveResponse>(`/api/projects/${projectId}/moderation-queue/${generationId}/approve`),
+
+  // Reject generation (moves to archive)
+  reject: (projectId: number, generationId: number, data: { reason: string; comment?: string }) =>
+    api.post<RejectResponse>(`/api/projects/${projectId}/moderation-queue/${generationId}/reject`, data),
+
+  // Regenerate (marks old as regenerated, starts new generation with optional feedback)
+  regenerate: (projectId: number, generationId: number, data?: { feedback?: string }) =>
+    api.post<RegenerateResponse>(`/api/projects/${projectId}/moderation-queue/${generationId}/regenerate`, data),
+
+  // Get rejection archive
+  getArchive: (projectId: number, params?: { offset?: number; limit?: number }) =>
+    api.get<RejectionArchiveResponse>(`/api/projects/${projectId}/rejection-archive`, { params }),
+}
+
+// Moderation types
+export interface ModerationQueueItem {
+  id: number
+  variant: { id: number; data: Record<string, unknown> } | null
+  video_template: { id: number; name: string } | null
+  preprocessing_result: Record<string, unknown> | null
+  image_prompt: string | null
+  video_prompt: string | null
+  image_url: string | null
+  video_url: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface ModerationQueueResponse {
+  items: ModerationQueueItem[]
+  total: number
+}
+
+export interface ApprovedGeneration {
+  id: number
+  project_id: number
+  template_generation_id: number
+  position: number
+  approved_at: string
+  publishing_metadata: Record<string, { title: string; description: string; hashtags?: string }> | null
+  status: string
+  platform_statuses: Record<string, string> | null
+  retry_count: number
+  last_error: string | null
+  published_at: string | null
+  created_at: string
+  updated_at: string
+  thumbnail_url: string | null
+  video_url: string | null
+}
+
+export interface ApproveResponse {
+  approved_generation: ApprovedGeneration
+}
+
+export interface Rejection {
+  id: number
+  project_id: number
+  template_generation_id: number
+  reason: string
+  comment: string | null
+  rejected_by: number | null
+  rejected_at: string
+  created_at: string
+  thumbnail_url: string | null
+}
+
+export interface RejectResponse {
+  rejection: Rejection
+}
+
+export interface RegenerateResponse {
+  new_generation: {
+    id: number
+    status: string
+    variant_id: number | null
+    video_template_id: number | null
+    created_at: string | null
+  }
+}
+
+export interface RejectionArchiveItem {
+  id: number
+  template_generation_id: number
+  reason: string
+  comment: string | null
+  rejected_by: number | null
+  rejected_by_name: string | null
+  rejected_at: string
+  thumbnail_url: string | null
+  variant_data: Record<string, unknown> | null
+}
+
+export interface RejectionArchiveResponse {
+  items: RejectionArchiveItem[]
+  total: number
+}
+
 export default api
