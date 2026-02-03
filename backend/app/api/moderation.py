@@ -18,7 +18,9 @@ from app.schemas.moderation import (
     ModerationQueueItem,
     ModerationQueueResponse,
     ApprovedGenerationResponse,
+    ApproveRequest,
     ApproveResponse,
+    PreGenerateMetadataResponse,
     RejectRequest,
     RejectionResponse,
     RejectActionResponse,
@@ -144,12 +146,51 @@ async def get_moderation_queue(
     return ModerationQueueResponse(items=items, total=len(items))
 
 
+# --- Pre-generate Metadata ---
+
+@router.post("/projects/{project_id}/moderation-queue/{generation_id}/pre-generate-metadata", response_model=PreGenerateMetadataResponse, tags=["moderation"])
+async def pre_generate_metadata(
+    project_id: int,
+    generation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Pre-generate publishing metadata for a generation WITHOUT approving it.
+
+    Returns metadata that user can review and edit before calling approve.
+    """
+    project = get_template_project(db, project_id, current_user)
+    generation = get_generation_for_moderation(db, project_id, generation_id)
+
+    scenario_data = {
+        "preprocessing_result": generation.preprocessing_result,
+        "image_prompt": generation.image_prompt,
+        "video_prompt": generation.video_prompt,
+    }
+
+    try:
+        metadata = await openai_service.generate_publishing_meta(
+            platforms=project.platforms or ["youtube"],
+            scenario_data=scenario_data,
+            fallback_text=generation.image_prompt[:500] if generation.image_prompt else None
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Metadata generation failed: {str(e)}. Please retry."
+        )
+
+    return PreGenerateMetadataResponse(metadata=metadata)
+
+
 # --- Approve ---
 
 @router.post("/projects/{project_id}/moderation-queue/{generation_id}/approve", response_model=ApproveResponse, tags=["moderation"])
 async def approve_generation(
     project_id: int,
     generation_id: int,
+    request: Optional[ApproveRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -157,7 +198,7 @@ async def approve_generation(
     Approve a generation for publishing.
 
     1. Check for duplicate approve (409 Conflict)
-    2. Generate publishing metadata via LLM
+    2. Use provided metadata or generate via LLM
     3. Create ApprovedGeneration with position = MAX(position) + 1
     4. Return the created ApprovedGeneration
     """
@@ -172,27 +213,29 @@ async def approve_generation(
     if existing:
         raise HTTPException(status_code=409, detail="Generation already approved")
 
-    # Generate publishing metadata via LLM
+    # Use provided metadata or generate via LLM
+    if request and request.publishing_metadata:
+        publishing_metadata = {
+            platform: meta.model_dump() for platform, meta in request.publishing_metadata.items()
+        }
+    else:
+        scenario_data = {
+            "preprocessing_result": generation.preprocessing_result,
+            "image_prompt": generation.image_prompt,
+            "video_prompt": generation.video_prompt,
+        }
 
-    # Build context from generation
-    scenario_data = {
-        "preprocessing_result": generation.preprocessing_result,
-        "image_prompt": generation.image_prompt,
-        "video_prompt": generation.video_prompt,
-    }
-
-    try:
-        publishing_metadata = await openai_service.generate_publishing_meta(
-            platforms=project.platforms or ["youtube"],
-            scenario_data=scenario_data,
-            fallback_text=generation.image_prompt[:500] if generation.image_prompt else None
-        )
-    except Exception as e:
-        # Metadata generation failed - return 503 for retry
-        raise HTTPException(
-            status_code=503,
-            detail=f"Metadata generation failed: {str(e)}. Please retry."
-        )
+        try:
+            publishing_metadata = await openai_service.generate_publishing_meta(
+                platforms=project.platforms or ["youtube"],
+                scenario_data=scenario_data,
+                fallback_text=generation.image_prompt[:500] if generation.image_prompt else None
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Metadata generation failed: {str(e)}. Please retry."
+            )
 
     # Get next position with FOR UPDATE to prevent race conditions
     max_position = db.query(func.max(ApprovedGeneration.position)).filter(

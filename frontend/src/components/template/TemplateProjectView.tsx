@@ -240,6 +240,7 @@ export function TemplateProjectView({
           <ReviewScreen
             projectId={projectId}
             pendingCount={stats?.review_count || 0}
+            onNavigate={handleNavigate}
           />
         )}
 

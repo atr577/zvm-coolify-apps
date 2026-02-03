@@ -350,9 +350,16 @@ export const moderationApi = {
   getQueue: (projectId: number) =>
     api.get<ModerationQueueResponse>(`/api/projects/${projectId}/moderation-queue`),
 
-  // Approve generation (generates metadata, adds to publishing queue)
-  approve: (projectId: number, generationId: number) =>
-    api.post<ApproveResponse>(`/api/projects/${projectId}/moderation-queue/${generationId}/approve`),
+  // Pre-generate publishing metadata without approving
+  preGenerateMetadata: (projectId: number, generationId: number) =>
+    api.post<PreGenerateMetadataResponse>(`/api/projects/${projectId}/moderation-queue/${generationId}/pre-generate-metadata`),
+
+  // Approve generation (with optional pre-edited metadata)
+  approve: (projectId: number, generationId: number, metadata?: Record<string, PlatformMetadata>) =>
+    api.post<ApproveResponse>(
+      `/api/projects/${projectId}/moderation-queue/${generationId}/approve`,
+      metadata ? { publishing_metadata: metadata } : undefined
+    ),
 
   // Reject generation (moves to archive)
   reject: (projectId: number, generationId: number, data: { reason: string; comment?: string }) =>
@@ -368,6 +375,16 @@ export const moderationApi = {
 }
 
 // Moderation types
+export interface PlatformMetadata {
+  title: string
+  description: string
+  hashtags?: string
+}
+
+export interface PreGenerateMetadataResponse {
+  metadata: Record<string, PlatformMetadata>
+}
+
 export interface ModerationQueueItem {
   id: number
   variant: { id: number; data: Record<string, unknown> } | null

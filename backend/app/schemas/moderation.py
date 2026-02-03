@@ -72,9 +72,21 @@ class ApprovedGenerationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ApproveRequest(BaseModel):
+    """Optional request body for approve (with pre-edited metadata)."""
+    publishing_metadata: Optional[Dict[str, PlatformMetadata]] = None
+
+
 class ApproveResponse(BaseModel):
     """Response for approve action."""
     approved_generation: ApprovedGenerationResponse
+
+
+# --- Pre-generate Metadata Schemas ---
+
+class PreGenerateMetadataResponse(BaseModel):
+    """Response for pre-generate metadata (without approving)."""
+    metadata: Dict[str, PlatformMetadata]
 
 
 # --- Rejection Schemas ---
