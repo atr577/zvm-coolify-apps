@@ -14,7 +14,7 @@ import { RejectionArchive } from './RejectionArchive'
 type FilterType = 'all' | 'pending' | 'approved' | 'rejected'
 type ItemStatus = 'pending' | 'approved' | 'rejected' | 'redo'
 
-type ScreenType = 'dashboard' | 'review' | 'pipeline'
+type ScreenType = 'dashboard' | 'generate' | 'review' | 'details'
 
 interface ReviewScreenProps {
   projectId: number
@@ -274,10 +274,10 @@ export function ReviewScreen({ projectId, onNavigate }: ReviewScreenProps) {
           {filter === 'pending' && onNavigate && (
             <div className="flex gap-3 justify-center">
               <button
-                onClick={() => onNavigate!('pipeline')}
+                onClick={() => onNavigate!('generate')}
                 className="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700"
               >
-                Run pipeline
+                Generate
               </button>
               <button
                 onClick={() => onNavigate!('dashboard')}

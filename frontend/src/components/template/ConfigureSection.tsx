@@ -3,12 +3,14 @@ import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucid
 import {
   templateApi,
   projectsApi,
+  workspacesApi,
   socialAccountsApi,
   publishingScheduleApi,
 } from '@/services/api'
 import type {
   SocialAccount,
   TemplateSettings,
+  Workspace,
   LLMModel,
   ImageModel,
   VideoModel,
@@ -24,6 +26,7 @@ import { DistributionStep } from './DistributionStep'
 
 interface ConfigureSectionProps {
   projectId: number
+  showProjectSettings?: boolean
 }
 
 // Settings that can be edited (preprocessing, image, video fields)
@@ -45,13 +48,18 @@ interface EditablePublishing {
   depth_days: number
 }
 
+// Project info editable fields
+interface EditableProjectInfo {
+  name: string
+  description: string
+  workspace_id: number | undefined
+}
+
 type StepNumber = 1 | 2 | 3 | 4 | 5
 
 type StepStatus = 'complete' | 'incomplete' | 'empty'
 
-export function ConfigureSection({ projectId }: ConfigureSectionProps) {
-  // Expand/collapse
-  const [expanded, setExpanded] = useState(false)
+export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSectionProps) {
   const [activeStep, setActiveStep] = useState<StepNumber | null>(null)
 
   // Loading
@@ -76,6 +84,11 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
   const [workspaceId, setWorkspaceId] = useState<number | null>(null)
   const [timezone, setTimezone] = useState('UTC')
   const [bindingLoading, setBindingLoading] = useState<string | null>(null)
+
+  // Project info (for Details tab)
+  const [initialProjectInfo, setInitialProjectInfo] = useState<EditableProjectInfo | null>(null)
+  const [editedProjectInfo, setEditedProjectInfo] = useState<EditableProjectInfo | null>(null)
+  const [allWorkspaces, setAllWorkspaces] = useState<Workspace[]>([])
 
   // Refresh triggers for child components
   const [variantsRefresh, setVariantsRefresh] = useState(0)
@@ -112,13 +125,26 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
       setWorkspaceId(project.workspace_id)
       setTimezone(project.timezone || 'UTC')
 
-      // Load workspace accounts
+      // Project info for Details tab
+      const projInfo: EditableProjectInfo = {
+        name: project.name,
+        description: project.description || '',
+        workspace_id: project.workspace_id,
+      }
+      setInitialProjectInfo(projInfo)
+      setEditedProjectInfo({ ...projInfo })
+
+      // Load workspace accounts + workspaces list
       if (project.workspace_id) {
         try {
-          const wsAccounts = await socialAccountsApi.listByWorkspace(project.workspace_id)
+          const [wsAccounts, wsListRes] = await Promise.all([
+            socialAccountsApi.listByWorkspace(project.workspace_id),
+            workspacesApi.list(),
+          ])
           setWorkspaceAccounts(wsAccounts.data)
+          setAllWorkspaces(wsListRes.data)
         } catch {
-          // Workspace accounts may fail — not critical
+          // Not critical
         }
       }
 
@@ -135,15 +161,13 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
       setInitialPublishing(editablePub)
       setEditedPublishing({ ...editablePub })
 
-      // Auto-expand logic
+      // Auto-open relevant step if setup incomplete
       if (variantsRes.data.total === 0) {
-        setExpanded(true)
         setActiveStep(1)
       } else if (
         (project.social_accounts || []).length === 0 ||
         pc.days.length === 0
       ) {
-        setExpanded(true)
         setActiveStep(5)
       }
     } catch (err) {
@@ -165,8 +189,11 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
       JSON.stringify(initialSettings) !== JSON.stringify(editedSettings)
     const publishingDirty =
       JSON.stringify(initialPublishing) !== JSON.stringify(editedPublishing)
-    return settingsDirty || publishingDirty
-  }, [initialSettings, editedSettings, initialPublishing, editedPublishing])
+    const projectDirty = showProjectSettings &&
+      initialProjectInfo && editedProjectInfo &&
+      JSON.stringify(initialProjectInfo) !== JSON.stringify(editedProjectInfo)
+    return settingsDirty || publishingDirty || !!projectDirty
+  }, [initialSettings, editedSettings, initialPublishing, editedPublishing, initialProjectInfo, editedProjectInfo, showProjectSettings])
 
   // Save
   const handleSave = async () => {
@@ -202,17 +229,34 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
       )
     }
 
+    // Project info dirty?
+    if (
+      showProjectSettings &&
+      initialProjectInfo && editedProjectInfo &&
+      JSON.stringify(initialProjectInfo) !== JSON.stringify(editedProjectInfo)
+    ) {
+      promises.push(
+        projectsApi.update(projectId, {
+          name: editedProjectInfo.name,
+          description: editedProjectInfo.description || undefined,
+          workspace_id: editedProjectInfo.workspace_id,
+        })
+      )
+    }
+
     await Promise.all(promises)
 
     // Update initial to match current (no longer dirty)
     setInitialSettings({ ...editedSettings })
     setInitialPublishing({ ...editedPublishing })
+    if (editedProjectInfo) setInitialProjectInfo({ ...editedProjectInfo })
   }
 
   // Discard
   const handleDiscard = () => {
     if (initialSettings) setEditedSettings({ ...initialSettings })
     if (initialPublishing) setEditedPublishing({ ...initialPublishing })
+    if (initialProjectInfo) setEditedProjectInfo({ ...initialProjectInfo })
   }
 
   // Settings field update
@@ -347,38 +391,53 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
 
   return (
     <>
-      <div className="bg-white rounded-lg border">
-        {/* Header */}
-        <button
-          onClick={() => {
-            setExpanded(!expanded)
-            if (!expanded && activeStep === null) setActiveStep(1)
-          }}
-          className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition"
-        >
-          <div className="flex items-center gap-3">
-            {expanded ? (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
-            ) : (
-              <ChevronRight className="w-5 h-5 text-gray-400" />
+      {/* Project Settings (Details tab only) */}
+      {showProjectSettings && editedProjectInfo && (
+        <div className="bg-white rounded-lg border p-6 mb-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Project</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <input
+                type="text"
+                value={editedProjectInfo.name}
+                onChange={(e) => setEditedProjectInfo({ ...editedProjectInfo, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <input
+                type="text"
+                value={editedProjectInfo.description}
+                onChange={(e) => setEditedProjectInfo({ ...editedProjectInfo, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                placeholder="Optional description"
+              />
+            </div>
+            {allWorkspaces.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
+                <select
+                  value={editedProjectInfo.workspace_id || ''}
+                  onChange={(e) => setEditedProjectInfo({ ...editedProjectInfo, workspace_id: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                >
+                  {allWorkspaces.map((ws) => (
+                    <option key={ws.id} value={ws.id}>{ws.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
-            <h2 className="text-lg font-medium text-gray-900">Configure</h2>
           </div>
-          {!expanded && (
-            <span className="text-sm text-gray-500">Expand</span>
-          )}
-        </button>
+        </div>
+      )}
 
-        {/* Summary line (when collapsed) */}
-        {!expanded && (
-          <div className="px-6 pb-4 -mt-2">
-            <SummaryLine statuses={stepStatuses} />
-          </div>
-        )}
-
-        {/* Accordion (when expanded) */}
-        {expanded && editedSettings && editedPublishing && (
-          <div className="border-t">
+      <div className="bg-white rounded-lg border">
+        {/* Steps accordion — always visible */}
+        {editedSettings && editedPublishing && (
+          <div>
             {/* Step 1: Input */}
             <AccordionStep
               step={1}
@@ -474,44 +533,6 @@ export function ConfigureSection({ projectId }: ConfigureSectionProps) {
 
       <StickySaveBar isDirty={isDirty} onSave={handleSave} onDiscard={handleDiscard} />
     </>
-  )
-}
-
-// --- Summary Line ---
-
-function SummaryLine({
-  statuses,
-}: {
-  statuses: Record<string, { status: StepStatus; summary: string }>
-}) {
-  const entries = [
-    { key: 'input', label: 'Input' },
-    { key: 'preprocessing', label: 'Preproc' },
-    { key: 'image', label: 'Image' },
-    { key: 'video', label: 'Video' },
-    { key: 'distribution', label: 'Distribution' },
-  ]
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-      {entries.map((entry, idx) => {
-        const s = statuses[entry.key]
-        return (
-          <span key={entry.key} className="flex items-center gap-1">
-            {s.status === 'complete' ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-            ) : (
-              <XCircle className="w-3.5 h-3.5 text-red-400" />
-            )}
-            <span className="text-gray-500">{entry.label}:</span>
-            <span className="text-gray-700">{s.summary}</span>
-            {idx < entries.length - 1 && (
-              <span className="text-gray-300 ml-1">·</span>
-            )}
-          </span>
-        )
-      })}
-    </div>
   )
 }
 

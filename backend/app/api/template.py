@@ -27,7 +27,8 @@ from app.schemas.template import (
     GenerateRequest,
     GenerationResponse,
     GenerationListResponse,
-    GenerationRatingUpdate,
+    BatchGenerateRequest,
+    BatchGenerateResponse,
 )
 from app.api.projects import user_has_workspace_access, get_user_workspace_ids
 from app.services.csv_parser import parse_csv, validate_csv_for_project, CSVParseError
@@ -272,7 +273,7 @@ async def list_variants(
     project_id: int,
     search: Optional[str] = Query(None, description="Search in variant data"),
     offset: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -692,6 +693,164 @@ async def start_generation(
     return response
 
 
+@router.post(
+    "/projects/{project_id}/generate/batch",
+    response_model=BatchGenerateResponse,
+    tags=["template"]
+)
+async def start_batch_generation(
+    project_id: int,
+    data: BatchGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Start a batch generation for a template project.
+
+    Modes:
+    - all_unused: Generate for all variants with usage_count=0
+    - least_used: Generate for the N least-used variants
+    - specific: Generate for specific variant IDs
+    """
+    import uuid
+    from datetime import datetime
+
+    project = get_template_project(db, project_id, current_user)
+
+    # Get template settings
+    settings = db.query(TemplateSettings).filter(
+        TemplateSettings.project_id == project_id
+    ).first()
+    if not settings:
+        raise HTTPException(status_code=400, detail="Template settings not found")
+
+    # Get or auto-select video template
+    if data.video_template_id:
+        video_template = db.query(VideoTemplate).filter(
+            VideoTemplate.id == data.video_template_id,
+            VideoTemplate.project_id == project_id,
+            VideoTemplate.is_deleted == False
+        ).first()
+        if not video_template:
+            raise HTTPException(status_code=404, detail="Video template not found")
+    else:
+        video_template = db.query(VideoTemplate).filter(
+            VideoTemplate.project_id == project_id,
+            VideoTemplate.is_deleted == False,
+            VideoTemplate.is_default == True
+        ).first()
+        if not video_template:
+            video_template = db.query(VideoTemplate).filter(
+                VideoTemplate.project_id == project_id,
+                VideoTemplate.is_deleted == False
+            ).first()
+        if not video_template:
+            raise HTTPException(status_code=400, detail="No video template available")
+
+    # Select variants based on mode
+    if data.mode == "all_unused":
+        variants = db.query(Variant).filter(
+            Variant.project_id == project_id,
+            Variant.usage_count == 0
+        ).order_by(Variant.row_number).all()
+        if not variants:
+            raise HTTPException(status_code=400, detail="No unused variants available")
+
+    elif data.mode == "least_used":
+        count = data.count or 10
+        variants = db.query(Variant).filter(
+            Variant.project_id == project_id
+        ).order_by(Variant.usage_count, Variant.row_number).limit(count).all()
+        if not variants:
+            raise HTTPException(status_code=400, detail="No variants available")
+
+    elif data.mode == "specific":
+        if not data.variant_ids:
+            raise HTTPException(status_code=400, detail="variant_ids required for specific mode")
+        variants = db.query(Variant).filter(
+            Variant.id.in_(data.variant_ids),
+            Variant.project_id == project_id
+        ).all()
+        if not variants:
+            raise HTTPException(status_code=400, detail="No matching variants found")
+        if len(variants) != len(data.variant_ids):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Found {len(variants)} of {len(data.variant_ids)} requested variants"
+            )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown mode: {data.mode}")
+
+    # Create batch
+    batch_id = str(uuid.uuid4())
+    generations = []
+
+    for variant in variants:
+        # Update variant usage
+        variant.usage_count += 1
+        variant.last_used_at = datetime.utcnow()
+
+        generation = TemplateGeneration(
+            project_id=project_id,
+            variant_id=variant.id,
+            video_template_id=video_template.id,
+            llm_model=settings.llm_model,
+            image_model=settings.image_model,
+            video_model=settings.video_model,
+            batch_id=batch_id,
+            status="pending"
+        )
+        db.add(generation)
+        generations.append((generation, variant))
+
+    db.commit()
+
+    # Refresh all generations
+    for gen, _ in generations:
+        db.refresh(gen)
+
+    # Start sequential background processing
+    gen_ids = [gen.id for gen, _ in generations]
+
+    async def run_batch_task(generation_ids: list[int]):
+        from app.db.base import SessionLocal
+        service = get_template_generation_service()
+        for gen_id in generation_ids:
+            db_session = SessionLocal()
+            try:
+                await service.run_generation(db_session, gen_id)
+            except Exception as e:
+                # Mark as failed but continue with the rest
+                try:
+                    gen = db_session.query(TemplateGeneration).filter(
+                        TemplateGeneration.id == gen_id
+                    ).first()
+                    if gen and gen.status != "completed":
+                        gen.status = "failed"
+                        gen.error_message = str(e)[:500]
+                        db_session.commit()
+                except Exception:
+                    pass
+            finally:
+                db_session.close()
+
+    import asyncio
+    asyncio.create_task(run_batch_task(gen_ids))
+
+    # Build response
+    result = []
+    for gen, variant in generations:
+        response = GenerationResponse.model_validate(gen)
+        response.variant_data = variant.data
+        result.append(response)
+
+    return BatchGenerateResponse(
+        batch_id=batch_id,
+        count=len(generations),
+        generations=result
+    )
+
+
 @router.get(
     "/projects/{project_id}/generations",
     response_model=GenerationListResponse,
@@ -844,51 +1003,3 @@ async def delete_generation(
     db.commit()
 
     return None
-
-
-@router.patch(
-    "/projects/{project_id}/generations/{generation_id}/rating",
-    response_model=GenerationResponse,
-    tags=["template"]
-)
-async def update_generation_rating(
-    project_id: int,
-    generation_id: int,
-    rating_data: GenerationRatingUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Update ratings for a generation (image and/or video).
-    """
-    project = get_template_project(db, project_id, current_user)
-
-    generation = db.query(TemplateGeneration).filter(
-        TemplateGeneration.id == generation_id,
-        TemplateGeneration.project_id == project_id,
-        TemplateGeneration.is_deleted == False
-    ).first()
-
-    if not generation:
-        raise HTTPException(status_code=404, detail="Generation not found")
-
-    # Update only provided fields
-    if rating_data.image_rating is not None:
-        generation.image_rating = rating_data.image_rating
-    if rating_data.image_comment is not None:
-        generation.image_comment = rating_data.image_comment
-    if rating_data.video_rating is not None:
-        generation.video_rating = rating_data.video_rating
-    if rating_data.video_comment is not None:
-        generation.video_comment = rating_data.video_comment
-
-    db.commit()
-    db.refresh(generation)
-
-    response = GenerationResponse.model_validate(generation)
-    if generation.variant_id:
-        variant = db.query(Variant).filter(Variant.id == generation.variant_id).first()
-        if variant:
-            response.variant_data = variant.data
-
-    return response

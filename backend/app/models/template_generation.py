@@ -65,6 +65,9 @@ class TemplateGeneration(Base):
     error_message = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
+    # Batch tracking
+    batch_id = Column(String(36), nullable=True, index=True)
+
     # Moderation flags
     regenerated = Column(Boolean, default=False, nullable=False)  # True if this was replaced by regeneration
 

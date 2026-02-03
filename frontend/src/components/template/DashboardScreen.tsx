@@ -7,7 +7,7 @@ import type { PublishingScheduleResponse, PublishingConfig } from '@/services/ap
 
 interface DashboardScreenProps {
   projectId: number
-  onNavigate: (screen: 'review' | 'pipeline', options?: { section?: string }) => void
+  onNavigate: (screen: 'review' | 'generate' | 'details', options?: { section?: string }) => void
   config: PublishingConfig | null
   schedule: PublishingScheduleResponse | null
   onRefresh: () => void
@@ -25,11 +25,11 @@ export function DashboardScreen({
   const [view, setView] = useState<'calendar' | 'queue'>('calendar')
   const [isPauseToggling, setIsPauseToggling] = useState(false)
 
-  const handleFunnelNavigate = (target: 'review' | 'pipeline' | 'queue' | 'calendar') => {
+  const handleFunnelNavigate = (target: 'review' | 'generate' | 'queue' | 'calendar') => {
     if (target === 'review') {
       onNavigate('review')
-    } else if (target === 'pipeline') {
-      onNavigate('pipeline', { section: 'run' })
+    } else if (target === 'generate') {
+      onNavigate('generate')
     } else if (target === 'queue') {
       setView('queue')
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' })
@@ -65,7 +65,7 @@ export function DashboardScreen({
             {config?.is_paused && (
               <div className="flex items-center gap-2 text-yellow-700 bg-yellow-50 px-3 py-2 rounded">
                 <AlertCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">Publishing paused</span>
+                <span className="text-sm font-medium">Publishing inactive</span>
               </div>
             )}
             {schedule && schedule.slots.length > 0 && !config?.is_paused && (
@@ -91,10 +91,10 @@ export function DashboardScreen({
               Review videos
             </button>
             <button
-              onClick={() => onNavigate('pipeline', { section: 'run' })}
+              onClick={() => onNavigate('generate')}
               className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition"
             >
-              Run pipeline
+              Generate
             </button>
           </div>
         </div>
@@ -105,20 +105,20 @@ export function DashboardScreen({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">Schedule</h3>
           <div className="flex items-center gap-4">
-            {/* Pause Toggle */}
+            {/* Active Toggle */}
             {isConfigured && (
               <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-sm text-gray-600">Pause</span>
+                <span className="text-sm text-gray-600">Active</span>
                 <button
                   onClick={handlePauseToggle}
                   disabled={isPauseToggling}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                    config?.is_paused ? 'bg-yellow-500' : 'bg-gray-300'
+                    !config?.is_paused ? 'bg-green-500' : 'bg-gray-300'
                   } ${isPauseToggling ? 'opacity-50' : ''}`}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                      config?.is_paused ? 'translate-x-6' : 'translate-x-1'
+                      !config?.is_paused ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
@@ -161,10 +161,10 @@ export function DashboardScreen({
             <p className="text-sm text-gray-500">
               No schedule configured. Set up days and times in{' '}
               <button
-                onClick={() => onNavigate('pipeline', { section: 'distribution' })}
+                onClick={() => onNavigate('details')}
                 className="text-purple-600 hover:underline"
               >
-                Pipeline &rarr; Distribution
+                Details &rarr; Distribution
               </button>
               .
             </p>

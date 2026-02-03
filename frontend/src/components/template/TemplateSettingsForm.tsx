@@ -149,10 +149,10 @@ export function TemplateSettingsForm({ projectId }: TemplateSettingsFormProps) {
         Pipeline configuration (models, prompts, templates, social accounts, schedule) has moved to{' '}
         <button
           type="button"
-          onClick={() => navigate(`/?project=${projectId}&screen=pipeline`)}
+          onClick={() => navigate(`/?project=${projectId}&screen=details`)}
           className="text-primary-600 hover:underline"
         >
-          Pipeline → Configure
+          Details
         </button>
         .
       </p>

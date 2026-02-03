@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, GenerationRatingUpdate } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -340,8 +340,8 @@ export const templateApi = {
   deleteGeneration: (projectId: number, generationId: number) =>
     api.delete(`/api/projects/${projectId}/generations/${generationId}`),
 
-  updateGenerationRating: (projectId: number, generationId: number, data: GenerationRatingUpdate) =>
-    api.patch<Generation>(`/api/projects/${projectId}/generations/${generationId}/rating`, data),
+  startBatchGeneration: (projectId: number, data: BatchGenerateRequest) =>
+    api.post<BatchGenerateResponse>(`/api/projects/${projectId}/generate/batch`, data),
 }
 
 // Moderation API (Template projects)

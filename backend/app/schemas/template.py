@@ -167,12 +167,17 @@ class GenerateRequest(BaseModel):
     video_template_id: Optional[int] = None  # null = use default
 
 
-class GenerationRatingUpdate(BaseModel):
-    """Schema for updating generation ratings."""
-    image_rating: Optional[int] = Field(None, ge=0, le=5)
-    image_comment: Optional[str] = None
-    video_rating: Optional[int] = Field(None, ge=0, le=5)
-    video_comment: Optional[str] = None
+class BatchModeEnum(str, Enum):
+    ALL_UNUSED = "all_unused"
+    LEAST_USED = "least_used"
+    SPECIFIC = "specific"
+
+
+class BatchGenerateRequest(BaseModel):
+    mode: BatchModeEnum
+    count: Optional[int] = Field(None, ge=1, le=100)  # for least_used mode
+    variant_ids: Optional[List[int]] = None  # for specific mode
+    video_template_id: Optional[int] = None  # null = use default
 
 
 class GenerationResponse(BaseModel):
@@ -180,6 +185,7 @@ class GenerationResponse(BaseModel):
     project_id: int
     variant_id: Optional[int] = None
     video_template_id: Optional[int] = None
+    batch_id: Optional[str] = None
 
     # Models used (snapshot from generation time)
     llm_model: str
@@ -203,12 +209,6 @@ class GenerationResponse(BaseModel):
     # Variant data (enriched from variant relationship in endpoint)
     variant_data: Optional[Dict[str, Any]] = None
 
-    # User ratings (0-5 scale)
-    image_rating: Optional[int] = None
-    image_comment: Optional[str] = None
-    video_rating: Optional[int] = None
-    video_comment: Optional[str] = None
-
     # Timestamps
     created_at: datetime
     completed_at: Optional[datetime] = None
@@ -219,6 +219,12 @@ class GenerationResponse(BaseModel):
 class GenerationListResponse(BaseModel):
     generations: List[GenerationResponse]
     total: int
+
+
+class BatchGenerateResponse(BaseModel):
+    batch_id: str
+    count: int
+    generations: List[GenerationResponse]
 
 
 # --- Template Project Creation (extended from base project) ---

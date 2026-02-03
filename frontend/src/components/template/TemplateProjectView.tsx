@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Settings, Loader2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { DashboardScreen } from './DashboardScreen'
 import { ReviewScreen } from './ReviewScreen'
-import { PipelineScreen } from './PipelineScreen'
+import { GenerateScreen } from './GenerateScreen'
+import { DetailsScreen } from './DetailsScreen'
 import {
   publishingScheduleApi,
   type PublishingConfig,
   type PublishingScheduleResponse,
   type PipelineStats,
 } from '@/services/api'
-import type { Generation } from '@/types'
+import type { BatchGenerateResponse } from '@/types'
 
 interface TemplateProjectViewProps {
   projectId: number
@@ -18,15 +19,18 @@ interface TemplateProjectViewProps {
   projectTimezone?: string
 }
 
-type ScreenType = 'dashboard' | 'review' | 'pipeline'
+type ScreenType = 'dashboard' | 'generate' | 'review' | 'details'
 
-const VALID_SCREENS: ScreenType[] = ['dashboard', 'review', 'pipeline']
+const VALID_SCREENS: ScreenType[] = ['dashboard', 'generate', 'review', 'details']
 
-// Map old tab params to new screens for backward compatibility
+// Backward compatibility: old params → new screens
+const LEGACY_SCREEN_MAP: Record<string, ScreenType> = {
+  pipeline: 'generate',
+}
 const TAB_TO_SCREEN: Record<string, ScreenType> = {
-  generate: 'pipeline',
-  variants: 'pipeline',
-  templates: 'pipeline',
+  generate: 'generate',
+  variants: 'details',
+  templates: 'details',
   moderation: 'review',
   publishing: 'dashboard',
 }
@@ -35,7 +39,6 @@ export function TemplateProjectView({
   projectId,
   projectName,
 }: TemplateProjectViewProps) {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [generationsRefresh, setGenerationsRefresh] = useState(0)
 
@@ -48,8 +51,15 @@ export function TemplateProjectView({
   // Determine current screen from URL
   const getScreenFromUrl = (): ScreenType | null => {
     const screenParam = searchParams.get('screen')
-    if (screenParam && VALID_SCREENS.includes(screenParam as ScreenType)) {
-      return screenParam as ScreenType
+    if (screenParam) {
+      // Direct match
+      if (VALID_SCREENS.includes(screenParam as ScreenType)) {
+        return screenParam as ScreenType
+      }
+      // Legacy screen names
+      if (screenParam in LEGACY_SCREEN_MAP) {
+        return LEGACY_SCREEN_MAP[screenParam]
+      }
     }
     // Backward compatibility: old ?tab= params
     const tabParam = searchParams.get('tab')
@@ -93,9 +103,9 @@ export function TemplateProjectView({
         if (!urlScreen) {
           let defaultScreen: ScreenType = 'dashboard'
 
-          // No variants or templates → pipeline (setup)
+          // No variants or templates → details (setup)
           if (statsData.variants_count === 0 || statsData.templates_count === 0) {
-            defaultScreen = 'pipeline'
+            defaultScreen = 'details'
           } else if (statsData.review_count > 0) {
             // Items pending review → review
             defaultScreen = 'review'
@@ -109,8 +119,10 @@ export function TemplateProjectView({
           }, { replace: true })
         } else {
           setCurrentScreen(urlScreen)
-          // Normalize URL: replace ?tab= with ?screen=
-          if (searchParams.get('tab')) {
+          // Normalize URL: replace legacy params with correct screen
+          const rawScreen = searchParams.get('screen')
+          const rawTab = searchParams.get('tab')
+          if (rawTab || (rawScreen && rawScreen !== urlScreen)) {
             setSearchParams(prev => {
               prev.set('screen', urlScreen)
               prev.delete('tab')
@@ -136,7 +148,7 @@ export function TemplateProjectView({
     })
   }
 
-  const handleGenerationStarted = (_generation: Generation) => {
+  const handleBatchStarted = (_response: BatchGenerateResponse) => {
     setGenerationsRefresh((prev) => prev + 1)
   }
 
@@ -151,7 +163,6 @@ export function TemplateProjectView({
     }
     const res = await publishingScheduleApi.updateConfig(projectId, updated)
     setConfig(res.data)
-    // Refresh schedule too
     const scheduleRes = await publishingScheduleApi.getSchedule(projectId)
     setSchedule(scheduleRes.data)
   }
@@ -164,57 +175,41 @@ export function TemplateProjectView({
     )
   }
 
+  const tabs: { screen: ScreenType; label: string; badge?: number }[] = [
+    { screen: 'dashboard', label: 'Dashboard' },
+    { screen: 'generate', label: 'Generate' },
+    { screen: 'review', label: 'Review', badge: stats?.review_count },
+    { screen: 'details', label: 'Details' },
+  ]
+
   return (
     <div className="flex-1 h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-gray-900">{projectName}</h1>
-          <button
-            onClick={() => navigate(`/project/${projectId}/edit`)}
-            className="text-gray-400 hover:text-gray-600 transition"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
         </div>
 
         {/* Screen Switcher */}
         <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => handleNavigate('dashboard')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition ${
-              currentScreen === 'dashboard'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => handleNavigate('review')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition relative ${
-              currentScreen === 'review'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Review
-            {stats && stats.review_count > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
-                {stats.review_count}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => handleNavigate('pipeline')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition ${
-              currentScreen === 'pipeline'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Pipeline
-          </button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.screen}
+              onClick={() => handleNavigate(tab.screen)}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition ${
+                currentScreen === tab.screen
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {tab.label}
+              {tab.badge && tab.badge > 0 ? (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
+                  {tab.badge}
+                </span>
+              ) : null}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -231,6 +226,14 @@ export function TemplateProjectView({
           />
         )}
 
+        {currentScreen === 'generate' && (
+          <GenerateScreen
+            projectId={projectId}
+            refreshTrigger={generationsRefresh}
+            onBatchStarted={handleBatchStarted}
+          />
+        )}
+
         {currentScreen === 'review' && (
           <ReviewScreen
             projectId={projectId}
@@ -239,12 +242,8 @@ export function TemplateProjectView({
           />
         )}
 
-        {currentScreen === 'pipeline' && (
-          <PipelineScreen
-            projectId={projectId}
-            generationsRefresh={generationsRefresh}
-            onGenerationStarted={handleGenerationStarted}
-          />
+        {currentScreen === 'details' && (
+          <DetailsScreen projectId={projectId} />
         )}
       </div>
     </div>

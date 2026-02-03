@@ -493,25 +493,29 @@ export interface Generation {
   failed_at_step: string | null
   error_message: string | null
   variant_data: Record<string, string> | null
-  // User ratings (0-5 scale)
-  image_rating: number | null
-  image_comment: string | null
-  video_rating: number | null
-  video_comment: string | null
+  batch_id: string | null
   created_at: string
   completed_at: string | null
-}
-
-export interface GenerationRatingUpdate {
-  image_rating?: number
-  image_comment?: string
-  video_rating?: number
-  video_comment?: string
 }
 
 export interface GenerationListResponse {
   generations: Generation[]
   total: number
+}
+
+export type BatchMode = 'all_unused' | 'least_used' | 'specific'
+
+export interface BatchGenerateRequest {
+  mode: BatchMode
+  count?: number
+  variant_ids?: number[]
+  video_template_id?: number
+}
+
+export interface BatchGenerateResponse {
+  batch_id: string
+  count: number
+  generations: Generation[]
 }
 
 // --- API Error Type ---
