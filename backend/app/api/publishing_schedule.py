@@ -15,6 +15,9 @@ from app.models.project import Project
 from app.models.publishing_config import PublishingConfig
 from app.models.approved_generation import ApprovedGeneration
 from app.models.template_generation import TemplateGeneration
+from app.models.variant import Variant
+from app.models.video_template import VideoTemplate
+from app.models.rejection_archive import RejectionArchive
 from app.api.projects import user_has_workspace_access
 from app.schemas.publishing import (
     PublishingConfigCreate,
@@ -28,6 +31,7 @@ from app.schemas.publishing import (
     ScheduleSlot,
     ScheduleSlotItem,
     ScheduleWarning,
+    PipelineStatsResponse,
 )
 
 from app.utils.urls import get_local_url
@@ -66,6 +70,7 @@ def get_or_create_config(db: Session, project_id: int) -> PublishingConfig:
         config = PublishingConfig(
             project_id=project_id,
             enabled=False,
+            is_paused=False,
             days=[],
             preferred_times=["18:00"],
             depth_days=7
@@ -169,6 +174,7 @@ async def update_publishing_config(
 
     # Update config
     config.enabled = request.enabled
+    config.is_paused = request.is_paused
     config.days = request.days
     config.preferred_times = request.preferred_times
     config.depth_days = request.depth_days
@@ -395,6 +401,7 @@ async def get_publishing_schedule(
     # Build config response
     config_response = PublishingScheduleConfig(
         enabled=config.enabled,
+        is_paused=config.is_paused,
         days=config.days,
         preferred_times=config.preferred_times or ["18:00"],
         timezone=project.timezone,
@@ -405,4 +412,79 @@ async def get_publishing_schedule(
         config=config_response,
         slots=response_slots,
         warnings=warnings
+    )
+
+
+# --- Pipeline Stats ---
+
+@router.get("/projects/{project_id}/pipeline-stats", response_model=PipelineStatsResponse, tags=["publishing-schedule"])
+async def get_pipeline_stats(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get pipeline funnel statistics for a template project.
+
+    Returns counts for: generating, pending review, approved (queue), scheduled slots.
+    Also returns variants_count and templates_count for smart default screen logic.
+    """
+    project = get_template_project(db, project_id, current_user)
+
+    # Generating count: active generation statuses
+    generating_count = db.query(func.count(TemplateGeneration.id)).filter(
+        TemplateGeneration.project_id == project_id,
+        TemplateGeneration.status.in_(['pending', 'preprocessing', 'generating_image', 'generating_video']),
+        TemplateGeneration.is_deleted == False
+    ).scalar()
+
+    # Review count: completed + not approved + not rejected + not regenerated + not deleted
+    approved_ids = db.query(ApprovedGeneration.template_generation_id).filter(
+        ApprovedGeneration.project_id == project_id
+    ).subquery()
+
+    rejected_ids = db.query(RejectionArchive.template_generation_id).filter(
+        RejectionArchive.project_id == project_id
+    ).subquery()
+
+    review_count = db.query(func.count(TemplateGeneration.id)).filter(
+        TemplateGeneration.project_id == project_id,
+        TemplateGeneration.status == "completed",
+        TemplateGeneration.regenerated == False,
+        TemplateGeneration.is_deleted == False,
+        ~TemplateGeneration.id.in_(approved_ids),
+        ~TemplateGeneration.id.in_(rejected_ids)
+    ).scalar()
+
+    # Approved count: items in queue with status 'approved'
+    approved_count = db.query(func.count(ApprovedGeneration.id)).filter(
+        ApprovedGeneration.project_id == project_id,
+        ApprovedGeneration.status == "approved"
+    ).scalar()
+
+    # Schedule slots
+    config = get_or_create_config(db, project_id)
+    slots = calculate_schedule_slots(config, project.timezone or 'UTC', config.depth_days)
+    total_schedule_slots = len(slots)
+    scheduled_count = min(approved_count, total_schedule_slots)
+
+    # Variants count
+    variants_count = db.query(func.count(Variant.id)).filter(
+        Variant.project_id == project_id
+    ).scalar()
+
+    # Templates count (non-deleted)
+    templates_count = db.query(func.count(VideoTemplate.id)).filter(
+        VideoTemplate.project_id == project_id,
+        VideoTemplate.is_deleted == False
+    ).scalar()
+
+    return PipelineStatsResponse(
+        generating_count=generating_count,
+        review_count=review_count,
+        approved_count=approved_count,
+        scheduled_count=scheduled_count,
+        total_schedule_slots=total_schedule_slots,
+        variants_count=variants_count,
+        templates_count=templates_count
     )

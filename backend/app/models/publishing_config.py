@@ -26,6 +26,9 @@ class PublishingConfig(Base):
     # Schedule enabled
     enabled = Column(Boolean, nullable=False, default=False)
 
+    # Publishing paused (temporary halt without disabling config)
+    is_paused = Column(Boolean, nullable=False, default=False)
+
     # Days of week: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     days = Column(JSON, nullable=False, default=list)
 

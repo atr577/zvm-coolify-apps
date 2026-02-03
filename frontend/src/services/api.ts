@@ -457,6 +457,7 @@ export interface PublishingConfig {
   id: number
   project_id: number
   enabled: boolean
+  is_paused: boolean
   days: string[]
   preferred_times: string[]
   depth_days: number
@@ -466,9 +467,20 @@ export interface PublishingConfig {
 
 export interface PublishingConfigUpdate {
   enabled: boolean
+  is_paused: boolean
   days: string[]
   preferred_times: string[]
   depth_days: number
+}
+
+export interface PipelineStats {
+  generating_count: number
+  review_count: number
+  approved_count: number
+  scheduled_count: number
+  total_schedule_slots: number
+  variants_count: number
+  templates_count: number
 }
 
 export interface PublishingQueueItem {
@@ -517,6 +529,7 @@ export interface ScheduleWarning {
 export interface PublishingScheduleResponse {
   config: {
     enabled: boolean
+    is_paused: boolean
     days: string[]
     preferred_times: string[]
     timezone: string
@@ -550,6 +563,10 @@ export const publishingScheduleApi = {
   // Get computed schedule
   getSchedule: (projectId: number) =>
     api.get<PublishingScheduleResponse>(`/api/projects/${projectId}/publishing-schedule`),
+
+  // Get pipeline funnel stats
+  getPipelineStats: (projectId: number) =>
+    api.get<PipelineStats>(`/api/projects/${projectId}/pipeline-stats`),
 }
 
 export default api

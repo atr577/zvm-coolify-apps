@@ -31,6 +31,7 @@ class PublishResponse(BaseModel):
 class PublishingConfigBase(BaseModel):
     """Base schema for publishing config."""
     enabled: bool = False
+    is_paused: bool = False
     days: List[str] = Field(default_factory=list, description="Days of week: mon, tue, wed, thu, fri, sat, sun")
     preferred_times: List[str] = Field(default_factory=lambda: ["18:00"], description="Times in HH:MM format")
     depth_days: int = Field(default=7, ge=1, le=30, description="Days to show in schedule")
@@ -162,6 +163,7 @@ class ScheduleWarning(BaseModel):
 class PublishingScheduleConfig(BaseModel):
     """Config info for schedule response."""
     enabled: bool
+    is_paused: bool = False
     days: List[str]
     preferred_times: List[str]
     timezone: str
@@ -173,3 +175,16 @@ class PublishingScheduleResponse(BaseModel):
     config: PublishingScheduleConfig
     slots: List[ScheduleSlot]
     warnings: List[ScheduleWarning] = Field(default_factory=list)
+
+
+# --- Pipeline Stats ---
+
+class PipelineStatsResponse(BaseModel):
+    """Response schema for pipeline funnel counters."""
+    generating_count: int = 0
+    review_count: int = 0
+    approved_count: int = 0
+    scheduled_count: int = 0
+    total_schedule_slots: int = 0
+    variants_count: int = 0
+    templates_count: int = 0

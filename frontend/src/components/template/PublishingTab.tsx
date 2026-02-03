@@ -48,7 +48,10 @@ export function PublishingTab({ projectId, projectTimezone }: PublishingTabProps
     depth_days: number
   }) => {
     try {
-      const response = await publishingScheduleApi.updateConfig(projectId, data)
+      const response = await publishingScheduleApi.updateConfig(projectId, {
+        ...data,
+        is_paused: config?.is_paused ?? false,
+      })
       setConfig(response.data)
       // Refetch schedule to get updated slots
       const scheduleRes = await publishingScheduleApi.getSchedule(projectId)
