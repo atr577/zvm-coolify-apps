@@ -10,7 +10,7 @@ import {
   type PublishingScheduleResponse,
   type PipelineStats,
 } from '@/services/api'
-import type { CSVUploadResponse, Generation } from '@/types'
+import type { Generation } from '@/types'
 
 interface TemplateProjectViewProps {
   projectId: number
@@ -37,7 +37,6 @@ export function TemplateProjectView({
 }: TemplateProjectViewProps) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [generationsRefresh, setGenerationsRefresh] = useState(0)
 
   // Data state
@@ -135,10 +134,6 @@ export function TemplateProjectView({
       prev.set('screen', screen)
       return prev
     })
-  }
-
-  const handleCsvUploadSuccess = (_response: CSVUploadResponse) => {
-    setRefreshTrigger((prev) => prev + 1)
   }
 
   const handleGenerationStarted = (_generation: Generation) => {
@@ -247,9 +242,7 @@ export function TemplateProjectView({
         {currentScreen === 'pipeline' && (
           <PipelineScreen
             projectId={projectId}
-            refreshTrigger={refreshTrigger}
             generationsRefresh={generationsRefresh}
-            onCsvUploadSuccess={handleCsvUploadSuccess}
             onGenerationStarted={handleGenerationStarted}
           />
         )}

@@ -5,9 +5,10 @@ import type { VideoTemplate, VideoTemplateCreate } from '@/types'
 interface VideoTemplatesListProps {
   projectId: number
   refreshTrigger?: number
+  onCountChange?: () => void
 }
 
-export function VideoTemplatesList({ projectId, refreshTrigger }: VideoTemplatesListProps) {
+export function VideoTemplatesList({ projectId, refreshTrigger, onCountChange }: VideoTemplatesListProps) {
   const [templates, setTemplates] = useState<VideoTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -28,6 +29,7 @@ export function VideoTemplatesList({ projectId, refreshTrigger }: VideoTemplates
     try {
       const response = await templateApi.listVideoTemplates(projectId)
       setTemplates(response.data)
+      onCountChange?.()
     } catch (err: unknown) {
       const errorMsg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to load templates'
