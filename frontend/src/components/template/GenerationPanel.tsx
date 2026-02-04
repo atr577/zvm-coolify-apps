@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
-import { templateApi } from '@/services/api'
+import { templateApi, publishingScheduleApi, type PipelineStats } from '@/services/api'
 import type { Variant, VideoTemplate, BatchGenerateResponse, BatchMode } from '@/types'
-import { Play, Loader2 } from 'lucide-react'
+import { Play, Loader2, CalendarDays } from 'lucide-react'
+
+type UiMode = 'fill_schedule' | 'least_used' | 'specific'
 
 interface GenerationPanelProps {
   projectId: number
@@ -14,8 +16,10 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
 
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
+
   // Selection state
-  const [mode, setMode] = useState<BatchMode>('all_unused')
+  const [uiMode, setUiMode] = useState<UiMode>('least_used')
   const [leastUsedCount, setLeastUsedCount] = useState(10)
   const [selectedVariantIds, setSelectedVariantIds] = useState<Set<number>>(new Set())
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | undefined>(undefined)
@@ -24,20 +28,35 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
     loadData()
   }, [projectId])
 
+  const getNeeded = (stats: PipelineStats): number => {
+    return Math.max(0,
+      stats.total_schedule_slots - stats.approved_count - stats.review_count - stats.generating_count
+    )
+  }
+
   const loadData = async () => {
     setLoading(true)
     try {
-      const [variantsRes, templatesRes] = await Promise.all([
+      const [variantsRes, templatesRes, statsRes] = await Promise.all([
         templateApi.listVariants(projectId, { limit: 200 }),
-        templateApi.listVideoTemplates(projectId)
+        templateApi.listVideoTemplates(projectId),
+        publishingScheduleApi.getPipelineStats(projectId),
       ])
       setVariants(variantsRes.data.variants)
       setTemplates(templatesRes.data)
+      setPipelineStats(statsRes.data)
 
       // Pre-select default template
       const defaultTemplate = templatesRes.data.find((t: VideoTemplate) => t.is_default)
       if (defaultTemplate) {
         setSelectedTemplateId(defaultTemplate.id)
+      }
+
+      // Default mode: fill_schedule if schedule configured, otherwise least_used
+      if (statsRes.data.total_schedule_slots > 0) {
+        setUiMode('fill_schedule')
+      } else {
+        setUiMode('least_used')
       }
     } catch (err) {
       console.error('Failed to load data:', err)
@@ -46,12 +65,13 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
     }
   }
 
-  const unusedCount = variants.filter(v => v.usage_count === 0).length
+  const needed = pipelineStats ? getNeeded(pipelineStats) : 0
+  const hasSchedule = pipelineStats ? pipelineStats.total_schedule_slots > 0 : false
 
   const getRunCount = (): number => {
-    if (mode === 'all_unused') return unusedCount
-    if (mode === 'least_used') return Math.min(leastUsedCount, variants.length)
-    if (mode === 'specific') return selectedVariantIds.size
+    if (uiMode === 'fill_schedule') return Math.min(needed, variants.length)
+    if (uiMode === 'least_used') return Math.min(leastUsedCount, variants.length)
+    if (uiMode === 'specific') return selectedVariantIds.size
     return 0
   }
 
@@ -61,16 +81,24 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
     if (runCount === 0) return
     setGenerating(true)
     try {
+      // Map UI mode to API mode
+      const apiMode: BatchMode = uiMode === 'fill_schedule' ? 'least_used' : uiMode
+      const count = uiMode === 'fill_schedule' ? needed : (uiMode === 'least_used' ? leastUsedCount : undefined)
+
       const response = await templateApi.startBatchGeneration(projectId, {
-        mode,
-        count: mode === 'least_used' ? leastUsedCount : undefined,
-        variant_ids: mode === 'specific' ? Array.from(selectedVariantIds) : undefined,
+        mode: apiMode,
+        count,
+        variant_ids: uiMode === 'specific' ? Array.from(selectedVariantIds) : undefined,
         video_template_id: selectedTemplateId,
       })
       onBatchStarted(response.data)
-      // Reload variants to update usage counts
-      const variantsRes = await templateApi.listVariants(projectId, { limit: 200 })
+      // Reload to update usage counts and stats
+      const [variantsRes, statsRes] = await Promise.all([
+        templateApi.listVariants(projectId, { limit: 200 }),
+        publishingScheduleApi.getPipelineStats(projectId),
+      ])
       setVariants(variantsRes.data.variants)
+      setPipelineStats(statsRes.data)
     } catch (err: unknown) {
       const errorMsg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Batch generation failed'
@@ -121,26 +149,36 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
               Select variants
             </label>
             <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === 'all_unused'}
-                  onChange={() => setMode('all_unused')}
-                  className="text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">
-                  All unused
-                  <span className="text-gray-400 ml-1">({unusedCount})</span>
-                </span>
-              </label>
+              {/* Fill schedule — only if schedule is configured */}
+              {hasSchedule && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="mode"
+                    checked={uiMode === 'fill_schedule'}
+                    onChange={() => setUiMode('fill_schedule')}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <CalendarDays className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm">
+                    Fill schedule
+                    {needed > 0 ? (
+                      <span className="text-gray-400 ml-1">
+                        ({needed} needed of {pipelineStats!.total_schedule_slots} slots)
+                      </span>
+                    ) : (
+                      <span className="text-green-600 ml-1">(filled)</span>
+                    )}
+                  </span>
+                </label>
+              )}
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="mode"
-                  checked={mode === 'least_used'}
-                  onChange={() => setMode('least_used')}
+                  checked={uiMode === 'least_used'}
+                  onChange={() => setUiMode('least_used')}
                   className="text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm">Least used, top</span>
@@ -148,7 +186,7 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
                   type="number"
                   value={leastUsedCount}
                   onChange={(e) => setLeastUsedCount(Math.max(1, Math.min(200, Number(e.target.value))))}
-                  onClick={() => setMode('least_used')}
+                  onClick={() => setUiMode('least_used')}
                   className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
                   min={1}
                   max={200}
@@ -159,13 +197,13 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
                 <input
                   type="radio"
                   name="mode"
-                  checked={mode === 'specific'}
-                  onChange={() => setMode('specific')}
+                  checked={uiMode === 'specific'}
+                  onChange={() => setUiMode('specific')}
                   className="text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm">
                   Specific variants
-                  {mode === 'specific' && selectedVariantIds.size > 0 && (
+                  {uiMode === 'specific' && selectedVariantIds.size > 0 && (
                     <span className="text-gray-400 ml-1">({selectedVariantIds.size} selected)</span>
                   )}
                 </span>
@@ -173,7 +211,7 @@ export function GenerationPanel({ projectId, onBatchStarted }: GenerationPanelPr
             </div>
 
             {/* Specific variants list */}
-            {mode === 'specific' && (
+            {uiMode === 'specific' && (
               <div className="mt-2 max-h-48 overflow-y-auto border rounded-lg p-2 space-y-1">
                 {variants.map((v) => (
                   <label key={v.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">

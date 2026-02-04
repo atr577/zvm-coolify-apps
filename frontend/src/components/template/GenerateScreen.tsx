@@ -23,7 +23,7 @@ export function GenerateScreen({
       </div>
       <div className="lg:col-span-2">
         <div className="bg-white rounded-lg border p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Progress</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Generations</h3>
           <BatchProgress projectId={projectId} refreshTrigger={refreshTrigger} />
         </div>
       </div>

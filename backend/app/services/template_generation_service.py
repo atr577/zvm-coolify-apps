@@ -1,19 +1,20 @@
 """
-Template Generation Service - 7-step pipeline for template project video generation.
+Template Generation Service - pipeline for template project video generation.
 
 Pipeline:
-1. Pick variant (least used or specified)
-2. Prepare input (replace placeholders)
-3. LLM preprocessing
-4. Generate image prompt
-5. Generate image
-6. Generate video
-7. Save results
+1. LLM preprocessing
+2. Generate image prompt
+3. Generate image
+4. Generate video
+5. Merge audio (if hook_audio_path provided)
 """
 
 import asyncio
 import logging
+import os
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,7 @@ from app.services.openai_client import OpenAIClient
 from app.services.openai_service import openai_service
 from app.services.fal_client import FalClient, FalClientError
 from app.services.media_downloader import download_image, download_video
+from app.core.media_processor import media_processor
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ class GenerationError(Exception):
 
 
 class TemplateGenerationService:
-    """Orchestrates the 7-step video generation pipeline."""
+    """Orchestrates the video generation pipeline."""
 
     def __init__(self):
         self.openai = OpenAIClient()
@@ -49,7 +51,8 @@ class TemplateGenerationService:
         self,
         db: Session,
         generation_id: int,
-        resume_from_step: Optional[str] = None
+        resume_from_step: Optional[str] = None,
+        hook_audio_path: Optional[str] = None,
     ) -> TemplateGeneration:
         """
         Run the generation pipeline.
@@ -58,6 +61,7 @@ class TemplateGenerationService:
             db: Database session
             generation_id: ID of the TemplateGeneration record
             resume_from_step: If set, resume from this step (for retries)
+            hook_audio_path: Path to pre-trimmed hook audio for merging
 
         Returns:
             Updated TemplateGeneration record
@@ -96,12 +100,15 @@ class TemplateGenerationService:
 
         # Determine which steps to run
         steps = ["preprocessing", "image_prompt", "image", "video"]
+        if hook_audio_path:
+            steps.append("merge_audio")
+
         start_index = 0
         if resume_from_step and resume_from_step in steps:
             start_index = steps.index(resume_from_step)
 
         try:
-            for i, step in enumerate(steps[start_index:], start=start_index):
+            for step in steps[start_index:]:
                 if step == "preprocessing":
                     await self._step_preprocessing(db, generation, settings, variant)
                 elif step == "image_prompt":
@@ -110,6 +117,8 @@ class TemplateGenerationService:
                     await self._step_image(db, generation, settings)
                 elif step == "video":
                     await self._step_video(db, generation, settings, video_template)
+                elif step == "merge_audio":
+                    await self._step_merge_audio(db, generation, hook_audio_path)
 
             # Mark as completed
             generation.status = GenerationStatus.COMPLETED.value
@@ -316,6 +325,51 @@ class TemplateGenerationService:
             raise GenerationError(f"Video generation failed: {e}", "video")
         except Exception as e:
             raise GenerationError(f"Video generation failed: {e}", "video")
+
+    async def _step_merge_audio(
+        self,
+        db: Session,
+        generation: TemplateGeneration,
+        hook_audio_path: str,
+    ):
+        """Step 5: Merge pre-generated hook audio with video."""
+        generation.status = GenerationStatus.MERGING_AUDIO.value
+        db.commit()
+
+        if not generation.video_path:
+            raise GenerationError("No video path available for merge", "merge_audio")
+
+        try:
+            from app.core.config import settings as app_settings
+
+            video_path = os.path.join(app_settings.MEDIA_DIR, generation.video_path)
+            if not os.path.exists(video_path):
+                raise GenerationError(f"Video file not found: {video_path}", "merge_audio")
+
+            # Merge video + audio
+            merged_path = await media_processor.merge_video_audio(
+                video_path=video_path,
+                audio_path=hook_audio_path,
+            )
+
+            # Move merged file to permanent location
+            final_filename = f"gen_{generation.id}_with_audio.mp4"
+            final_dir = os.path.join(app_settings.MEDIA_DIR, "videos")
+            os.makedirs(final_dir, exist_ok=True)
+            final_path = os.path.join(final_dir, final_filename)
+            shutil.move(merged_path, final_path)
+
+            # Store relative path (consistent with video_path)
+            generation.audio_path = hook_audio_path
+            generation.video_with_audio_path = f"videos/{final_filename}"
+            db.commit()
+
+            logger.info(f"Generation {generation.id}: audio merged successfully")
+
+        except GenerationError:
+            raise
+        except Exception as e:
+            raise GenerationError(f"Audio merge failed: {e}", "merge_audio")
 
     async def _generate_metadata(
         self,

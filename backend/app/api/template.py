@@ -13,6 +13,8 @@ from app.models.template_settings import TemplateSettings
 from app.models.video_template import VideoTemplate
 from app.models.variant import Variant
 from app.models.template_generation import TemplateGeneration
+from app.models.approved_generation import ApprovedGeneration
+from app.models.rejection_archive import RejectionArchive
 from app.schemas.template import (
     TemplateSettingsResponse,
     TemplateSettingsUpdate,
@@ -42,6 +44,7 @@ from app.services.openai_client import openai_client, OpenAIClientError
 
 import logging
 import json
+import os
 import random
 import string
 
@@ -146,21 +149,30 @@ async def create_template_project(
     db.refresh(project)
     db.refresh(settings)
 
-    # Auto-generate variant_generation_prompt from pipeline prompts
-    if (
-        not settings.variant_generation_prompt
-        and settings.preprocessing_prompt
-        and settings.image_prompt_template
-    ):
-        try:
-            prompt = await _generate_variant_prompt_from_pipeline(
-                settings.preprocessing_prompt,
-                settings.image_prompt_template
-            )
-            settings.variant_generation_prompt = prompt
-            db.commit()
-        except Exception as e:
-            logger.warning(f"Auto-generate variant prompt on create failed: {e}")
+    # Auto-generate variant_generation_prompt and music_prompt from pipeline prompts
+    if settings.preprocessing_prompt and settings.image_prompt_template:
+        auto_gen_tasks = []
+        if not settings.variant_generation_prompt:
+            auto_gen_tasks.append(("variant", _generate_variant_prompt_from_pipeline(
+                settings.preprocessing_prompt, settings.image_prompt_template
+            )))
+        if not settings.music_prompt:
+            auto_gen_tasks.append(("music", _generate_music_prompt_from_pipeline(
+                settings.preprocessing_prompt, settings.image_prompt_template
+            )))
+
+        import asyncio
+        for name, coro in auto_gen_tasks:
+            try:
+                result = await coro
+                if name == "variant":
+                    settings.variant_generation_prompt = result
+                elif name == "music":
+                    settings.music_prompt = result
+            except Exception as e:
+                logger.warning(f"Auto-generate {name} prompt on create failed: {e}")
+
+        db.commit()
 
     return {
         "id": project.id,
@@ -227,22 +239,30 @@ async def update_template_settings(
     db.commit()
     db.refresh(settings)
 
-    # Auto-generate variant_generation_prompt if empty and pipeline prompts are set
-    if (
-        not settings.variant_generation_prompt
-        and settings.preprocessing_prompt
-        and settings.image_prompt_template
-    ):
-        try:
-            prompt = await _generate_variant_prompt_from_pipeline(
-                settings.preprocessing_prompt,
-                settings.image_prompt_template
-            )
-            settings.variant_generation_prompt = prompt
+    # Auto-generate prompts if empty and pipeline prompts are set
+    if settings.preprocessing_prompt and settings.image_prompt_template:
+        changed = False
+        if not settings.variant_generation_prompt:
+            try:
+                settings.variant_generation_prompt = await _generate_variant_prompt_from_pipeline(
+                    settings.preprocessing_prompt, settings.image_prompt_template
+                )
+                changed = True
+            except Exception as e:
+                logger.warning(f"Auto-generate variant prompt failed: {e}")
+
+        if not settings.music_prompt:
+            try:
+                settings.music_prompt = await _generate_music_prompt_from_pipeline(
+                    settings.preprocessing_prompt, settings.image_prompt_template
+                )
+                changed = True
+            except Exception as e:
+                logger.warning(f"Auto-generate music prompt failed: {e}")
+
+        if changed:
             db.commit()
             db.refresh(settings)
-        except Exception as e:
-            logger.warning(f"Auto-generate variant prompt failed: {e}")
 
     return settings
 
@@ -449,6 +469,133 @@ async def delete_all_variants(
 
 
 # --- Variant Generation (LLM) Endpoints ---
+
+async def _generate_batch_music(project_id: int) -> Optional[str]:
+    """
+    Generate a music track and return path to trimmed hook audio.
+
+    Returns None if project has no music_prompt set (music disabled).
+    """
+    from app.db.base import SessionLocal
+    from app.core.music_generator import MusicGenerator, sanitize_prompt
+    from app.core.hook_analyzer import hook_analyzer
+    from app.core.media_processor import media_processor
+    from app.services.media_service import media_service
+
+    db_session = SessionLocal()
+    try:
+        settings = db_session.query(TemplateSettings).filter(
+            TemplateSettings.project_id == project_id
+        ).first()
+
+        if not settings or not settings.music_prompt:
+            return None
+
+        music_prompt = settings.music_prompt
+
+        # Parse video duration for hook length
+        duration_str = settings.video_duration or "5"
+        hook_duration = float(duration_str.rstrip("s"))
+
+        logger.info(f"Project {project_id}: generating batch music track")
+
+        # Sanitize and generate track via Lyria2
+        full_prompt = sanitize_prompt(music_prompt)
+        audio_url = await media_service.generate_music(
+            prompt=full_prompt,
+            negative_prompt="low quality, distorted"
+        )
+
+        # Download track
+        track_path = await media_processor.download_file(audio_url)
+        logger.info(f"Project {project_id}: track downloaded to {track_path}")
+
+        # Find hooks (video param unused in implementation)
+        hooks = await hook_analyzer.find_hooks(
+            audio_path=track_path,
+            video=None,
+            num_hooks=4,
+            hook_duration=hook_duration,
+        )
+
+        if not hooks:
+            logger.warning(f"Project {project_id}: no hooks found, using full track start")
+            # Fallback: use first N seconds of track
+            hooks = hook_analyzer._create_fallback_hooks(
+                total_duration=30.0,
+                hook_duration=hook_duration,
+                num_hooks=1,
+            )
+
+        # Auto-select best hook (highest energy, first in sorted list)
+        best_hook = hooks[0]
+        logger.info(
+            f"Project {project_id}: selected hook {best_hook.start:.1f}-{best_hook.end:.1f}s "
+            f"({best_hook.energy} energy, {best_hook.type})"
+        )
+
+        # Trim hook with fade
+        from app.core.config import settings as app_settings
+        audio_dir = os.path.join(app_settings.MEDIA_DIR, "audio")
+        os.makedirs(audio_dir, exist_ok=True)
+        hook_filename = f"project_{project_id}_hook.mp3"
+        hook_output_path = os.path.join(audio_dir, hook_filename)
+
+        trimmed_path = await media_processor.trim_audio(
+            audio_path=track_path,
+            start=best_hook.start,
+            end=best_hook.end,
+            fade_in=0.5,
+            fade_out=0.5,
+            output_path=hook_output_path,
+        )
+
+        logger.info(f"Project {project_id}: hook trimmed to {trimmed_path}")
+
+        # Cleanup full track temp file
+        try:
+            os.remove(track_path)
+        except OSError:
+            pass
+
+        return trimmed_path
+
+    except Exception as e:
+        logger.error(f"Project {project_id}: batch music generation failed: {e}")
+        return None
+    finally:
+        db_session.close()
+
+
+async def _generate_music_prompt_from_pipeline(
+    preprocessing_prompt: str,
+    image_prompt_template: str,
+) -> str:
+    """Generate a music_prompt by analyzing pipeline prompts."""
+    system = (
+        "You are a music director for short-form viral videos. "
+        "Analyze the given video pipeline prompts and create a concise music style description "
+        "for AI music generation. Output ONLY the music description (1-2 sentences), nothing else."
+    )
+    user_prompt = f"""Analyze these prompts from a video generation pipeline and suggest appropriate music:
+
+PREPROCESSING PROMPT (processes raw data):
+{preprocessing_prompt}
+
+IMAGE PROMPT TEMPLATE (generates image descriptions):
+{image_prompt_template}
+
+Based on the visual style and mood of these videos, describe the ideal background music.
+Include: genre, tempo, mood, instruments. Keep it concise (1-2 sentences).
+Example: "Upbeat electronic lo-fi beat with soft synth pads and a catchy melody, energetic but not overwhelming"
+"""
+
+    return await openai_client.generate_text(
+        prompt=user_prompt,
+        system_prompt=system,
+        temperature=0.7
+    )
+
 
 async def _generate_variant_prompt_from_pipeline(
     preprocessing_prompt: str,
@@ -972,17 +1119,21 @@ async def start_generation(
     db.refresh(generation)
 
     # Start background task
-    async def run_generation_task(gen_id: int):
+    async def run_generation_task(gen_id: int, proj_id: int):
         from app.db.base import SessionLocal
         db_session = SessionLocal()
         try:
             service = get_template_generation_service()
-            await service.run_generation(db_session, gen_id)
+            hook_audio_path = await _generate_batch_music(proj_id)
+            await service.run_generation(
+                db_session, gen_id,
+                hook_audio_path=hook_audio_path,
+            )
         finally:
             db_session.close()
 
     import asyncio
-    asyncio.create_task(run_generation_task(generation.id))
+    asyncio.create_task(run_generation_task(generation.id, project_id))
 
     # Return response with variant data
     response = GenerationResponse.model_validate(generation)
@@ -1109,13 +1260,20 @@ async def start_batch_generation(
     # Start sequential background processing
     gen_ids = [gen.id for gen, _ in generations]
 
-    async def run_batch_task(generation_ids: list[int]):
+    async def run_batch_task(generation_ids: list[int], project_id: int):
         from app.db.base import SessionLocal
         service = get_template_generation_service()
+
+        # Generate music track for the batch (if music_prompt is set)
+        hook_audio_path = await _generate_batch_music(project_id)
+
         for gen_id in generation_ids:
             db_session = SessionLocal()
             try:
-                await service.run_generation(db_session, gen_id)
+                await service.run_generation(
+                    db_session, gen_id,
+                    hook_audio_path=hook_audio_path,
+                )
             except Exception as e:
                 # Mark as failed but continue with the rest
                 try:
@@ -1132,7 +1290,7 @@ async def start_batch_generation(
                 db_session.close()
 
     import asyncio
-    asyncio.create_task(run_batch_task(gen_ids))
+    asyncio.create_task(run_batch_task(gen_ids, project_id))
 
     # Build response
     result = []
@@ -1172,7 +1330,24 @@ async def list_generations(
     total = query.count()
     generations = query.order_by(TemplateGeneration.created_at.desc()).offset(offset).limit(limit).all()
 
-    # Enrich with variant data
+    # Batch-load moderation statuses
+    gen_ids = [g.id for g in generations]
+
+    approved_set = set()
+    rejected_set = set()
+    if gen_ids:
+        approved_set = {
+            row[0] for row in db.query(ApprovedGeneration.template_generation_id).filter(
+                ApprovedGeneration.template_generation_id.in_(gen_ids)
+            ).all()
+        }
+        rejected_set = {
+            row[0] for row in db.query(RejectionArchive.template_generation_id).filter(
+                RejectionArchive.template_generation_id.in_(gen_ids)
+            ).all()
+        }
+
+    # Enrich with variant data and moderation status
     result = []
     for gen in generations:
         response = GenerationResponse.model_validate(gen)
@@ -1180,6 +1355,13 @@ async def list_generations(
             variant = db.query(Variant).filter(Variant.id == gen.variant_id).first()
             if variant:
                 response.variant_data = variant.data
+        # Moderation status
+        if gen.id in approved_set:
+            response.moderation_status = "approved"
+        elif gen.id in rejected_set:
+            response.moderation_status = "rejected"
+        elif gen.regenerated:
+            response.moderation_status = "regenerated"
         result.append(response)
 
     return GenerationListResponse(generations=result, total=total)

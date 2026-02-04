@@ -41,6 +41,8 @@ class GenerationStatusEnum(str, Enum):
     PREPROCESSING = "preprocessing"
     GENERATING_IMAGE = "generating_image"
     GENERATING_VIDEO = "generating_video"
+    GENERATING_AUDIO = "generating_audio"
+    MERGING_AUDIO = "merging_audio"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -70,6 +72,7 @@ class TemplateSettingsUpdate(BaseModel):
     image_aspect_ratio: Optional[AspectRatioEnum] = None
     video_duration: Optional[str] = None
     variant_generation_prompt: Optional[str] = None
+    music_prompt: Optional[str] = None
 
 
 class TemplateSettingsResponse(BaseModel):
@@ -83,6 +86,7 @@ class TemplateSettingsResponse(BaseModel):
     image_aspect_ratio: str
     video_duration: str
     variant_generation_prompt: Optional[str] = None
+    music_prompt: Optional[str] = None
     csv_columns: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
@@ -226,6 +230,8 @@ class GenerationResponse(BaseModel):
     video_url: Optional[str] = None
     image_path: Optional[str] = None
     video_path: Optional[str] = None
+    audio_path: Optional[str] = None
+    video_with_audio_path: Optional[str] = None
 
     # Status
     status: GenerationStatusEnum
@@ -234,6 +240,9 @@ class GenerationResponse(BaseModel):
 
     # Variant data (enriched from variant relationship in endpoint)
     variant_data: Optional[Dict[str, Any]] = None
+
+    # Moderation status (enriched in endpoint): approved / rejected / regenerated / null
+    moderation_status: Optional[str] = None
 
     # Timestamps
     created_at: datetime

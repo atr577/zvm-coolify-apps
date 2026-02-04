@@ -164,11 +164,13 @@ function GenerationCard({
               </a>
             </div>
           )}
-          {gen.video_path && (
+          {(gen.video_with_audio_path || gen.video_path) && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-gray-500 uppercase">Video</div>
+              <div className="text-xs font-medium text-gray-500 uppercase">
+                Video{gen.video_with_audio_path ? ' + Music' : ''}
+              </div>
               <VideoPreview
-                videoUrl={`/api/files/${gen.video_path}`}
+                videoUrl={`/api/files/${gen.video_with_audio_path || gen.video_path}`}
                 thumbnailUrl={gen.image_path ? `/api/files/${gen.image_path}` : null}
                 className="w-full max-h-64"
               />

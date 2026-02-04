@@ -29,7 +29,7 @@ interface ConfigureSectionProps {
   showProjectSettings?: boolean
 }
 
-// Settings that can be edited (preprocessing, image, video fields)
+// Settings that can be edited (preprocessing, image, video, music fields)
 interface EditableSettings {
   llm_model: string
   preprocessing_prompt: string
@@ -39,6 +39,7 @@ interface EditableSettings {
   video_model: string
   video_duration: string
   variant_generation_prompt: string
+  music_prompt: string
 }
 
 // Publishing config editable fields
@@ -56,7 +57,7 @@ interface EditableProjectInfo {
   workspace_id: number | undefined
 }
 
-type StepNumber = 1 | 2 | 3 | 4 | 5
+type StepNumber = 1 | 2 | 3 | 4 | 5 | 6
 
 type StepStatus = 'complete' | 'incomplete' | 'empty'
 
@@ -118,6 +119,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         video_model: s.video_model,
         video_duration: s.video_duration,
         variant_generation_prompt: s.variant_generation_prompt || '',
+        music_prompt: s.music_prompt || '',
       }
       setInitialSettings(editable)
       setEditedSettings({ ...editable })
@@ -170,7 +172,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         (project.social_accounts || []).length === 0 ||
         pc.days.length === 0
       ) {
-        setActiveStep(5)
+        setActiveStep(6)
       }
     } catch (err) {
       console.error('Failed to load configure data:', err)
@@ -215,6 +217,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           video_model: editedSettings.video_model as VideoModel,
           video_duration: editedSettings.video_duration,
           variant_generation_prompt: editedSettings.variant_generation_prompt || undefined,
+          music_prompt: editedSettings.music_prompt || undefined,
         })
       )
     }
@@ -263,6 +266,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         video_model: s.video_model,
         video_duration: s.video_duration,
         variant_generation_prompt: s.variant_generation_prompt || '',
+        music_prompt: s.music_prompt || '',
       }
       setInitialSettings(fresh)
       setEditedSettings({ ...fresh })
@@ -380,6 +384,12 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           : 'incomplete') as StepStatus,
         summary: editedSettings?.video_model
           ? `${getModelLabel(editedSettings.video_model)} · ${templatesCount} tmpl`
+          : 'not set',
+      },
+      music: {
+        status: (editedSettings?.music_prompt ? 'complete' : 'empty') as StepStatus,
+        summary: editedSettings?.music_prompt
+          ? editedSettings.music_prompt.slice(0, 40) + (editedSettings.music_prompt.length > 40 ? '...' : '')
           : 'not set',
       },
       distribution: {
@@ -533,13 +543,38 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
               />
             </AccordionStep>
 
-            {/* Step 5: Distribution */}
+            {/* Step 5: Music */}
             <AccordionStep
               step={5}
-              title="Distribution"
-              status={stepStatuses.distribution}
+              title="Music"
+              status={stepStatuses.music}
               isActive={activeStep === 5}
               onToggle={() => handleStepToggle(5)}
+            >
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">
+                  Music style for generated videos. Auto-generated from your pipeline prompts, or edit manually.
+                </p>
+                <textarea
+                  value={editedSettings.music_prompt}
+                  onChange={(e) => updateSetting('music_prompt', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                  placeholder="e.g. Upbeat electronic lo-fi beat with soft synth pads and a catchy melody"
+                />
+                <p className="text-xs text-gray-400">
+                  One track is generated per batch and merged with all videos. Leave empty to skip music.
+                </p>
+              </div>
+            </AccordionStep>
+
+            {/* Step 6: Distribution */}
+            <AccordionStep
+              step={6}
+              title="Distribution"
+              status={stepStatuses.distribution}
+              isActive={activeStep === 6}
+              onToggle={() => handleStepToggle(6)}
             >
               <DistributionStep
                 projectId={projectId}
