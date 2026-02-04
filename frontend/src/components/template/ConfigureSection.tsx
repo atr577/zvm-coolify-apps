@@ -38,6 +38,7 @@ interface EditableSettings {
   image_prompt_template: string
   video_model: string
   video_duration: string
+  variant_generation_prompt: string
 }
 
 // Publishing config editable fields
@@ -116,6 +117,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         image_prompt_template: s.image_prompt_template,
         video_model: s.video_model,
         video_duration: s.video_duration,
+        variant_generation_prompt: s.variant_generation_prompt || '',
       }
       setInitialSettings(editable)
       setEditedSettings({ ...editable })
@@ -163,7 +165,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
 
       // Auto-open relevant step if setup incomplete
       if (variantsRes.data.total === 0) {
-        setActiveStep(1)
+        setActiveStep(2)
       } else if (
         (project.social_accounts || []).length === 0 ||
         pc.days.length === 0
@@ -212,6 +214,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           image_prompt_template: editedSettings.image_prompt_template,
           video_model: editedSettings.video_model as VideoModel,
           video_duration: editedSettings.video_duration,
+          variant_generation_prompt: editedSettings.variant_generation_prompt || undefined,
         })
       )
     }
@@ -246,8 +249,28 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
 
     await Promise.all(promises)
 
-    // Update initial to match current (no longer dirty)
-    setInitialSettings({ ...editedSettings })
+    // Re-fetch settings to get auto-generated variant_generation_prompt
+    try {
+      const freshSettings = await templateApi.getSettings(projectId)
+      const s = freshSettings.data
+      setSettings(s)
+      const fresh: EditableSettings = {
+        llm_model: s.llm_model,
+        preprocessing_prompt: s.preprocessing_prompt,
+        image_model: s.image_model,
+        image_aspect_ratio: s.image_aspect_ratio,
+        image_prompt_template: s.image_prompt_template,
+        video_model: s.video_model,
+        video_duration: s.video_duration,
+        variant_generation_prompt: s.variant_generation_prompt || '',
+      }
+      setInitialSettings(fresh)
+      setEditedSettings({ ...fresh })
+    } catch {
+      // Fallback: just mark current as initial
+      setInitialSettings({ ...editedSettings })
+    }
+
     setInitialPublishing({ ...editedPublishing })
     if (editedProjectInfo) setInitialProjectInfo({ ...editedProjectInfo })
   }
@@ -331,9 +354,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
     }
 
     return {
-      input: {
+      variants: {
         status: (variantsCount > 0 ? 'complete' : 'empty') as StepStatus,
-        summary: variantsCount > 0 ? `${variantsCount} vars` : 'no CSV',
+        summary: variantsCount > 0 ? `${variantsCount} vars` : 'no data',
       },
       preprocessing: {
         status: (editedSettings?.llm_model && editedSettings?.preprocessing_prompt
@@ -438,28 +461,13 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         {/* Steps accordion — always visible */}
         {editedSettings && editedPublishing && (
           <div>
-            {/* Step 1: Input */}
+            {/* Step 1: Preprocessing */}
             <AccordionStep
               step={1}
-              title="Input"
-              status={stepStatuses.input}
-              isActive={activeStep === 1}
-              onToggle={() => handleStepToggle(1)}
-            >
-              <InputStep
-                projectId={projectId}
-                refreshTrigger={variantsRefresh}
-                onCsvUploadSuccess={handleCsvUploadSuccess}
-              />
-            </AccordionStep>
-
-            {/* Step 2: Preprocessing */}
-            <AccordionStep
-              step={2}
               title="Preprocessing"
               status={stepStatuses.preprocessing}
-              isActive={activeStep === 2}
-              onToggle={() => handleStepToggle(2)}
+              isActive={activeStep === 1}
+              onToggle={() => handleStepToggle(1)}
             >
               <PreprocessingStep
                 llmModel={editedSettings.llm_model}
@@ -467,6 +475,24 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
                 csvColumns={settings?.csv_columns || null}
                 onModelChange={(v) => updateSetting('llm_model', v)}
                 onPromptChange={(v) => updateSetting('preprocessing_prompt', v)}
+              />
+            </AccordionStep>
+
+            {/* Step 2: Variants */}
+            <AccordionStep
+              step={2}
+              title="Variants"
+              status={stepStatuses.variants}
+              isActive={activeStep === 2}
+              onToggle={() => handleStepToggle(2)}
+            >
+              <InputStep
+                projectId={projectId}
+                refreshTrigger={variantsRefresh}
+                variantGenerationPrompt={editedSettings.variant_generation_prompt}
+                onPromptChange={(v) => updateSetting('variant_generation_prompt', v)}
+                onCsvUploadSuccess={handleCsvUploadSuccess}
+                onVariantsGenerated={handleCsvUploadSuccess}
               />
             </AccordionStep>
 

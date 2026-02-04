@@ -1,7 +1,7 @@
 # Архитектура REGGY
 
-**Версия:** 2.1
-**Дата:** 2026-02-02
+**Версия:** 3.0
+**Дата:** 2026-02-03
 
 ---
 
@@ -110,7 +110,8 @@ REGGY/
 | `media_downloader` | `services/media_downloader.py` | Download & store media locally |
 | `metrics_fetcher` | `services/metrics_fetcher.py` | Fetch metrics from social platforms |
 | `music_generator` | `core/music_generator.py` | Generate music prompts + tracks |
-| `template_generation_service` | `services/template_generation_service.py` | Template project batch generation |
+| `template_generation_service` | `services/template_generation_service.py` | Template generation pipeline + metadata |
+| `openai_service` | `services/openai_service.py` | Publishing metadata generation |
 | `placeholder_service` | `services/placeholder_service.py` | CSV parsing + placeholder extraction |
 
 ### Prompt Templates
@@ -169,10 +170,11 @@ User ─────────┬──────── Workspace
 |-------|---------|
 | `VideoTemplate` | Template with image/video prompts |
 | `TemplateSettings` | Generation settings for template project |
-| `TemplateGeneration` | Batch generation job |
-| `Variant` | Generated variant from template |
+| `TemplateGeneration` | Generation run (batch_id, publishing_metadata cache) |
+| `Variant` | CSV row variant data + usage_count |
 | `PublishingConfig` | Schedule settings (days, times, depth) |
 | `ApprovedGeneration` | Publishing queue item (approved videos) |
+| `RejectionArchive` | Rejected generation with reason |
 
 ---
 
@@ -204,16 +206,20 @@ User ─────────┬──────── Workspace
 ```
 1. User creates Project (type=template)
    └── TemplateSettings (models, duration, prompts)
-   └── VideoTemplate[] (image_prompt, video_prompt per variant)
+   └── VideoTemplate[] (video prompt templates)
 
 2. User uploads CSV or creates Variants manually
 
-3. User starts TemplateGeneration
-   └── For each Variant:
-       IMAGE → VIDEO → AUDIO (parallel where possible)
+3. User starts Batch Generation (3 modes: all_unused, least_used, specific)
+   └── For each Variant (sequentially, one at a time):
+       PREPROCESSING → IMAGE_PROMPT → IMAGE → VIDEO → METADATA
+   └── Publishing metadata cached on TemplateGeneration
 
-4. User moderates (approve/regenerate/reject)
+4. User reviews in moderation (approve/regenerate/reject)
+   └── Metadata shown instantly from cache
    └── Approved → ApprovedGeneration (publishing queue)
+   └── Rejected → RejectionArchive
+   └── Regenerate → new generation with optional feedback
 
 5. Scheduler publishes at configured slots
    └── PublishingConfig: days, times, timezone

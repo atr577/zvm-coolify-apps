@@ -1,7 +1,7 @@
 # API Reference
 
-**Версия:** 2.1
-**Дата:** 2026-02-02
+**Версия:** 3.0
+**Дата:** 2026-02-03
 
 **Full API docs:** http://localhost:8000/docs (Swagger UI)
 
@@ -49,6 +49,8 @@ Authorization: Bearer <access_token>
 | GET | `/{id}` | Get project |
 | PATCH | `/{id}` | Update project |
 | DELETE | `/{id}` | Delete project |
+| POST | `/{id}/social-accounts` | Bind social account |
+| DELETE | `/{id}/social-accounts/{account_id}` | Unbind social account |
 
 ### Videos `/api/videos`
 
@@ -82,14 +84,61 @@ Authorization: Bearer <access_token>
 | POST | `/projects/{id}/templates` | Create video template |
 | PATCH | `/templates/{id}` | Update template |
 | DELETE | `/templates/{id}` | Delete template |
-| GET | `/projects/{id}/variants` | List variants |
+| GET | `/projects/{id}/variants` | List variants (limit 500) |
 | POST | `/projects/{id}/variants` | Create variant |
 | POST | `/projects/{id}/variants/csv` | Upload CSV variants |
 | DELETE | `/variants/{id}` | Delete variant |
 | GET | `/projects/{id}/generations` | List generations |
-| POST | `/projects/{id}/generations` | Start generation |
+| POST | `/projects/{id}/generations` | Start single generation |
+| POST | `/projects/{id}/generate/batch` | Start batch generation |
 | GET | `/generations/{id}` | Get generation status |
-| POST | `/generations/{id}/cancel` | Cancel generation |
+
+#### Batch Generation
+
+```
+POST /api/template/projects/{id}/generate/batch
+```
+
+Request:
+```json
+{
+  "mode": "all_unused | least_used | specific",
+  "count": 10,              // for least_used mode
+  "variant_ids": [1, 2, 3], // for specific mode
+  "video_template_id": null  // null = use default
+}
+```
+
+Response:
+```json
+{
+  "batch_id": "uuid",
+  "count": 10,
+  "generations": [...]
+}
+```
+
+Modes:
+- `all_unused` — все варианты с usage_count=0
+- `least_used` — top N вариантов по usage_count ASC
+- `specific` — конкретные variant_ids
+
+### Moderation `/api/projects/{id}/moderation-*`
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/projects/{id}/moderation-queue` | Get pending generations for review |
+| POST | `/projects/{id}/moderation-queue/{gen_id}/pre-generate-metadata` | Get/cache publishing metadata |
+| POST | `/projects/{id}/moderation-queue/{gen_id}/approve` | Approve with metadata |
+| POST | `/projects/{id}/moderation-queue/{gen_id}/reject` | Reject with reason |
+| POST | `/projects/{id}/moderation-queue/{gen_id}/regenerate` | Regenerate with optional feedback |
+| GET | `/projects/{id}/rejection-archive` | List rejected generations |
+
+#### Metadata flow
+
+1. При создании видео мета генерируется автоматически (кешируется в `publishing_metadata`)
+2. `pre-generate-metadata` — возвращает кеш если есть, иначе генерирует и кеширует
+3. `approve` — использует: user-edited metadata > cached > generate on-the-fly
 
 ### Publishing Schedule `/api/projects/{id}/publishing-*`
 
@@ -165,29 +214,34 @@ GET /api/videos?project_id=5&status=completed
 | 401 | Unauthorized (missing/invalid token) |
 | 403 | Forbidden (no permission) |
 | 404 | Not found |
-| 409 | Conflict (invalid state transition) |
-| 500 | Server error |
+| 409 | Conflict (duplicate approve/reject) |
+| 422 | Validation error (FastAPI) |
+| 503 | Service unavailable (AI service failure) |
 
-### Workflow States
+### Template Generation Pipeline
 
-Video status flow:
 ```
-pending → in_progress → completed
-                ↓
-              failed
+preprocessing → image_prompt → image → video → metadata
 ```
 
-Step status flow:
+Each generation goes through 4 steps + metadata pre-generation:
+1. LLM preprocessing of variant data
+2. LLM generates image prompt
+3. fal.ai generates image
+4. fal.ai generates video
+5. LLM generates publishing metadata (non-blocking, cached)
+
+Status flow:
 ```
-pending → in_progress → awaiting_approval → approved
-                              ↓
-                          regenerate → in_progress
+pending → preprocessing → generating_image → generating_video → completed
+                                                    ↓
+                                                  failed
 ```
 
----
+### Moderation Flow
 
-## WebSocket (Future)
-
-Currently using polling for real-time updates. WebSocket planned for:
-- Generation progress
-- Metrics updates
+```
+completed → [review] → approved → [queue] → published
+                    → rejected (archive)
+                    → regenerate → new generation
+```

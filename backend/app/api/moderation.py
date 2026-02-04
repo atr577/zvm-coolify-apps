@@ -138,6 +138,7 @@ async def get_moderation_queue(
             video_prompt=gen.video_prompt,
             image_url=get_local_url(gen.image_path, gen.image_url),
             video_url=get_local_url(gen.video_path, gen.video_url),
+            publishing_metadata=gen.publishing_metadata,
             created_at=gen.created_at,
             completed_at=gen.completed_at
         )
@@ -163,6 +164,11 @@ async def pre_generate_metadata(
     project = get_template_project(db, project_id, current_user)
     generation = get_generation_for_moderation(db, project_id, generation_id)
 
+    # Return cached metadata if available
+    if generation.publishing_metadata:
+        return PreGenerateMetadataResponse(metadata=generation.publishing_metadata)
+
+    # Otherwise generate on-demand (fallback for old generations)
     scenario_data = {
         "preprocessing_result": generation.preprocessing_result,
         "image_prompt": generation.image_prompt,
@@ -180,6 +186,10 @@ async def pre_generate_metadata(
             status_code=503,
             detail=f"Metadata generation failed: {str(e)}. Please retry."
         )
+
+    # Cache for next time
+    generation.publishing_metadata = metadata
+    db.commit()
 
     return PreGenerateMetadataResponse(metadata=metadata)
 
@@ -213,11 +223,13 @@ async def approve_generation(
     if existing:
         raise HTTPException(status_code=409, detail="Generation already approved")
 
-    # Use provided metadata or generate via LLM
+    # Use provided metadata > cached on generation > generate via LLM
     if request and request.publishing_metadata:
         publishing_metadata = {
             platform: meta.model_dump() for platform, meta in request.publishing_metadata.items()
         }
+    elif generation.publishing_metadata:
+        publishing_metadata = generation.publishing_metadata
     else:
         scenario_data = {
             "preprocessing_result": generation.preprocessing_result,

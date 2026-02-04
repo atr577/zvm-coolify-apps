@@ -65,6 +65,9 @@ class TemplateGeneration(Base):
     error_message = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
+    # Pre-generated publishing metadata (cached at completion)
+    publishing_metadata = Column(JSON, nullable=True)
+
     # Batch tracking
     batch_id = Column(String(36), nullable=True, index=True)
 

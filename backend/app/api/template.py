@@ -29,10 +29,23 @@ from app.schemas.template import (
     GenerationListResponse,
     BatchGenerateRequest,
     BatchGenerateResponse,
+    GenerateVariantPromptResponse,
+    GenerateVariantsRequest,
+    GenerateVariantsPreviewResponse,
+    SaveGeneratedVariantsRequest,
+    SaveGeneratedVariantsResponse,
 )
 from app.api.projects import user_has_workspace_access, get_user_workspace_ids
 from app.services.csv_parser import parse_csv, validate_csv_for_project, CSVParseError
 from app.services.template_generation_service import get_template_generation_service
+from app.services.openai_client import openai_client, OpenAIClientError
+
+import logging
+import json
+import random
+import string
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -131,6 +144,23 @@ async def create_template_project(
 
     db.commit()
     db.refresh(project)
+    db.refresh(settings)
+
+    # Auto-generate variant_generation_prompt from pipeline prompts
+    if (
+        not settings.variant_generation_prompt
+        and settings.preprocessing_prompt
+        and settings.image_prompt_template
+    ):
+        try:
+            prompt = await _generate_variant_prompt_from_pipeline(
+                settings.preprocessing_prompt,
+                settings.image_prompt_template
+            )
+            settings.variant_generation_prompt = prompt
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Auto-generate variant prompt on create failed: {e}")
 
     return {
         "id": project.id,
@@ -196,6 +226,24 @@ async def update_template_settings(
 
     db.commit()
     db.refresh(settings)
+
+    # Auto-generate variant_generation_prompt if empty and pipeline prompts are set
+    if (
+        not settings.variant_generation_prompt
+        and settings.preprocessing_prompt
+        and settings.image_prompt_template
+    ):
+        try:
+            prompt = await _generate_variant_prompt_from_pipeline(
+                settings.preprocessing_prompt,
+                settings.image_prompt_template
+            )
+            settings.variant_generation_prompt = prompt
+            db.commit()
+            db.refresh(settings)
+        except Exception as e:
+            logger.warning(f"Auto-generate variant prompt failed: {e}")
+
     return settings
 
 
@@ -398,6 +446,255 @@ async def delete_all_variants(
     db.commit()
 
     return {"message": "All variants deleted", "deleted_count": deleted_count}
+
+
+# --- Variant Generation (LLM) Endpoints ---
+
+async def _generate_variant_prompt_from_pipeline(
+    preprocessing_prompt: str,
+    image_prompt_template: str
+) -> str:
+    """Generate a variant_generation_prompt by analyzing pipeline prompts."""
+    system = (
+        "You are a data analyst. Analyze the given prompts and create a concise instruction "
+        "for generating diverse data rows (variants) as FLAT JSON objects (no nesting). "
+        "Each variant is like a CSV row — simple string values only. "
+        "Identify the KEY INPUT variables that the preprocessing prompt expects. "
+        "Return ONLY the instruction text, nothing else."
+    )
+    user_prompt = f"""Analyze these two prompts from a video generation pipeline:
+
+PREPROCESSING PROMPT (processes raw data into structured format):
+{preprocessing_prompt}
+
+IMAGE PROMPT TEMPLATE (generates image description from data):
+{image_prompt_template}
+
+The preprocessing prompt takes SHORT input descriptions and expands them into detailed JSON.
+Your job: write an instruction for generating those SHORT input descriptions as FLAT JSON objects.
+
+CRITICAL RULES:
+- Each variant must be a FLAT object with simple string values — NO nested objects, NO arrays
+- Think of it as CSV data: each key is a column name, each value is a RICH text description (10-30 words)
+- Column names should be in the same language as the preprocessing prompt
+- Values should be detailed and vivid, not generic (e.g. "Токио — Синдзюку / неоновая улица" not just "Tokyo")
+
+The instruction should:
+1. List exactly 3-6 required columns with clear names (e.g. "Место", "Мотоцикл", "модель", "одежда")
+2. For each column, give an example value showing the expected detail level
+3. Emphasize diversity and uniqueness
+4. State that fields must vary independently (e.g. location must NOT determine character appearance)
+5. Specify that values should be written in the same language as the prompts
+6. Be concise (4-6 sentences)"""
+
+    return await openai_client.generate_text(
+        prompt=user_prompt,
+        system_prompt=system,
+        temperature=0.5
+    )
+
+
+@router.post(
+    "/projects/{project_id}/variants/generate-prompt",
+    response_model=GenerateVariantPromptResponse,
+    tags=["template"]
+)
+async def generate_variant_prompt(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate variant_generation_prompt from pipeline prompts (preprocessing + image_prompt).
+
+    Analyzes the pipeline prompts and creates an instruction for variant generation.
+    Saves the result to settings.variant_generation_prompt.
+    """
+    project = get_template_project(db, project_id, current_user)
+
+    settings = db.query(TemplateSettings).filter(
+        TemplateSettings.project_id == project_id
+    ).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Template settings not found")
+
+    if not settings.preprocessing_prompt or not settings.image_prompt_template:
+        raise HTTPException(
+            status_code=400,
+            detail="Both preprocessing_prompt and image_prompt_template must be set"
+        )
+
+    try:
+        prompt = await _generate_variant_prompt_from_pipeline(
+            settings.preprocessing_prompt,
+            settings.image_prompt_template
+        )
+    except OpenAIClientError as e:
+        raise HTTPException(status_code=503, detail=f"Generation failed: {e}")
+
+    settings.variant_generation_prompt = prompt
+    db.commit()
+    db.refresh(settings)
+
+    return GenerateVariantPromptResponse(prompt=prompt)
+
+
+@router.post(
+    "/projects/{project_id}/variants/generate",
+    response_model=GenerateVariantsPreviewResponse,
+    tags=["template"]
+)
+async def generate_variants_preview(
+    project_id: int,
+    data: GenerateVariantsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate variant preview using LLM. Does NOT save to database.
+
+    Returns a preview of generated variants for user to review before saving.
+    """
+    project = get_template_project(db, project_id, current_user)
+
+    settings = db.query(TemplateSettings).filter(
+        TemplateSettings.project_id == project_id
+    ).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Template settings not found")
+
+    if not settings.variant_generation_prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="variant_generation_prompt is not set. Generate or set it first."
+        )
+
+    # Gather context: existing columns + sample variants
+    columns = settings.csv_columns or []
+    existing_variants = db.query(Variant).filter(
+        Variant.project_id == project_id
+    ).order_by(Variant.row_number).limit(10).all()
+
+    examples = [v.data for v in existing_variants]
+
+    # Build LLM prompt
+    system = (
+        "You are a data generator. Generate unique data rows as a JSON object with key \"variants\" "
+        "containing an array of FLAT objects. Each object represents one data row. "
+        "FLAT means: all values must be simple strings, NO nested objects, NO arrays. "
+        "Think of each object as a CSV row with string values only. "
+        "All objects MUST have the same keys. "
+        "IMPORTANT: Each field must vary INDEPENDENTLY. Do not create stereotypical correlations "
+        "between fields (e.g. location should NOT determine character appearance, ethnicity, or name). "
+        "Mix combinations freely and unexpectedly. "
+        "Return valid JSON only."
+    )
+
+    context_parts = [f"INSTRUCTION:\n{settings.variant_generation_prompt}"]
+
+    if columns:
+        context_parts.append(f"\nREQUIRED COLUMNS (use exactly these keys): {json.dumps(columns)}")
+
+    if examples:
+        context_parts.append(
+            f"\nEXISTING EXAMPLES (generate different values, keep same structure):\n"
+            + json.dumps(examples[:5], ensure_ascii=False, indent=2)
+        )
+
+    # Random seed to avoid similar results on repeated generations
+    seed = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+    context_parts.append(
+        f"\nGenerate exactly {data.count} unique variants. "
+        f"DIVERSITY SEED: {seed} — use this as creative inspiration to produce COMPLETELY DIFFERENT results each time. "
+        f"Avoid repeating the same cities, names, brands, or patterns. Be surprising and global. "
+        f"Return JSON: {{\"variants\": [...]}}"
+    )
+
+    user_prompt = "\n".join(context_parts)
+
+    try:
+        result = await openai_client.generate_json(
+            prompt=user_prompt,
+            system_prompt=system,
+            temperature=1.0
+        )
+    except OpenAIClientError as e:
+        raise HTTPException(status_code=503, detail=f"Generation failed: {e}")
+
+    variants = result.get("variants", [])
+    if not variants or not isinstance(variants, list):
+        raise HTTPException(status_code=503, detail="Generation failed: invalid LLM response format")
+
+    # Extract columns from generated data
+    generated_columns = list(variants[0].keys()) if variants else columns
+
+    return GenerateVariantsPreviewResponse(
+        variants=variants,
+        columns=generated_columns
+    )
+
+
+@router.post(
+    "/projects/{project_id}/variants/save-generated",
+    response_model=SaveGeneratedVariantsResponse,
+    tags=["template"]
+)
+async def save_generated_variants(
+    project_id: int,
+    data: SaveGeneratedVariantsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Save generated variants from preview. Deduplicates against existing variants.
+    """
+    project = get_template_project(db, project_id, current_user)
+
+    if not data.variants:
+        raise HTTPException(status_code=400, detail="No variants to save")
+
+    # Get existing variant data for deduplication
+    existing = db.query(Variant).filter(Variant.project_id == project_id).all()
+    existing_data_set = {json.dumps(v.data, sort_keys=True) for v in existing}
+
+    # Get max row_number
+    max_row = db.query(func.max(Variant.row_number)).filter(
+        Variant.project_id == project_id
+    ).scalar() or 0
+
+    created = 0
+    skipped = 0
+
+    for variant_data in data.variants:
+        data_key = json.dumps(variant_data, sort_keys=True)
+        if data_key in existing_data_set:
+            skipped += 1
+            continue
+
+        max_row += 1
+        variant = Variant(
+            project_id=project_id,
+            row_number=max_row,
+            data=variant_data,
+            usage_count=0,
+        )
+        db.add(variant)
+        existing_data_set.add(data_key)
+        created += 1
+
+    # Update csv_columns if not set
+    settings = db.query(TemplateSettings).filter(
+        TemplateSettings.project_id == project_id
+    ).first()
+    if settings and not settings.csv_columns and data.variants:
+        settings.csv_columns = list(data.variants[0].keys())
+
+    db.commit()
+
+    return SaveGeneratedVariantsResponse(
+        variants_created=created,
+        duplicates_skipped=skipped
+    )
 
 
 # --- Video Templates Endpoints ---

@@ -69,6 +69,7 @@ class TemplateSettingsUpdate(BaseModel):
     video_model: Optional[VideoModelEnum] = None
     image_aspect_ratio: Optional[AspectRatioEnum] = None
     video_duration: Optional[str] = None
+    variant_generation_prompt: Optional[str] = None
 
 
 class TemplateSettingsResponse(BaseModel):
@@ -81,6 +82,7 @@ class TemplateSettingsResponse(BaseModel):
     video_model: str
     image_aspect_ratio: str
     video_duration: str
+    variant_generation_prompt: Optional[str] = None
     csv_columns: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
@@ -150,6 +152,30 @@ class VariantListResponse(BaseModel):
     variants: List[VariantResponse]
     total: int
     csv_columns: Optional[List[str]] = None
+
+
+# --- Variant Generation Schemas ---
+
+class GenerateVariantPromptResponse(BaseModel):
+    prompt: str
+
+
+class GenerateVariantsRequest(BaseModel):
+    count: int = Field(ge=1, le=50, default=10)
+
+
+class GenerateVariantsPreviewResponse(BaseModel):
+    variants: List[Dict[str, Any]]
+    columns: List[str]
+
+
+class SaveGeneratedVariantsRequest(BaseModel):
+    variants: List[Dict[str, Any]]
+
+
+class SaveGeneratedVariantsResponse(BaseModel):
+    variants_created: int
+    duplicates_skipped: int
 
 
 # --- CSV Upload Schema ---

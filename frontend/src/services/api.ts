@@ -306,6 +306,22 @@ export const templateApi = {
   deleteAllVariants: (projectId: number) =>
     api.delete(`/api/projects/${projectId}/variants`),
 
+  // Variant Generation (LLM)
+  generateVariantPrompt: (projectId: number) =>
+    api.post<{ prompt: string }>(`/api/projects/${projectId}/variants/generate-prompt`),
+
+  generateVariantsPreview: (projectId: number, count: number) =>
+    api.post<{ variants: Record<string, unknown>[]; columns: string[] }>(
+      `/api/projects/${projectId}/variants/generate`,
+      { count }
+    ),
+
+  saveGeneratedVariants: (projectId: number, variants: Record<string, unknown>[]) =>
+    api.post<{ variants_created: number; duplicates_skipped: number }>(
+      `/api/projects/${projectId}/variants/save-generated`,
+      { variants }
+    ),
+
   // Video Templates
   listVideoTemplates: (projectId: number, includeDeleted = false) =>
     api.get<VideoTemplate[]>(`/api/projects/${projectId}/video-templates`, {
@@ -394,6 +410,7 @@ export interface ModerationQueueItem {
   video_prompt: string | null
   image_url: string | null
   video_url: string | null
+  publishing_metadata: Record<string, PlatformMetadata> | null
   created_at: string
   completed_at: string | null
 }

@@ -17,11 +17,13 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
+from app.models.project import Project
 from app.models.template_settings import TemplateSettings
 from app.models.video_template import VideoTemplate
 from app.models.variant import Variant
 from app.models.template_generation import TemplateGeneration, GenerationStatus
 from app.services.openai_client import OpenAIClient
+from app.services.openai_service import openai_service
 from app.services.fal_client import FalClient, FalClientError
 from app.services.media_downloader import download_image, download_video
 
@@ -113,6 +115,9 @@ class TemplateGenerationService:
             generation.status = GenerationStatus.COMPLETED.value
             generation.completed_at = datetime.utcnow()
             db.commit()
+
+            # Pre-generate publishing metadata (non-blocking)
+            await self._generate_metadata(db, generation)
 
             logger.info(f"Generation {generation_id} completed successfully")
 
@@ -311,6 +316,40 @@ class TemplateGenerationService:
             raise GenerationError(f"Video generation failed: {e}", "video")
         except Exception as e:
             raise GenerationError(f"Video generation failed: {e}", "video")
+
+    async def _generate_metadata(
+        self,
+        db: Session,
+        generation: TemplateGeneration
+    ):
+        """Pre-generate publishing metadata after video completion."""
+        try:
+            project = db.query(Project).filter(
+                Project.id == generation.project_id
+            ).first()
+
+            platforms = (project.platforms or ["youtube"]) if project else ["youtube"]
+
+            scenario_data = {
+                "preprocessing_result": generation.preprocessing_result,
+                "image_prompt": generation.image_prompt,
+                "video_prompt": generation.video_prompt,
+            }
+
+            metadata = await openai_service.generate_publishing_meta(
+                platforms=platforms,
+                scenario_data=scenario_data,
+                fallback_text=generation.image_prompt[:500] if generation.image_prompt else None
+            )
+
+            generation.publishing_metadata = metadata
+            db.commit()
+
+            logger.info(f"Generation {generation.id}: publishing metadata pre-generated")
+
+        except Exception as e:
+            # Non-critical — don't fail the generation, just log
+            logger.warning(f"Generation {generation.id}: metadata pre-generation failed: {e}")
 
     async def _fail_generation(
         self,

@@ -1,7 +1,7 @@
 # REGGY - AI Video Generation Platform
 
-**Версия:** 2.1
-**Дата:** 2026-02-02
+**Версия:** 3.0
+**Дата:** 2026-02-03
 
 ---
 
@@ -43,15 +43,18 @@ REGGY — платформа для автоматизированного со�
 ### 3. Template (Batch генерация)
 
 ```
-CSV с данными → Массовая генерация по шаблону
+CSV с данными → Batch генерация → Модерация → Публикация по расписанию
 ```
 
 **Когда использовать:** Производство большого количества видео по единому шаблону.
 
+**UI:** 4 вкладки — Dashboard / Generate / Review / Details
+
 **Пример:**
 - CSV: 100 строк с комбинациями переменных
-- Шаблон: image_prompt + video_prompt + настройки
-- Результат: 100 видео с минимальным участием
+- Batch: "Generate all unused" → 100 видео последовательно
+- Review: approve/reject/regenerate каждое видео
+- Schedule: автопубликация по расписанию (дни, время)
 
 ---
 
@@ -118,7 +121,14 @@ SCENARIO → IMAGE → VIDEO → AUDIO
 ### Social Publishing
 - OAuth интеграция с YouTube, Instagram, TikTok
 - Привязка аккаунтов к проектам
-- Автогенерация title, description, hashtags
+- Автогенерация title, description, hashtags (при создании видео)
+
+### Video Moderation (Template projects)
+- Review screen с фокусным просмотром видео
+- Approve → публикация по расписанию
+- Reject → архив с причиной
+- Regenerate → новая генерация с текстовым feedback
+- Метаданные показываются мгновенно (кеш с момента генерации)
 
 ### Lineage Tracking
 При выборе варианта восстанавливается вся цепочка:
@@ -151,6 +161,7 @@ Regenerate с текстовым feedback:
 | Videos | `/api/videos` | Video CRUD |
 | Workflow | `/api/workflow` | 4-stage generation pipeline |
 | Template | `/api/template` | Template project operations |
+| Moderation | `/api/projects/{id}/moderation-*` | Review queue, approve/reject/regenerate |
 | Publishing Schedule | `/api/projects/{id}/publishing-*` | Schedule config, queue, calendar |
 | Publish | `/api/publish` | Social media publishing |
 | Metrics | `/api/metrics` | Analytics |

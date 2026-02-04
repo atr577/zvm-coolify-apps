@@ -116,7 +116,7 @@ export function ReviewScreen({ projectId, onNavigate }: ReviewScreenProps) {
     fetchData()
   }, [fetchData])
 
-  // Pre-generate metadata when current item changes
+  // Load metadata: use cached from item, or fetch from API as fallback
   const loadMetadata = useCallback(async (generationId: number) => {
     setMetadata(null)
     setMetadataError(null)
@@ -134,7 +134,15 @@ export function ReviewScreen({ projectId, onNavigate }: ReviewScreenProps) {
 
   useEffect(() => {
     if (currentItem && getStatus(currentItem.id) === 'pending') {
-      loadMetadata(currentItem.id)
+      if (currentItem.publishing_metadata) {
+        // Use cached metadata — no preloader
+        setMetadata(currentItem.publishing_metadata)
+        setMetadataLoading(false)
+        setMetadataError(null)
+      } else {
+        // Fallback: fetch from API (old generations without cached metadata)
+        loadMetadata(currentItem.id)
+      }
     } else {
       setMetadata(null)
       setMetadataLoading(false)

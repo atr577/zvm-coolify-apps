@@ -69,7 +69,10 @@ class TemplateSettings(Base):
     # Video Settings
     video_duration = Column(String(10), nullable=False, default="5")  # Kling: "5"/"10", Veo: "4s"/"6s"/"8s"
 
-    # CSV Metadata (detected on import)
+    # Variant generation
+    variant_generation_prompt = Column(Text, nullable=True)
+
+    # CSV Metadata (detected on import or from LLM generation)
     csv_columns = Column(JSON, nullable=True)
 
     # Publishing metadata prompts

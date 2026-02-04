@@ -405,6 +405,7 @@ export interface TemplateSettings {
   video_model: string
   image_aspect_ratio: string
   video_duration: string
+  variant_generation_prompt: string | null
   csv_columns: string[] | null
   created_at: string
   updated_at: string
@@ -418,6 +419,7 @@ export interface TemplateSettingsUpdate {
   video_model?: VideoModel
   image_aspect_ratio?: AspectRatio
   video_duration?: string
+  variant_generation_prompt?: string
 }
 
 export interface Variant {

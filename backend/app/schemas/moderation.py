@@ -28,6 +28,7 @@ class ModerationQueueItem(BaseModel):
     video_prompt: Optional[str] = None
     image_url: Optional[str] = None
     video_url: Optional[str] = None
+    publishing_metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
 
