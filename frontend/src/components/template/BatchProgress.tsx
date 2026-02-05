@@ -182,7 +182,7 @@ function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
   )
 }
 
-function BatchProgressBar({ batch, onRetry }: { batch: BatchInfo; onRetry: (id: number) => void }) {
+function BatchProgressBar({ batch }: { batch: BatchInfo }) {
   const total = batch.generations.length
   const completed = batch.generations.filter(g => g.status === 'completed').length
   const failed = batch.generations.filter(g => g.status === 'failed').length
@@ -369,7 +369,6 @@ export function BatchProgress({ projectId, refreshTrigger }: BatchProgressProps)
             <BatchProgressBar
               key={batch.batch_id || `single-${i}`}
               batch={batch}
-              onRetry={handleRetry}
             />
           ))}
 
