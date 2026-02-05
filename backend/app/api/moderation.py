@@ -137,7 +137,7 @@ async def get_moderation_queue(
             image_prompt=gen.image_prompt,
             video_prompt=gen.video_prompt,
             image_url=get_local_url(gen.image_path, gen.image_url),
-            video_url=get_local_url(gen.video_path, gen.video_url),
+            video_url=get_local_url(gen.video_with_audio_path or gen.video_path, gen.video_url),
             publishing_metadata=gen.publishing_metadata,
             created_at=gen.created_at,
             completed_at=gen.completed_at

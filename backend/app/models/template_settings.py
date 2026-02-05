@@ -75,6 +75,9 @@ class TemplateSettings(Base):
     # CSV Metadata (detected on import or from LLM generation)
     csv_columns = Column(JSON, nullable=True)
 
+    # Music settings
+    music_prompt = Column(Text, nullable=True)  # Auto-generated or user-edited music style description
+
     # Publishing metadata prompts
     title_prompt = Column(Text, nullable=True)  # Prompt template for title generation
     description_prompt = Column(Text, nullable=True)  # Prompt template for description generation

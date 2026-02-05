@@ -14,6 +14,8 @@ class GenerationStatus(str, enum.Enum):
     PREPROCESSING = "preprocessing"
     GENERATING_IMAGE = "generating_image"
     GENERATING_VIDEO = "generating_video"
+    GENERATING_AUDIO = "generating_audio"
+    MERGING_AUDIO = "merging_audio"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -54,6 +56,8 @@ class TemplateGeneration(Base):
     # Local media paths (downloaded from fal.ai)
     image_path = Column(String(255), nullable=True)
     video_path = Column(String(255), nullable=True)
+    audio_path = Column(String(255), nullable=True)  # Trimmed hook audio
+    video_with_audio_path = Column(String(255), nullable=True)  # Final merged video
 
     # fal.ai request IDs (for resume/retry)
     fal_image_request_id = Column(String(100), nullable=True)

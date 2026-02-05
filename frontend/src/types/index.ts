@@ -393,7 +393,7 @@ export interface AdaptationData {
 export type LLMModel = 'gpt-4o-mini' | 'gpt-4o'
 export type ImageModel = 'fal-ai/nano-banana-pro' | 'fal-ai/flux-pro/v1.1-ultra' | 'fal-ai/flux-pro/v1.1' | 'fal-ai/ideogram/v3' | 'fal-ai/imagen3'
 export type VideoModel = 'fal-ai/veo3/fast/image-to-video' | 'fal-ai/veo3/image-to-video' | 'fal-ai/veo3.1/reference-to-video' | 'fal-ai/kling-video/v2.1/standard/image-to-video' | 'fal-ai/kling-video/v2.1/pro/image-to-video' | 'fal-ai/minimax/video-01'
-export type GenerationStatus = 'pending' | 'preprocessing' | 'generating_image' | 'generating_video' | 'completed' | 'failed'
+export type GenerationStatus = 'pending' | 'preprocessing' | 'generating_image' | 'generating_video' | 'generating_audio' | 'merging_audio' | 'completed' | 'failed'
 
 export interface TemplateSettings {
   id: number
@@ -406,6 +406,7 @@ export interface TemplateSettings {
   image_aspect_ratio: string
   video_duration: string
   variant_generation_prompt: string | null
+  music_prompt: string | null
   csv_columns: string[] | null
   created_at: string
   updated_at: string
@@ -420,6 +421,7 @@ export interface TemplateSettingsUpdate {
   image_aspect_ratio?: AspectRatio
   video_duration?: string
   variant_generation_prompt?: string
+  music_prompt?: string
 }
 
 export interface Variant {
@@ -491,10 +493,13 @@ export interface Generation {
   video_url: string | null
   image_path: string | null
   video_path: string | null
+  audio_path: string | null
+  video_with_audio_path: string | null
   status: GenerationStatus
   failed_at_step: string | null
   error_message: string | null
   variant_data: Record<string, string> | null
+  moderation_status: 'approved' | 'rejected' | 'regenerated' | null
   batch_id: string | null
   created_at: string
   completed_at: string | null

@@ -226,7 +226,7 @@ async def get_publishing_queue(
             created_at=item.created_at,
             updated_at=item.updated_at,
             thumbnail_url=get_local_url(gen.image_path, gen.image_url) if gen else None,
-            video_url=get_local_url(gen.video_path, gen.video_url) if gen else None
+            video_url=get_local_url(gen.video_with_audio_path or gen.video_path, gen.video_url) if gen else None
         ))
 
     return PublishingQueueResponse(items=response_items, total=len(response_items))
@@ -279,7 +279,7 @@ async def update_queue_item(
         created_at=item.created_at,
         updated_at=item.updated_at,
         thumbnail_url=get_local_url(gen.image_path, gen.image_url) if gen else None,
-        video_url=get_local_url(gen.video_path, gen.video_url) if gen else None
+        video_url=get_local_url(gen.video_with_audio_path or gen.video_path, gen.video_url) if gen else None
     )
 
 
@@ -365,7 +365,7 @@ async def get_publishing_schedule(
                 id=q_item.id,
                 generation_id=q_item.template_generation_id,
                 thumbnail_url=get_local_url(gen.image_path, gen.image_url) if gen else None,
-                video_url=get_local_url(gen.video_path, gen.video_url) if gen else None,
+                video_url=get_local_url(gen.video_with_audio_path or gen.video_path, gen.video_url) if gen else None,
                 publishing_metadata=q_item.publishing_metadata,
                 status=q_item.status,
                 platform_statuses=q_item.platform_statuses
