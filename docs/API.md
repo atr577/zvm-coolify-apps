@@ -1,7 +1,7 @@
 # API Reference
 
-**Версия:** 3.0
-**Дата:** 2026-02-03
+**Версия:** 4.0
+**Дата:** 2026-02-05
 
 **Full API docs:** http://localhost:8000/docs (Swagger UI)
 
@@ -93,6 +93,14 @@ Authorization: Bearer <access_token>
 | POST | `/projects/{id}/generate/batch` | Start batch generation |
 | GET | `/generations/{id}` | Get generation status |
 
+#### LLM Variant Generation
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/projects/{id}/variants/generate-prompt` | Generate variant prompt from pipeline |
+| POST | `/projects/{id}/variants/generate` | Generate variants preview (not saved) |
+| POST | `/projects/{id}/variants/save-generated` | Save previewed variants |
+
 #### Batch Generation
 
 ```
@@ -102,7 +110,7 @@ POST /api/template/projects/{id}/generate/batch
 Request:
 ```json
 {
-  "mode": "all_unused | least_used | specific",
+  "mode": "least_used | specific | fill_schedule",
   "count": 10,              // for least_used mode
   "variant_ids": [1, 2, 3], // for specific mode
   "video_template_id": null  // null = use default
@@ -119,9 +127,93 @@ Response:
 ```
 
 Modes:
-- `all_unused` — все варианты с usage_count=0
 - `least_used` — top N вариантов по usage_count ASC
 - `specific` — конкретные variant_ids
+- `fill_schedule` — авто-рассчитывает (slots - approved - review - generating)
+
+#### Generation Pipeline
+
+Status flow:
+```
+pending → preprocessing → generating_image → generating_video → generating_audio → merging_audio → completed
+                                                                                              ↓
+                                                                                            failed
+```
+
+New statuses for music:
+- `generating_audio` — Lyria2 generating music track
+- `merging_audio` — MediaProcessor merging hook with video
+
+### Discover `/api/discover`
+
+**New in v4.0** — Iterative exploration workflow for discovering new video formats.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/` | Create discover project |
+| GET | `/` | List discover projects |
+| GET | `/{id}` | Get project with all rounds |
+| DELETE | `/{id}` | Archive project |
+| POST | `/{id}/rounds` | Generate next round |
+| POST | `/{id}/rounds/{round_id}/select` | Submit selections |
+| POST | `/{id}/rounds/{round_id}/retry` | Retry failed items |
+| POST | `/{id}/advance` | Advance to video stage |
+| POST | `/{id}/advance-extraction` | Advance to extraction |
+| POST | `/{id}/rollback` | Roll back last round |
+| POST | `/{id}/extract` | Extract template prompts |
+| PUT | `/{id}/extraction` | Edit extracted prompts |
+| POST | `/{id}/create-template` | Create Template project |
+
+#### Create Discover Project
+
+```
+POST /api/discover
+```
+
+Request:
+```json
+{
+  "concept": "Industrial hydraulic crusher destroying various objects",
+  "name": "Crusher Videos",
+  "workspace_id": 1,
+  "image_model": "fal-ai/flux-pro/v1.1",
+  "video_model": "fal-ai/veo3/fast/image-to-video",
+  "image_aspect_ratio": "9:16",
+  "video_duration": "6s"
+}
+```
+
+#### Generate Round
+
+```
+POST /api/discover/{id}/rounds
+```
+
+Request:
+```json
+{
+  "feedback": "I want more dramatic angles",
+  "count": 7  // optional, 1-7
+}
+```
+
+#### Submit Selection
+
+```
+POST /api/discover/{id}/rounds/{round_id}/select
+```
+
+Request:
+```json
+{
+  "selections": {
+    "1": "selected",
+    "2": "rejected",
+    "3": "selected"
+  },
+  "feedback": "More close-up shots"
+}
+```
 
 ### Moderation `/api/projects/{id}/moderation-*`
 
@@ -155,16 +247,22 @@ Modes:
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/{platform}/authorize` | Get OAuth redirect URL |
+| GET | `/connect/{platform}` | Get OAuth redirect URL |
 | GET | `/{platform}/callback` | OAuth callback handler |
 
 Platforms: `youtube`, `instagram`, `tiktok`
+
+**YouTube Multi-Channel Support:**
+- OAuth returns ALL channels associated with the Google account
+- Each channel is stored as a separate SocialAccount
+- `display_name` format: `"email - channel_name (@handle)"`
 
 ### Social Accounts `/api/social-accounts`
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/` | List connected accounts |
+| GET | `/workspace/{id}` | List accounts for workspace |
 | DELETE | `/{id}` | Disconnect account |
 | POST | `/{id}/refresh` | Refresh OAuth tokens |
 
@@ -221,22 +319,17 @@ GET /api/videos?project_id=5&status=completed
 ### Template Generation Pipeline
 
 ```
-preprocessing → image_prompt → image → video → metadata
+preprocessing → image_prompt → image → video → audio → merge
 ```
 
-Each generation goes through 4 steps + metadata pre-generation:
+Each generation goes through these steps:
 1. LLM preprocessing of variant data
 2. LLM generates image prompt
 3. fal.ai generates image
 4. fal.ai generates video
-5. LLM generates publishing metadata (non-blocking, cached)
-
-Status flow:
-```
-pending → preprocessing → generating_image → generating_video → completed
-                                                    ↓
-                                                  failed
-```
+5. Lyria2 generates music track (once per batch)
+6. MediaProcessor merges hook with video
+7. LLM generates publishing metadata (cached)
 
 ### Moderation Flow
 
@@ -244,4 +337,13 @@ pending → preprocessing → generating_image → generating_video → complete
 completed → [review] → approved → [queue] → published
                     → rejected (archive)
                     → regenerate → new generation
+```
+
+### Discover Flow
+
+```
+concept → [images stage] → [videos stage] → extraction → template
+             ↓                 ↓
+          rounds            rounds
+         (narrow)          (narrow)
 ```

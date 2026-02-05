@@ -113,7 +113,9 @@ export function DistributionStep({
                         value={acc.id}
                         disabled={acc.is_token_expired}
                       >
-                        @{acc.username || acc.display_name || acc.platform_user_id}
+                        {platform === 'youtube'
+                          ? (acc.display_name || acc.username || acc.platform_user_id)
+                          : `@${acc.username || acc.display_name || acc.platform_user_id}`}
                         {acc.is_token_expired ? ' (expired)' : ''}
                       </option>
                     ))}

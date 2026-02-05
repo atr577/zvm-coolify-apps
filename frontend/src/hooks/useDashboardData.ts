@@ -1,8 +1,8 @@
 import { useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useSearchParams } from 'react-router-dom'
-import { projectsApi, videosApi, workspacesApi, templateApi } from '@/services/api'
-import type { Video, CreateProjectDto, Workspace } from '@/types'
+import { projectsApi, videosApi, workspacesApi, templateApi, discoverApi } from '@/services/api'
+import type { Video, CreateProjectDto, Workspace, DiscoverProject } from '@/types'
 
 export type FilterTab = 'all' | 'in_progress' | 'ready' | 'published' | 'errors'
 
@@ -60,6 +60,12 @@ export function useDashboardData() {
   const { data: workspaces } = useQuery<Workspace[]>(
     'workspaces',
     () => workspacesApi.list().then(res => res.data)
+  )
+
+  // Fetch discover projects
+  const { data: discoverProjects } = useQuery<DiscoverProject[]>(
+    'discover-projects',
+    () => discoverApi.list().then(res => res.data.projects)
   )
 
   // Fetch videos for all projects (and generation counts for template projects)
@@ -162,6 +168,7 @@ export function useDashboardData() {
 
     // Data
     projects,
+    discoverProjects,
     workspaces,
     allVideos,
     templateGenerationCounts,

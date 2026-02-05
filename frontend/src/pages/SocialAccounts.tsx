@@ -197,7 +197,9 @@ export default function SocialAccounts() {
                             {account.display_name || account.username || 'Unknown'}
                           </p>
                           {account.username && account.display_name !== account.username && (
-                            <p className="text-sm text-gray-500">@{account.username}</p>
+                            <p className="text-sm text-gray-500">
+                              {account.username.startsWith('@') ? account.username : `@${account.username}`}
+                            </p>
                           )}
                         </div>
                         <div className="ml-4">

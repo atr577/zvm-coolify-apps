@@ -30,7 +30,7 @@ OAUTH_CONFIGS = {
     "youtube": {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
-        "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube",
+        "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.email",
         "client_id": getattr(settings, "YOUTUBE_CLIENT_ID", None),
         "client_secret": getattr(settings, "YOUTUBE_CLIENT_SECRET", None),
     }
@@ -172,36 +172,39 @@ async def oauth_callback(
             # Получаем информацию о пользователе платформы
             user_info = await get_platform_user_info(platform, access_token)
 
-            # Создаем или обновляем SocialAccount
-            existing_account = db.query(SocialAccount).filter(
-                SocialAccount.user_id == user_id,
-                SocialAccount.platform == platform,
-                SocialAccount.platform_user_id == user_info["id"]
-            ).first()
+            # YouTube may return multiple channels - handle as list
+            user_info_list = user_info if isinstance(user_info, list) else [user_info]
 
-            if existing_account:
-                existing_account.access_token = access_token
-                existing_account.refresh_token = refresh_token
-                existing_account.username = user_info.get("username")
-                existing_account.display_name = user_info.get("display_name")
-                existing_account.profile_picture = user_info.get("profile_picture")
-                existing_account.is_active = True
-                db.commit()
-                account = existing_account
-            else:
-                account = SocialAccount(
-                    user_id=user_id,
-                    platform=platform,
-                    platform_user_id=user_info["id"],
-                    access_token=access_token,
-                    refresh_token=refresh_token,
-                    username=user_info.get("username"),
-                    display_name=user_info.get("display_name"),
-                    profile_picture=user_info.get("profile_picture"),
-                    is_active=True
-                )
-                db.add(account)
-                db.commit()
+            # Создаем или обновляем SocialAccount для каждого канала
+            for info in user_info_list:
+                existing_account = db.query(SocialAccount).filter(
+                    SocialAccount.user_id == user_id,
+                    SocialAccount.platform == platform,
+                    SocialAccount.platform_user_id == info["id"]
+                ).first()
+
+                if existing_account:
+                    existing_account.access_token = access_token
+                    existing_account.refresh_token = refresh_token
+                    existing_account.username = info.get("username")
+                    existing_account.display_name = info.get("display_name")
+                    existing_account.profile_picture = info.get("profile_picture")
+                    existing_account.is_active = True
+                else:
+                    account = SocialAccount(
+                        user_id=user_id,
+                        platform=platform,
+                        platform_user_id=info["id"],
+                        access_token=access_token,
+                        refresh_token=refresh_token,
+                        username=info.get("username"),
+                        display_name=info.get("display_name"),
+                        profile_picture=info.get("profile_picture"),
+                        is_active=True
+                    )
+                    db.add(account)
+
+            db.commit()
 
             # Редирект на фронтенд с success
             frontend_url = settings.CORS_ORIGINS[0] if settings.CORS_ORIGINS else "http://localhost:3000"
@@ -248,6 +251,15 @@ async def get_platform_user_info(platform: str, access_token: str) -> dict:
             }
 
         elif platform == "youtube":
+            # Get Google account email
+            email_response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            email_data = email_response.json()
+            google_email = email_data.get("email", "")
+
+            # Get YouTube channels (with snippet for title and customUrl for handle)
             response = await client.get(
                 "https://www.googleapis.com/youtube/v3/channels",
                 params={"part": "snippet", "mine": "true"},
@@ -255,13 +267,30 @@ async def get_platform_user_info(platform: str, access_token: str) -> dict:
             )
             data = response.json()
             if data.get("items"):
-                channel = data["items"][0]
-                return {
-                    "id": channel.get("id"),
-                    "username": channel["snippet"].get("title"),
-                    "display_name": channel["snippet"].get("title"),
-                    "profile_picture": channel["snippet"].get("thumbnails", {}).get("default", {}).get("url")
-                }
+                # Return ALL channels, not just the first one
+                channels = []
+                for channel in data["items"]:
+                    channel_title = channel["snippet"].get("title", "")
+                    # customUrl is the @handle (e.g. @georgym)
+                    custom_url = channel["snippet"].get("customUrl", "")
+                    handle = custom_url if custom_url else ""
+                    # Format: "email - channel_name (handle)" or "email - channel_name" if no handle
+                    if google_email and handle:
+                        display = f"{google_email} - {channel_title} ({handle})"
+                    elif google_email:
+                        display = f"{google_email} - {channel_title}"
+                    elif handle:
+                        display = f"{channel_title} ({handle})"
+                    else:
+                        display = channel_title
+                    channels.append({
+                        "id": channel.get("id"),
+                        "username": handle or channel_title,
+                        "display_name": display,
+                        "profile_picture": channel["snippet"].get("thumbnails", {}).get("default", {}).get("url")
+                    })
+                # Return list for youtube, single dict for others
+                return channels if len(channels) > 1 else channels[0]
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

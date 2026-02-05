@@ -1,8 +1,17 @@
-import { FolderOpen, Plus, Compass, Repeat, LayoutTemplate } from 'lucide-react'
-import type { Project, Video } from '@/types'
+import { useNavigate } from 'react-router-dom'
+import { FolderOpen, Plus, Compass, Repeat, LayoutTemplate, Search } from 'lucide-react'
+import type { Project, Video, DiscoverProject } from '@/types'
+
+const STAGE_LABELS: Record<string, string> = {
+  images: 'Images',
+  videos: 'Videos',
+  extraction: 'Extraction',
+  completed: 'Done',
+}
 
 interface ProjectSidebarProps {
   projects: Project[] | undefined
+  discoverProjects?: DiscoverProject[]
   allVideos: Record<number, Video[]> | undefined
   templateGenerationCounts?: Record<number, number>
   selectedProjectId: number | null
@@ -12,12 +21,17 @@ interface ProjectSidebarProps {
 
 export default function ProjectSidebar({
   projects,
+  discoverProjects,
   allVideos,
   templateGenerationCounts,
   selectedProjectId,
   onSelectProject,
   onCreateProject
 }: ProjectSidebarProps) {
+  const navigate = useNavigate()
+
+  const activeDiscover = discoverProjects?.filter(d => d.status !== 'archived') || []
+
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-4 border-b border-gray-200">
@@ -38,38 +52,68 @@ export default function ProjectSidebar({
           </span>
         </button>
 
-        {/* Project list */}
-        {projects?.map((project: Project) => {
-          // Use generation count for template projects, video count for others
-          const videoCount = project.project_type === 'template'
-            ? templateGenerationCounts?.[project.id] || 0
-            : allVideos?.[project.id]?.length || 0
-          const isSelected = selectedProjectId === project.id
+        {/* Discover projects */}
+        {activeDiscover.length > 0 && (
+          <>
+            <div className="px-4 pt-4 pb-1">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Discover</span>
+            </div>
+            {activeDiscover.map(dp => (
+              <button
+                key={`discover-${dp.id}`}
+                onClick={() => navigate(`/discover/${dp.id}`)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition"
+              >
+                <div className="flex items-center flex-1 min-w-0">
+                  <Search className="h-5 w-5 mr-3 flex-shrink-0 text-amber-500" />
+                  <span className="truncate text-gray-700">{dp.name}</span>
+                </div>
+                <span className="text-xs text-gray-400 ml-2">{STAGE_LABELS[dp.stage] || dp.stage}</span>
+              </button>
+            ))}
+          </>
+        )}
 
-          return (
-            <button
-              key={project.id}
-              onClick={() => onSelectProject(project.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition ${
-                isSelected ? 'bg-purple-50 border-r-2 border-purple-600' : ''
-              }`}
-            >
-              <div className="flex items-center flex-1 min-w-0">
-                {project.project_type === 'remix' ? (
-                  <Repeat className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-purple-400'}`} />
-                ) : project.project_type === 'template' ? (
-                  <LayoutTemplate className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-green-500'}`} />
-                ) : (
-                  <Compass className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-blue-400'}`} />
-                )}
-                <span className={`truncate ${isSelected ? 'text-purple-600 font-medium' : 'text-gray-700'}`}>
-                  {project.name}
-                </span>
+        {/* Template & Remix projects */}
+        {projects && projects.length > 0 && (
+          <>
+            {activeDiscover.length > 0 && (
+              <div className="px-4 pt-4 pb-1">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Projects</span>
               </div>
-              <span className="text-xs text-gray-400 ml-2">{videoCount}</span>
-            </button>
-          )
-        })}
+            )}
+            {projects.map((project: Project) => {
+              const videoCount = project.project_type === 'template'
+                ? templateGenerationCounts?.[project.id] || 0
+                : allVideos?.[project.id]?.length || 0
+              const isSelected = selectedProjectId === project.id
+
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => onSelectProject(project.id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition ${
+                    isSelected ? 'bg-purple-50 border-r-2 border-purple-600' : ''
+                  }`}
+                >
+                  <div className="flex items-center flex-1 min-w-0">
+                    {project.project_type === 'remix' ? (
+                      <Repeat className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-purple-400'}`} />
+                    ) : project.project_type === 'template' ? (
+                      <LayoutTemplate className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-green-500'}`} />
+                    ) : (
+                      <Compass className={`h-5 w-5 mr-3 flex-shrink-0 ${isSelected ? 'text-purple-600' : 'text-blue-400'}`} />
+                    )}
+                    <span className={`truncate ${isSelected ? 'text-purple-600 font-medium' : 'text-gray-700'}`}>
+                      {project.name}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-400 ml-2">{videoCount}</span>
+                </button>
+              )
+            })}
+          </>
+        )}
       </div>
 
       {/* Create project button */}

@@ -5,7 +5,8 @@ import { Plus, Film, Settings } from 'lucide-react'
 import { useDashboardData, FilterTab } from '@/hooks/useDashboardData'
 import ProjectForm from '@/components/ProjectForm'
 import { TemplateProjectForm, TemplateProjectView, type TemplateProjectCreateDto } from '@/components/template'
-import { templateApi } from '@/services/api'
+import { DiscoverProjectForm, type DiscoverProjectFormData } from '@/components/discover'
+import { templateApi, discoverApi } from '@/services/api'
 import ProjectSidebar from '@/components/dashboard/ProjectSidebar'
 import VideoGridCard from '@/components/dashboard/VideoGridCard'
 
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [selectedProjectType, setSelectedProjectType] = useState<ProjectTypeSelection>(null)
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false)
+  const [isCreatingDiscover, setIsCreatingDiscover] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -24,6 +26,7 @@ export default function Dashboard() {
     setSelectedProjectId,
     setActiveFilter,
     projects,
+    discoverProjects,
     workspaces,
     allVideos,
     templateGenerationCounts,
@@ -57,6 +60,7 @@ export default function Dashboard() {
       {/* Sidebar */}
       <ProjectSidebar
         projects={projects}
+        discoverProjects={discoverProjects}
         allVideos={allVideos}
         templateGenerationCounts={templateGenerationCounts}
         selectedProjectId={selectedProjectId}
@@ -192,19 +196,52 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Modal: Create project - Step 2: Discover/Remix form */}
-      {isCreatingProject && (selectedProjectType === 'discover' || selectedProjectType === 'remix') && (
+      {/* Modal: Create project - Step 2: Discover form */}
+      {isCreatingProject && selectedProjectType === 'discover' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <h2 className="text-xl font-semibold p-6 pb-4 border-b">Create Discover Project</h2>
+            <div className="overflow-y-auto p-6 pt-4">
+              <DiscoverProjectForm
+                workspaces={workspaces}
+                onSubmit={async (data: DiscoverProjectFormData) => {
+                  setIsCreatingDiscover(true)
+                  try {
+                    const res = await discoverApi.create(data)
+                    setIsCreatingProject(false)
+                    setSelectedProjectType(null)
+                    navigate(`/discover/${res.data.id}`)
+                  } catch (err) {
+                    console.error('Failed to create discover project:', err)
+                    alert('Failed to create project')
+                  } finally {
+                    setIsCreatingDiscover(false)
+                  }
+                }}
+                onCancel={() => {
+                  setIsCreatingProject(false)
+                  setSelectedProjectType(null)
+                }}
+                isLoading={isCreatingDiscover}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create project - Step 2: Remix form */}
+      {isCreatingProject && selectedProjectType === 'remix' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
             <h2 className="text-xl font-semibold p-6 pb-4 border-b">
-              Создать проект ({selectedProjectType === 'discover' ? 'Discover' : 'Remix'})
+              Создать проект (Remix)
             </h2>
             <div className="overflow-y-auto p-6 pt-4">
               <ProjectForm
-                initialData={{ project_type: selectedProjectType }}
+                initialData={{ project_type: 'remix' }}
                 workspaces={workspaces}
                 onSubmit={(data) => {
-                  createProject({ ...data, project_type: selectedProjectType })
+                  createProject({ ...data, project_type: 'remix' })
                   setIsCreatingProject(false)
                   setSelectedProjectType(null)
                 }}

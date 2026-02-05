@@ -230,7 +230,9 @@ export default function PublishingSettings({
                           // State 1: Bound account — locked
                           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center">
                             <Lock className="h-3 w-3 mr-1" />
-                            @{boundAccount.username || boundAccount.display_name || 'Connected'}
+                            {platform === 'youtube'
+                              ? (boundAccount.display_name || boundAccount.username || 'Connected')
+                              : `@${boundAccount.username || boundAccount.display_name || 'Connected'}`}
                           </span>
                         ) : availableAccounts.length > 0 ? (
                           // State 2: Not bound but accounts available — dropdown
@@ -248,7 +250,9 @@ export default function PublishingSettings({
                           >
                             {availableAccounts.map(acc => (
                               <option key={acc.id} value={acc.id}>
-                                @{acc.username || acc.display_name || acc.platform_user_id}
+                                {platform === 'youtube'
+                                  ? (acc.display_name || acc.username || acc.platform_user_id)
+                                  : `@${acc.username || acc.display_name || acc.platform_user_id}`}
                               </option>
                             ))}
                           </select>
