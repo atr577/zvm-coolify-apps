@@ -80,9 +80,17 @@ class TemplateSettings(Base):
     description_prompt = Column(Text, nullable=True)  # Prompt template for description generation
     platform_rules = Column(JSON, nullable=True)  # Per-platform rules: {"instagram": {...}, "tiktok": {...}}
 
+    # Discover lineage (if created from Discover workflow)
+    source_discover_id = Column(
+        Integer,
+        ForeignKey("discover_projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     project = relationship("Project", back_populates="template_settings")
+    source_discover = relationship("DiscoverProject")

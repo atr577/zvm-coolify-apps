@@ -19,6 +19,20 @@ from app.models.approved_generation import ApprovedGeneration
 from app.models.rejection_archive import RejectionArchive
 from app.models.publishing_config import PublishingConfig
 
+# Discover workflow models
+from app.models.discover import (
+    DiscoverProject,
+    DiscoverRound,
+    DiscoverItem,
+    DiscoverExtraction,
+    DiscoverStage,
+    DiscoverStatus,
+    RoundType,
+    RoundStatus,
+    ItemStatus,
+    SelectionStatus,
+)
+
 __all__ = [
     "User",
     "SocialAccount",
@@ -50,4 +64,15 @@ __all__ = [
     "ApprovedGeneration",
     "RejectionArchive",
     "PublishingConfig",
+    # Discover workflow
+    "DiscoverProject",
+    "DiscoverRound",
+    "DiscoverItem",
+    "DiscoverExtraction",
+    "DiscoverStage",
+    "DiscoverStatus",
+    "RoundType",
+    "RoundStatus",
+    "ItemStatus",
+    "SelectionStatus",
 ]

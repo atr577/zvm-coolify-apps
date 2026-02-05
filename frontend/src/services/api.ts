@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -601,6 +601,68 @@ export const publishingScheduleApi = {
   // Get pipeline funnel stats
   getPipelineStats: (projectId: number) =>
     api.get<PipelineStats>(`/api/projects/${projectId}/pipeline-stats`),
+}
+
+// Discover API
+export const discoverApi = {
+  // CRUD
+  create: (data: DiscoverProjectCreate) =>
+    api.post<DiscoverProject>('/api/discover', data),
+
+  list: (workspaceId?: number, status?: string) =>
+    api.get<DiscoverProjectListResponse>('/api/discover', {
+      params: {
+        ...(workspaceId ? { workspace_id: workspaceId } : {}),
+        ...(status ? { status } : {}),
+      },
+    }),
+
+  get: (id: number) =>
+    api.get<DiscoverProject>(`/api/discover/${id}`),
+
+  archive: (id: number) =>
+    api.delete(`/api/discover/${id}`),
+
+  // Rounds
+  generateRound: (projectId: number, feedback?: string, model?: string, count?: number) =>
+    api.post<{ round: DiscoverRound }>(`/api/discover/${projectId}/rounds`, { feedback, model, count }),
+
+  submitSelection: (projectId: number, roundId: number, data: DiscoverSelectionRequest) =>
+    api.post<DiscoverSelectionResponse>(`/api/discover/${projectId}/rounds/${roundId}/select`, data),
+
+  retryFailed: (projectId: number, roundId: number) =>
+    api.post<{ retried_count: number }>(`/api/discover/${projectId}/rounds/${roundId}/retry`),
+
+  // Stage management
+  advanceToVideo: (projectId: number, finalistImageItemId: number) =>
+    api.post<DiscoverProject>(`/api/discover/${projectId}/advance`, {
+      finalist_image_item_id: finalistImageItemId,
+    }),
+
+  advanceToExtraction: (projectId: number, finalistVideoItemId: number) =>
+    api.post<DiscoverProject>(`/api/discover/${projectId}/advance-extraction`, {
+      finalist_video_item_id: finalistVideoItemId,
+    }),
+
+  rollback: (projectId: number) =>
+    api.post<{ message: string }>(`/api/discover/${projectId}/rollback`),
+
+  // Extraction
+  extract: (projectId: number) =>
+    api.post<{ extraction: DiscoverExtraction }>(`/api/discover/${projectId}/extract`),
+
+  updateExtraction: (projectId: number, data: { edited_base_prompt?: string; edited_variation_prompt?: string }) =>
+    api.put<DiscoverExtraction>(`/api/discover/${projectId}/extraction`, data),
+
+  // Template creation
+  createTemplate: (projectId: number, data: DiscoverCreateTemplateRequest) =>
+    api.post<{ project_id: number; message: string }>(`/api/discover/${projectId}/create-template`, data),
+
+  // One-click finalize: video finalist → extraction → template creation
+  finalize: (projectId: number, finalistVideoItemId: number) =>
+    api.post<{ project_id: number; message: string }>(`/api/discover/${projectId}/finalize`, {
+      finalist_video_item_id: finalistVideoItemId,
+    }),
 }
 
 export default api

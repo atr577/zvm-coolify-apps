@@ -520,6 +520,113 @@ export interface BatchGenerateResponse {
   generations: Generation[]
 }
 
+// --- Discover Workflow ---
+
+export type DiscoverStage = 'images' | 'videos' | 'extraction' | 'completed'
+export type DiscoverStatus = 'active' | 'completed' | 'archived'
+export type DiscoverRoundType = 'image' | 'video'
+export type DiscoverRoundStatus = 'pending' | 'generating' | 'completed' | 'failed'
+export type DiscoverItemStatus = 'pending' | 'generating' | 'completed' | 'failed'
+export type DiscoverSelection = 'unreviewed' | 'selected' | 'rejected'
+
+export interface DiscoverItem {
+  id: number
+  position: number
+  prompt: string
+  source_image_item_id: number | null
+  status: DiscoverItemStatus
+  result_url: string | null
+  local_path: string | null
+  error_message: string | null
+  selection: DiscoverSelection
+  created_at: string
+  completed_at: string | null
+}
+
+export interface DiscoverRound {
+  id: number
+  round_number: number
+  round_type: DiscoverRoundType
+  status: DiscoverRoundStatus
+  error_message: string | null
+  feedback_text: string | null
+  total_items: number
+  selected_count: number
+  rejected_count: number
+  items: DiscoverItem[]
+  created_at: string
+  completed_at: string | null
+}
+
+export interface DiscoverExtraction {
+  id: number
+  winning_image_prompt: string
+  winning_video_prompt: string | null
+  base_prompt: string
+  variation_prompt: string
+  slot_names: string[] | null
+  slot_examples: Record<string, string[]> | null
+  edited_base_prompt: string | null
+  edited_variation_prompt: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DiscoverProject {
+  id: number
+  concept: string
+  name: string
+  stage: DiscoverStage
+  status: DiscoverStatus
+  current_image_round: number
+  current_video_round: number
+  image_model: string
+  video_model: string
+  image_aspect_ratio: string
+  video_duration: string
+  finalist_image_item_id: number | null
+  finalist_video_item_id: number | null
+  created_project_id: number | null
+  rounds: DiscoverRound[]
+  extraction: DiscoverExtraction | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DiscoverProjectListResponse {
+  projects: DiscoverProject[]
+  total: number
+}
+
+export interface DiscoverProjectCreate {
+  concept: string
+  name: string
+  workspace_id: number
+  image_model?: string
+  video_model?: string
+  image_aspect_ratio?: string
+  video_duration?: string
+}
+
+export interface DiscoverSelectionRequest {
+  selections: Record<string, 'selected' | 'rejected'>
+  feedback?: string
+}
+
+export interface DiscoverSelectionResponse {
+  round_id: number
+  selected_count: number
+  rejected_count: number
+  can_advance_to_video: boolean
+  can_generate_next_round: boolean
+}
+
+export interface DiscoverCreateTemplateRequest {
+  name: string
+  platforms?: string[]
+  video_template_prompt: string
+}
+
 // --- API Error Type ---
 
 export interface ApiError {

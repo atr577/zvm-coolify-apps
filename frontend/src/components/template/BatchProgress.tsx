@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { templateApi } from '@/services/api'
 import type { Generation } from '@/types'
-import { Loader2, RotateCcw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Loader2, RotateCcw, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface BatchProgressProps {
   projectId: number
@@ -150,6 +150,58 @@ function FailedItem({ gen, onRetry }: { gen: Generation; onRetry: (id: number) =
   )
 }
 
+function BatchHistoryItem({ batch }: { batch: BatchInfo }) {
+  const [expanded, setExpanded] = useState(false)
+  const total = batch.generations.length
+  const completed = batch.generations.filter(g => g.status === 'completed').length
+  const failed = batch.generations.filter(g => g.status === 'failed').length
+
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition text-sm"
+      >
+        <div className="flex items-center gap-2">
+          {failed === 0 ? (
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          )}
+          <span className="font-medium text-gray-700">
+            Batch — {total} video{total !== 1 ? 's' : ''}
+          </span>
+          <span className="text-gray-400">
+            ({completed} done{failed > 0 ? `, ${failed} failed` : ''})
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400">
+            {new Date(batch.created_at).toLocaleString()}
+          </span>
+          {expanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
+          {batch.generations.map(gen => (
+            <div key={gen.id} className="flex items-center gap-2 text-xs py-1">
+              {gen.status === 'completed' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+              {gen.status === 'failed' && <XCircle className="h-3 w-3 text-red-500" />}
+              <span className="text-gray-500">#{gen.id}</span>
+              {gen.variant_data && (
+                <span className="text-gray-600 truncate">
+                  {Object.values(gen.variant_data).slice(0, 3).join(', ')}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function BatchProgress({ projectId, refreshTrigger }: BatchProgressProps) {
   const [generations, setGenerations] = useState<Generation[]>([])
   const [loading, setLoading] = useState(true)
@@ -203,39 +255,45 @@ export function BatchProgress({ projectId, refreshTrigger }: BatchProgressProps)
     )
   }
 
-  // Filter to active batches (have in-progress or failed) and recent completed
+  // Filter batches by status
   const batches = groupByBatch(generations)
-  const activeBatches = batches.filter(b => {
-    return b.generations.some(g =>
-      IN_PROGRESS_STATUSES.includes(g.status) || g.status === 'failed'
-    )
-  })
+
+  // Active: has in-progress items
+  const activeBatches = batches.filter(b =>
+    b.generations.some(g => IN_PROGRESS_STATUSES.includes(g.status))
+  )
+
+  // History: all items done (completed or failed), only batches (not singles)
+  const historyBatches = batches.filter(b =>
+    b.batch_id &&
+    !b.generations.some(g => IN_PROGRESS_STATUSES.includes(g.status))
+  )
 
   // All failed generations across all batches (for retry section)
   const failedGenerations = generations.filter(g => g.status === 'failed')
 
-  if (activeBatches.length === 0 && failedGenerations.length === 0) {
-    const totalCompleted = generations.filter(g => g.status === 'completed').length
+  if (activeBatches.length === 0 && historyBatches.length === 0 && failedGenerations.length === 0) {
     return (
       <div className="text-center py-6 text-sm text-gray-500">
-        {totalCompleted > 0
-          ? `${totalCompleted} completed — check Review tab`
-          : 'No active generations. Start a batch to begin.'
-        }
+        No generations yet. Start a batch to begin.
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {/* Active batches */}
-      {activeBatches.map((batch, i) => (
-        <BatchProgressBar
-          key={batch.batch_id || `single-${i}`}
-          batch={batch}
-          onRetry={handleRetry}
-        />
-      ))}
+      {/* Active batches with progress bars */}
+      {activeBatches.length > 0 && (
+        <div className="space-y-3">
+          {activeBatches.map((batch, i) => (
+            <BatchProgressBar
+              key={batch.batch_id || `single-${i}`}
+              batch={batch}
+              onRetry={handleRetry}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Failed items with retry */}
       {failedGenerations.length > 0 && (
@@ -245,6 +303,18 @@ export function BatchProgress({ projectId, refreshTrigger }: BatchProgressProps)
           </div>
           {failedGenerations.map(gen => (
             <FailedItem key={gen.id} gen={gen} onRetry={handleRetry} />
+          ))}
+        </div>
+      )}
+
+      {/* History: completed batches as accordions */}
+      {historyBatches.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-gray-500 uppercase">
+            History ({historyBatches.length} batch{historyBatches.length !== 1 ? 'es' : ''})
+          </div>
+          {historyBatches.map((batch, i) => (
+            <BatchHistoryItem key={batch.batch_id || `hist-${i}`} batch={batch} />
           ))}
         </div>
       )}
