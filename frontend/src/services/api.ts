@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement, DiscoverAudioVariant, AudioLibrarySearchResponse } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -685,6 +685,57 @@ export const discoverApi = {
   updatePrompt: (projectId: number, refinedPrompt: string) =>
     api.put<DiscoverRefinement>(`/api/discover/${projectId}/refine/prompt`, {
       refined_prompt: refinedPrompt,
+    }),
+
+  // Audio Selection
+  advanceToAudio: (projectId: number, finalistVideoItemId: number) =>
+    api.post<DiscoverProject>(`/api/discover/${projectId}/advance-audio`, {
+      finalist_video_item_id: finalistVideoItemId,
+    }),
+
+  generateSfx: (projectId: number, mode: 'auto' | 'manual', prompt?: string) =>
+    api.post<DiscoverAudioVariant>(`/api/discover/${projectId}/audio/generate-sfx`, { mode, prompt }),
+
+  generateMusic: (projectId: number, mode: 'auto' | 'manual', prompt?: string) =>
+    api.post<DiscoverAudioVariant>(`/api/discover/${projectId}/audio/generate-music`, { mode, prompt }),
+
+  selectHook: (projectId: number, variantId: number, hookStartMs: number, hookEndMs: number) =>
+    api.post<DiscoverAudioVariant>(`/api/discover/${projectId}/audio/select-hook`, {
+      variant_id: variantId,
+      hook_start_ms: hookStartMs,
+      hook_end_ms: hookEndMs,
+    }),
+
+  selectLibrary: (projectId: number, libraryItemId: number) =>
+    api.post<DiscoverAudioVariant>(`/api/discover/${projectId}/audio/select-library`, {
+      library_item_id: libraryItemId,
+    }),
+
+  confirmAudio: (projectId: number, variantId: number) =>
+    api.post<DiscoverProject>(`/api/discover/${projectId}/audio/confirm`, {
+      variant_id: variantId,
+    }),
+
+  skipAudio: (projectId: number) =>
+    api.post<DiscoverProject>(`/api/discover/${projectId}/audio/skip`),
+
+  rollbackAudio: (projectId: number) =>
+    api.post<{ message: string }>(`/api/discover/${projectId}/audio/rollback`),
+}
+
+// Audio Library API
+export const audioLibraryApi = {
+  search: (workspaceId: number, params?: {
+    mood?: string
+    source_type?: string
+    min_duration_ms?: number
+    max_duration_ms?: number
+    sort?: string
+    page?: number
+    page_size?: number
+  }) =>
+    api.get<AudioLibrarySearchResponse>('/api/audio-library', {
+      params: { workspace_id: workspaceId, ...params },
     }),
 }
 

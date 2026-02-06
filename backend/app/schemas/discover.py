@@ -1,7 +1,7 @@
 """Pydantic schemas for Discover workflow."""
 
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Dict, List
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Any, Optional, Dict, List
 from datetime import datetime
 from enum import Enum
 
@@ -78,6 +78,37 @@ class DiscoverExtractionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DiscoverAudioVariantResponse(BaseModel):
+    id: int
+    audio_type: str  # 'sfx' | 'music' | 'library'
+    prompt: Optional[str] = None
+    prompt_mode: str  # 'manual' | 'auto'
+    status: str  # pending | generating | completed | failed
+    file_url: Optional[str] = None
+    trimmed_file_url: Optional[str] = None
+    full_duration_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
+    detected_hooks: Optional[List[Dict]] = None
+    hook_start_ms: Optional[int] = None
+    hook_end_ms: Optional[int] = None
+    error_message: Optional[str] = None
+    library_item_id: Optional[int] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_trimmed_url(cls, data: Any) -> Any:
+        """Build trimmed_file_url from trimmed_file_path."""
+        if hasattr(data, "trimmed_file_path") and data.trimmed_file_path:
+            from pathlib import Path
+            p = Path(data.trimmed_file_path)
+            # Extract "audio/filename.mp3" from absolute path
+            data.trimmed_file_url = f"/api/files/{p.parent.name}/{p.name}"
+        return data
+
+
 class DiscoverProjectResponse(BaseModel):
     id: int
     concept: str
@@ -92,6 +123,9 @@ class DiscoverProjectResponse(BaseModel):
     video_duration: str
     finalist_image_item_id: Optional[int] = None
     finalist_video_item_id: Optional[int] = None
+    audio_mode: Optional[str] = None
+    selected_audio_variant_id: Optional[int] = None
+    audio_variants: List[DiscoverAudioVariantResponse] = []
     created_project_id: Optional[int] = None
     rounds: List[DiscoverRoundResponse] = []
     extraction: Optional[DiscoverExtractionResponse] = None
@@ -182,3 +216,33 @@ class CompileResponse(BaseModel):
     refined_prompt: str
     score: int
     ready_to_generate: bool
+
+
+# --- Audio Selection ---
+
+class AdvanceAudioRequest(BaseModel):
+    finalist_video_item_id: int
+
+
+class GenerateSfxRequest(BaseModel):
+    mode: str = Field(..., pattern=r'^(auto|manual)$')
+    prompt: Optional[str] = Field(None, min_length=1, max_length=500)
+
+
+class GenerateMusicRequest(BaseModel):
+    mode: str = Field(..., pattern=r'^(auto|manual)$')
+    prompt: Optional[str] = Field(None, min_length=1, max_length=500)
+
+
+class SelectHookRequest(BaseModel):
+    variant_id: int
+    hook_start_ms: int = Field(..., ge=0)
+    hook_end_ms: int = Field(..., ge=0)
+
+
+class SelectLibraryRequest(BaseModel):
+    library_item_id: int
+
+
+class ConfirmAudioRequest(BaseModel):
+    variant_id: int

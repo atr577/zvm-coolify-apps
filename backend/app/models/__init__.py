@@ -25,6 +25,7 @@ from app.models.discover import (
     DiscoverRound,
     DiscoverItem,
     DiscoverExtraction,
+    DiscoverAudioVariant,
     DiscoverStage,
     DiscoverStatus,
     RoundType,
@@ -32,6 +33,9 @@ from app.models.discover import (
     ItemStatus,
     SelectionStatus,
 )
+
+# Audio library
+from app.models.audio_library import AudioLibrary
 
 __all__ = [
     "User",
@@ -69,10 +73,13 @@ __all__ = [
     "DiscoverRound",
     "DiscoverItem",
     "DiscoverExtraction",
+    "DiscoverAudioVariant",
     "DiscoverStage",
     "DiscoverStatus",
     "RoundType",
     "RoundStatus",
     "ItemStatus",
     "SelectionStatus",
+    # Audio library
+    "AudioLibrary",
 ]

@@ -16,6 +16,7 @@ class DiscoverStage(str, enum.Enum):
     """Current stage of discovery workflow."""
     IMAGES = "images"
     VIDEOS = "videos"
+    AUDIO = "audio"
     EXTRACTION = "extraction"
     COMPLETED = "completed"
 
@@ -110,6 +111,14 @@ class DiscoverProject(Base):
         nullable=True,
     )
 
+    # Audio selection
+    audio_mode = Column(String(20), nullable=True)  # 'sound_fx' | 'music' | 'library' | 'none'
+    selected_audio_variant_id = Column(
+        Integer,
+        ForeignKey("discover_audio_variants.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
+
     # Link to created Template project
     created_project_id = Column(
         Integer,
@@ -141,6 +150,12 @@ class DiscoverProject(Base):
         back_populates="project",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+    audio_variants = relationship(
+        "DiscoverAudioVariant",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        foreign_keys="DiscoverAudioVariant.project_id",
     )
     created_project = relationship("Project")
 
@@ -338,3 +353,59 @@ class DiscoverRefinement(Base):
 
     # Relationships
     project = relationship("DiscoverProject", back_populates="refinement")
+
+
+class DiscoverAudioVariant(Base):
+    """Audio variant generated during Discover audio selection step."""
+    __tablename__ = "discover_audio_variants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(
+        Integer,
+        ForeignKey("discover_projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Audio type
+    audio_type = Column(String(20), nullable=False)  # 'sfx' | 'music' | 'library'
+
+    # Generation details
+    prompt = Column(Text, nullable=True)
+    prompt_mode = Column(String(10), nullable=False, default="manual")  # 'manual' | 'auto'
+
+    # Result — full generated audio
+    status = Column(String(20), nullable=False, default="pending")  # pending|generating|completed|failed
+    file_path = Column(String(500), nullable=True)
+    file_url = Column(String(500), nullable=True)
+    full_duration_ms = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    # Hook detection (for music/library — auto-detected segments)
+    detected_hooks = Column(JSON, nullable=True)  # [{start_ms, end_ms, energy, type}]
+
+    # Selected hook (user picks one segment)
+    hook_start_ms = Column(Integer, nullable=True)
+    hook_end_ms = Column(Integer, nullable=True)
+    trimmed_file_path = Column(String(500), nullable=True)
+
+    # Final duration (after hook trim; for SFX = full_duration_ms)
+    duration_ms = Column(Integer, nullable=True)
+
+    # Library reference (if audio_type='library')
+    library_item_id = Column(
+        Integer,
+        ForeignKey("audio_library.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    project = relationship(
+        "DiscoverProject",
+        back_populates="audio_variants",
+        foreign_keys=[project_id],
+    )

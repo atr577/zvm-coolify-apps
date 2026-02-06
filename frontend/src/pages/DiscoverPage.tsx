@@ -9,6 +9,7 @@ import type { DiscoverProject } from '@/types'
 import { getErrorMessage } from '@/types'
 import { RoundView } from '@/components/discover/RoundView'
 import { PromptRefinement } from '@/components/discover/PromptRefinement'
+import AudioSelection from '@/components/discover/AudioSelection'
 import { getMediaUrl } from '@/utils/video'
 
 const POLL_INTERVAL = 3000
@@ -32,6 +33,7 @@ const STAGE_LABELS: Record<string, string> = {
   refine: 'Prompt Refinement',
   images: 'Image Exploration',
   videos: 'Video Exploration',
+  audio: 'Audio Selection',
   extraction: 'Template Extraction',
   completed: 'Completed',
 }
@@ -63,6 +65,8 @@ export default function DiscoverPage() {
   const [imageFinalistId, setImageFinalistId] = useState<number | null>(null)
   const [videoFinalistId, setVideoFinalistId] = useState<number | null>(null)
   const [creatingTemplate, setCreatingTemplate] = useState(false)
+  const [audioVariantId, setAudioVariantId] = useState<number | null>(null)
+  const [confirmingAudio, setConfirmingAudio] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchProject = useCallback(async () => {
@@ -161,23 +165,24 @@ export default function DiscoverPage() {
     }
   }
 
-  const handleCreateTemplate = async () => {
+  const handleAdvanceToAudio = async () => {
     if (!project || !videoFinalistId) return
     setAdvancing(true)
     setError(null)
     try {
-      // Auto-submit selections before finalizing
+      // Auto-submit selections before advancing
       const ok = await submitAllSelections()
       if (!ok) {
         setAdvancing(false)
         return
       }
 
-      // One-click: finalize → extraction → create template
-      const res = await discoverApi.finalize(projectId, videoFinalistId)
-      navigate(`/?project=${res.data.project_id}`)
+      await discoverApi.advanceToAudio(projectId, videoFinalistId)
+      setVideoFinalistId(null)
+      await fetchProject()
     } catch (err) {
       setError(getErrorMessage(err))
+    } finally {
       setAdvancing(false)
     }
   }
@@ -244,6 +249,7 @@ export default function DiscoverPage() {
     .filter(r =>
       project.stage === 'images' ? r.round_type === 'image' :
       project.stage === 'videos' ? r.round_type === 'video' :
+      project.stage === 'audio' ? r.round_type === 'video' :
       true
     )
     .sort((a, b) => {
@@ -255,7 +261,7 @@ export default function DiscoverPage() {
     })
   const latestRound = currentRounds.length > 0 ? currentRounds[currentRounds.length - 1] : null
   const isGenerating = latestRound?.items.some(i => i.status === 'pending' || i.status === 'generating') || false
-  const canStartNewRound = !isGenerating && project.stage !== 'extraction' && project.stage !== 'completed'
+  const canStartNewRound = !isGenerating && project.stage !== 'audio' && project.stage !== 'extraction' && project.stage !== 'completed'
   const showRefinement = project.stage === 'images' && currentRounds.length === 0
 
   return (
@@ -281,8 +287,8 @@ export default function DiscoverPage() {
       {/* Stage progress */}
       <div className="mb-6">
         <div className="flex items-center gap-1">
-          {['refine', 'images', 'videos', 'completed'].map((stage, idx) => {
-            const stages = ['refine', 'images', 'videos', 'completed']
+          {['refine', 'images', 'videos', 'audio', 'completed'].map((stage, idx) => {
+            const stages = ['refine', 'images', 'videos', 'audio', 'completed']
             const displayStage = project.stage === 'extraction' ? 'completed'
               : showRefinement ? 'refine'
               : project.stage
@@ -304,6 +310,7 @@ export default function DiscoverPage() {
           <span>Refine</span>
           <span>Images</span>
           <span>Videos</span>
+          <span>Audio</span>
           <span>Done</span>
         </div>
       </div>
@@ -359,6 +366,11 @@ export default function DiscoverPage() {
         )
       })()}
 
+      {/* Audio Selection */}
+      {project.stage === 'audio' && (
+        <AudioSelection project={project} onRefresh={fetchProject} onVariantSelect={setAudioVariantId} />
+      )}
+
       {/* Prompt Refinement (before first image round) */}
       {showRefinement && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -370,8 +382,88 @@ export default function DiscoverPage() {
         </div>
       )}
 
+      {/* Audio Action Bar */}
+      {project.stage === 'audio' && (() => {
+        const selectedVariant = audioVariantId
+          ? (project.audio_variants || []).find(v => v.id === audioVariantId)
+          : null
+        const canConfirm = selectedVariant && selectedVariant.status === 'completed' && !(
+          selectedVariant.audio_type !== 'sfx' &&
+          !selectedVariant.hook_start_ms &&
+          selectedVariant.detected_hooks &&
+          selectedVariant.detected_hooks.length > 1
+        )
+        return (
+          <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 -mx-6 px-6 py-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={async () => {
+                  setError(null)
+                  setRollingBack(true)
+                  try {
+                    await discoverApi.rollbackAudio(projectId)
+                    await fetchProject()
+                  } catch (err) {
+                    setError(getErrorMessage(err))
+                  } finally {
+                    setRollingBack(false)
+                  }
+                }}
+                disabled={rollingBack}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                {rollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+                Back to Videos
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    setError(null)
+                    try {
+                      await discoverApi.skipAudio(projectId)
+                      await fetchProject()
+                    } catch (err) {
+                      setError(getErrorMessage(err))
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Skip Audio
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                {canConfirm && (
+                  <button
+                    onClick={async () => {
+                      if (!audioVariantId) return
+                      setError(null)
+                      setConfirmingAudio(true)
+                      try {
+                        await discoverApi.confirmAudio(projectId, audioVariantId)
+                        await fetchProject()
+                      } catch (err) {
+                        setError(getErrorMessage(err))
+                      } finally {
+                        setConfirmingAudio(false)
+                      }
+                    }}
+                    disabled={confirmingAudio}
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {confirmingAudio ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Merging...</>
+                    ) : (
+                      <><CheckCircle2 className="h-4 w-4" /> Confirm & Continue</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Rounds */}
-      {!showRefinement && <div className="space-y-6">
+      {!showRefinement && project.stage !== 'audio' && <div className="space-y-6">
           {currentRounds.map((round, idx) => {
             const isLatest = idx === currentRounds.length - 1 && project.stage !== 'completed'
             const isCollapsed = collapsedRounds.has(round.id)
@@ -542,15 +634,15 @@ export default function DiscoverPage() {
                     </button>
                   )}
 
-                  {/* Create Template (green — forward) */}
+                  {/* Advance to Audio (green — forward) */}
                   {project.stage === 'videos' && videoFinalistId && !isGenerating && (
                     <button
-                      onClick={handleCreateTemplate}
+                      onClick={handleAdvanceToAudio}
                       disabled={advancing}
                       className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
                     >
-                      {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                      {advancing ? 'Creating Template...' : 'Create Template'}
+                      {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                      {advancing ? 'Advancing...' : 'Select Audio'}
                     </button>
                   )}
 

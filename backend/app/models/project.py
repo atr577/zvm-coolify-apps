@@ -44,6 +44,13 @@ class Project(Base):
     # Audio provider: kling (default), ai_music (requires OPENAI_API_KEY)
     audio_provider = Column(String(20), nullable=True)  # None = use default for audio_mode
 
+    # Audio library reference (from Discover audio selection)
+    audio_source_id = Column(
+        Integer,
+        ForeignKey("audio_library.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Project type: discover (full workflow) or remix (skip to image generation)
     project_type = Column(String(20), nullable=False, default="discover")
 

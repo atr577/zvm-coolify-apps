@@ -12,6 +12,7 @@ from app.schemas.discover import (
     DiscoverProjectListResponse,
     DiscoverRoundResponse,
     DiscoverExtractionResponse,
+    DiscoverAudioVariantResponse,
     GenerateRoundRequest,
     SelectionRequest,
     SelectionResponse,
@@ -23,6 +24,12 @@ from app.schemas.discover import (
     BlockUpdateRequest,
     PromptUpdateRequest,
     CompileResponse,
+    AdvanceAudioRequest,
+    GenerateSfxRequest,
+    GenerateMusicRequest,
+    SelectHookRequest,
+    SelectLibraryRequest,
+    ConfirmAudioRequest,
 )
 from app.services.discover_service import get_discover_service
 
@@ -371,6 +378,179 @@ async def finalize_and_create_template(
             "project_id": template_project_id,
             "message": "Template project created",
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Audio Selection ---
+
+@router.post("/{project_id}/advance-audio", response_model=DiscoverProjectResponse)
+async def advance_to_audio(
+    project_id: int,
+    data: AdvanceAudioRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Advance from videos to audio stage."""
+    service = get_discover_service()
+    try:
+        await service.advance_to_audio(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+            finalist_video_item_id=data.finalist_video_item_id,
+        )
+        project = await service.get_project(db, project_id, current_user.id)
+        return project
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/generate-sfx", response_model=DiscoverAudioVariantResponse)
+async def generate_sfx(
+    project_id: int,
+    data: GenerateSfxRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate Sound FX via MMAudio V2."""
+    service = get_discover_service()
+    try:
+        variant = await service.generate_sfx(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+            mode=data.mode,
+            prompt=data.prompt,
+        )
+        return variant
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/generate-music", response_model=DiscoverAudioVariantResponse)
+async def generate_music(
+    project_id: int,
+    data: GenerateMusicRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate music via Lyria2."""
+    service = get_discover_service()
+    try:
+        variant = await service.generate_music(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+            mode=data.mode,
+            prompt=data.prompt,
+        )
+        return variant
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/select-hook", response_model=DiscoverAudioVariantResponse)
+async def select_hook(
+    project_id: int,
+    data: SelectHookRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Select a hook segment from detected hooks."""
+    service = get_discover_service()
+    try:
+        variant = await service.select_hook(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+            variant_id=data.variant_id,
+            hook_start_ms=data.hook_start_ms,
+            hook_end_ms=data.hook_end_ms,
+        )
+        return variant
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/select-library", response_model=DiscoverAudioVariantResponse)
+async def select_library(
+    project_id: int,
+    data: SelectLibraryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Select track from audio library."""
+    service = get_discover_service()
+    try:
+        variant = await service.select_from_library(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+            library_item_id=data.library_item_id,
+        )
+        return variant
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/confirm", response_model=DiscoverProjectResponse)
+async def confirm_audio(
+    project_id: int,
+    data: ConfirmAudioRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Confirm audio selection. Merges video+audio, advances to extraction."""
+    service = get_discover_service()
+    try:
+        await service.confirm_audio(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+            variant_id=data.variant_id,
+        )
+        project = await service.get_project(db, project_id, current_user.id)
+        return project
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/skip", response_model=DiscoverProjectResponse)
+async def skip_audio(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Skip audio. Advances to extraction."""
+    service = get_discover_service()
+    try:
+        await service.skip_audio(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+        project = await service.get_project(db, project_id, current_user.id)
+        return project
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/audio/rollback", response_model=dict)
+async def rollback_audio(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Rollback from audio to videos stage."""
+    service = get_discover_service()
+    try:
+        await service.rollback_from_audio(
+            db=db,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+        return {"message": "Rolled back to videos stage"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

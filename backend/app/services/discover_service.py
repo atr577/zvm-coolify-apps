@@ -14,10 +14,11 @@ from sqlalchemy import func
 
 from app.models.discover import (
     DiscoverProject, DiscoverRound, DiscoverItem, DiscoverExtraction,
-    DiscoverRefinement,
+    DiscoverRefinement, DiscoverAudioVariant,
     DiscoverStage, DiscoverStatus, RoundType, RoundStatus, ItemStatus,
     SelectionStatus,
 )
+from app.models.audio_library import AudioLibrary
 from app.services.openai_client import OpenAIClient
 from app.services.fal_client import FalClient
 from app.services.media_downloader import download_file, ensure_directories, MEDIA_BASE_DIR
@@ -87,6 +88,7 @@ class DiscoverService:
                 joinedload(DiscoverProject.rounds)
                 .joinedload(DiscoverRound.items),
                 joinedload(DiscoverProject.extraction),
+                joinedload(DiscoverProject.audio_variants),
             )
             .filter(
                 DiscoverProject.id == project_id,
@@ -602,11 +604,11 @@ class DiscoverService:
         self, db: Session, project_id: int, user_id: int,
         finalist_video_item_id: int,
     ) -> DiscoverProject:
-        """Advance from videos to extraction stage."""
+        """Advance from videos (or audio) to extraction stage."""
         project = await self.get_project(db, project_id, user_id)
 
-        if project.stage != DiscoverStage.VIDEOS.value:
-            raise ValueError(f"Cannot advance: stage is {project.stage}, expected videos")
+        if project.stage not in (DiscoverStage.VIDEOS.value, DiscoverStage.AUDIO.value):
+            raise ValueError(f"Cannot advance: stage is {project.stage}, expected videos or audio")
 
         finalist_item = db.query(DiscoverItem).filter(
             DiscoverItem.id == finalist_video_item_id,
@@ -889,6 +891,36 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
             slot_examples=extraction.slot_examples,
         )
 
+        # Resolve audio inheritance from Discover → Template
+        audio_mode = project.audio_mode or "none"
+        audio_source_id = None
+
+        if audio_mode != "none" and project.selected_audio_variant_id:
+            selected_variant = db.query(DiscoverAudioVariant).filter(
+                DiscoverAudioVariant.id == project.selected_audio_variant_id,
+            ).first()
+
+            if selected_variant:
+                if selected_variant.library_item_id:
+                    # Music/library — already in library
+                    audio_source_id = selected_variant.library_item_id
+                elif selected_variant.audio_type == "sound_fx" and selected_variant.file_path:
+                    # SFX — store as library item for Template reuse
+                    from app.services.audio_library_service import get_audio_library_service
+                    lib_service = get_audio_library_service()
+                    audio_file = selected_variant.trimmed_file_path or selected_variant.file_path
+                    lib_item = await lib_service.add_from_variant(
+                        db,
+                        workspace_id=project.workspace_id,
+                        source_type="sound_fx",
+                        file_path=audio_file,
+                        file_url=selected_variant.file_url,
+                        duration_ms=selected_variant.duration_ms or selected_variant.full_duration_ms or 0,
+                        prompt=selected_variant.prompt,
+                        source_discover_project_id=project.id,
+                    )
+                    audio_source_id = lib_item.id
+
         # Create Project
         template_project = Project(
             user_id=user_id,
@@ -899,6 +931,8 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
             platforms=platforms,
             duration=10,
             aspect_ratio=project.image_aspect_ratio,
+            audio_mode=audio_mode,
+            audio_source_id=audio_source_id,
         )
         db.add(template_project)
         db.flush()
@@ -939,6 +973,545 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
             f"Discover {project_id}: created template project {template_project.id}"
         )
         return template_project.id
+
+    # ========== Audio Selection ==========
+
+    MAX_AUDIO_VARIANTS = 3
+
+    async def advance_to_audio(
+        self, db: Session, project_id: int, user_id: int,
+        finalist_video_item_id: int,
+    ) -> DiscoverProject:
+        """Advance from videos → audio stage. Sets video finalist."""
+        project = await self.get_project(db, project_id, user_id)
+
+        if project.stage != DiscoverStage.VIDEOS.value:
+            raise ValueError(f"Cannot advance to audio: stage is {project.stage}, expected videos")
+
+        finalist_item = db.query(DiscoverItem).filter(
+            DiscoverItem.id == finalist_video_item_id,
+            DiscoverItem.status == ItemStatus.COMPLETED.value,
+        ).first()
+        if not finalist_item:
+            raise ValueError("Video finalist item not found or not completed")
+
+        if finalist_item.selection != SelectionStatus.SELECTED.value:
+            finalist_item.selection = SelectionStatus.SELECTED.value
+
+        project.stage = DiscoverStage.AUDIO.value
+        project.finalist_video_item_id = finalist_video_item_id
+        project.updated_at = datetime.utcnow()
+        db.commit()
+
+        logger.info(f"Discover {project_id}: advanced to audio, finalist video={finalist_video_item_id}")
+        return project
+
+    async def generate_sfx(
+        self, db: Session, project_id: int, user_id: int,
+        mode: str, prompt: str | None = None,
+    ) -> DiscoverAudioVariant:
+        """Generate Sound FX via MMAudio V2."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot generate SFX: stage is {project.stage}")
+
+        # Check variant limit (completed only)
+        completed_count = db.query(DiscoverAudioVariant).filter(
+            DiscoverAudioVariant.project_id == project_id,
+            DiscoverAudioVariant.audio_type == "sfx",
+            DiscoverAudioVariant.status == "completed",
+        ).count()
+        if completed_count >= self.MAX_AUDIO_VARIANTS:
+            raise ValueError(f"Max {self.MAX_AUDIO_VARIANTS} completed SFX variants reached")
+
+        if mode == "manual" and not prompt:
+            raise ValueError("Prompt required for manual mode")
+
+        # Get finalist video URL
+        finalist_video = db.query(DiscoverItem).filter(
+            DiscoverItem.id == project.finalist_video_item_id
+        ).first()
+        if not finalist_video or not finalist_video.result_url:
+            raise ValueError("No finalist video URL available")
+
+        # Create variant
+        variant = DiscoverAudioVariant(
+            project_id=project_id,
+            audio_type="sfx",
+            prompt=prompt if mode == "manual" else None,
+            prompt_mode=mode,
+            status="generating",
+        )
+        db.add(variant)
+        project.audio_mode = "sound_fx"
+        db.commit()
+        db.refresh(variant)
+
+        # Start background generation
+        asyncio.create_task(
+            self._generate_sfx_background(project_id, variant.id, finalist_video.result_url, prompt)
+        )
+
+        return variant
+
+    async def _generate_sfx_background(
+        self, project_id: int, variant_id: int,
+        video_url: str, prompt: str | None,
+    ):
+        """Background: generate SFX via MMAudio V2."""
+        from app.db.base import SessionLocal
+
+        db = SessionLocal()
+        try:
+            audio_url = await self.fal.generate_mmaudio(video_url=video_url, prompt=prompt)
+
+            variant = db.query(DiscoverAudioVariant).filter(
+                DiscoverAudioVariant.id == variant_id
+            ).first()
+            if not variant:
+                return
+
+            # Download audio
+            local_path = await self._download_discover_audio(audio_url, project_id, variant_id)
+
+            # Get duration
+            from app.core.media_processor import media_processor
+            duration_s = await media_processor.get_audio_duration(local_path)
+            duration_ms = int(duration_s * 1000)
+
+            variant.file_url = audio_url
+            variant.file_path = local_path
+            variant.full_duration_ms = duration_ms
+            variant.duration_ms = duration_ms  # SFX: no hook trim
+            variant.status = "completed"
+            variant.completed_at = datetime.utcnow()
+
+            db.commit()
+            logger.info(f"SFX variant {variant_id} completed: {audio_url}")
+
+        except Exception as e:
+            logger.error(f"SFX generation failed for variant {variant_id}: {e}")
+            try:
+                variant = db.query(DiscoverAudioVariant).filter(
+                    DiscoverAudioVariant.id == variant_id
+                ).first()
+                if variant:
+                    variant.status = "failed"
+                    variant.error_message = str(e)[:500]
+                    db.commit()
+            except Exception:
+                pass
+        finally:
+            db.close()
+
+    async def generate_music(
+        self, db: Session, project_id: int, user_id: int,
+        mode: str, prompt: str | None = None,
+    ) -> DiscoverAudioVariant:
+        """Generate music via Lyria2."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot generate music: stage is {project.stage}")
+
+        completed_count = db.query(DiscoverAudioVariant).filter(
+            DiscoverAudioVariant.project_id == project_id,
+            DiscoverAudioVariant.audio_type == "music",
+            DiscoverAudioVariant.status == "completed",
+        ).count()
+        if completed_count >= self.MAX_AUDIO_VARIANTS:
+            raise ValueError(f"Max {self.MAX_AUDIO_VARIANTS} completed music variants reached")
+
+        if mode == "manual" and not prompt:
+            raise ValueError("Prompt required for manual mode")
+
+        # For auto mode, build prompt from context
+        auto_prompt = None
+        if mode == "auto":
+            auto_prompt = await self._build_auto_music_prompt(project)
+
+        variant = DiscoverAudioVariant(
+            project_id=project_id,
+            audio_type="music",
+            prompt=auto_prompt if mode == "auto" else prompt,
+            prompt_mode=mode,
+            status="generating",
+        )
+        db.add(variant)
+        project.audio_mode = "music"
+        db.commit()
+        db.refresh(variant)
+
+        final_prompt = auto_prompt if mode == "auto" else prompt
+        asyncio.create_task(
+            self._generate_music_background(project_id, variant.id, final_prompt)
+        )
+
+        return variant
+
+    async def _build_auto_music_prompt(self, project: DiscoverProject) -> str:
+        """Build music prompt from project context via GPT."""
+        # Get video finalist prompt for context
+        video_prompt = ""
+        if project.finalist_video_item_id:
+            from app.db.base import SessionLocal
+            db = SessionLocal()
+            try:
+                item = db.query(DiscoverItem).filter(
+                    DiscoverItem.id == project.finalist_video_item_id
+                ).first()
+                if item:
+                    video_prompt = item.prompt
+            finally:
+                db.close()
+
+        scene_context = f"Concept: {project.concept}"
+        if video_prompt:
+            scene_context += f"\nVideo motion: {video_prompt}"
+
+        user_prompt = f"""Create background music for this short viral video:
+
+{scene_context}
+
+Return a single concise music prompt (1-2 sentences) describing the mood, genre, tempo and instruments.
+No JSON, just the prompt text."""
+
+        openai = OpenAIClient()
+        result = await openai.generate_text(
+            prompt=user_prompt,
+            system_prompt="You are a music director for short-form viral videos. Write concise music descriptions for AI music generation.",
+            temperature=0.8,
+        )
+        return result.strip() or "Energetic instrumental with driving beat"
+
+    async def _generate_music_background(
+        self, project_id: int, variant_id: int, prompt: str,
+    ):
+        """Background: generate music via Lyria2 + hook detection."""
+        from app.db.base import SessionLocal
+
+        db = SessionLocal()
+        try:
+            audio_url = await self.fal.generate_music(prompt=prompt)
+
+            variant = db.query(DiscoverAudioVariant).filter(
+                DiscoverAudioVariant.id == variant_id
+            ).first()
+            if not variant:
+                return
+
+            local_path = await self._download_discover_audio(audio_url, project_id, variant_id)
+
+            from app.core.media_processor import media_processor
+            duration_s = await media_processor.get_audio_duration(local_path)
+            duration_ms = int(duration_s * 1000)
+
+            variant.file_url = audio_url
+            variant.file_path = local_path
+            variant.full_duration_ms = duration_ms
+            variant.status = "completed"
+            variant.completed_at = datetime.utcnow()
+
+            # Run hook detection inline with timeout
+            project = db.query(DiscoverProject).filter(
+                DiscoverProject.id == project_id
+            ).first()
+            if project:
+                video_duration_s = self._parse_video_duration(project.video_duration)
+                await self._detect_hooks(variant, local_path, video_duration_s)
+
+            db.commit()
+            logger.info(f"Music variant {variant_id} completed with hooks: {audio_url}")
+
+        except Exception as e:
+            logger.error(f"Music generation failed for variant {variant_id}: {e}")
+            try:
+                variant = db.query(DiscoverAudioVariant).filter(
+                    DiscoverAudioVariant.id == variant_id
+                ).first()
+                if variant:
+                    variant.status = "failed"
+                    variant.error_message = str(e)[:500]
+                    db.commit()
+            except Exception:
+                pass
+        finally:
+            db.close()
+
+    async def _detect_hooks(
+        self, variant: DiscoverAudioVariant, audio_path: str, video_duration_s: float,
+    ):
+        """Run HookAnalyzer on audio. 5s timeout, fallback to full track."""
+        try:
+            from app.core.hook_analyzer import HookAnalyzer
+
+            analyzer = HookAnalyzer()
+            hooks = await asyncio.wait_for(
+                analyzer.find_hooks(
+                    audio_path=audio_path,
+                    video=None,
+                    num_hooks=4,
+                    hook_duration=video_duration_s,
+                ),
+                timeout=5.0,
+            )
+
+            variant.detected_hooks = [
+                {
+                    "start_ms": int(h.start * 1000),
+                    "end_ms": int(h.end * 1000),
+                    "energy": h.energy,
+                    "type": h.type,
+                }
+                for h in hooks
+            ]
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Hook detection failed/timed out for variant {variant.id}: {e}")
+            variant.detected_hooks = [
+                {
+                    "start_ms": 0,
+                    "end_ms": variant.full_duration_ms or 30000,
+                    "energy": "medium",
+                    "type": "full",
+                }
+            ]
+
+    async def select_hook(
+        self, db: Session, project_id: int, user_id: int,
+        variant_id: int, hook_start_ms: int, hook_end_ms: int,
+    ) -> DiscoverAudioVariant:
+        """Record hook selection. Audio is trimmed only at confirm time."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot select hook: stage is {project.stage}")
+
+        variant = db.query(DiscoverAudioVariant).filter(
+            DiscoverAudioVariant.id == variant_id,
+            DiscoverAudioVariant.project_id == project_id,
+            DiscoverAudioVariant.status == "completed",
+        ).first()
+        if not variant:
+            raise ValueError("Audio variant not found or not completed")
+
+        if hook_end_ms <= hook_start_ms:
+            raise ValueError("hook_end_ms must be greater than hook_start_ms")
+
+        variant.hook_start_ms = hook_start_ms
+        variant.hook_end_ms = hook_end_ms
+        variant.duration_ms = hook_end_ms - hook_start_ms
+        db.commit()
+        db.refresh(variant)
+
+        logger.info(f"Hook selected for variant {variant_id}: {hook_start_ms}-{hook_end_ms}ms")
+        return variant
+
+    async def select_from_library(
+        self, db: Session, project_id: int, user_id: int,
+        library_item_id: int,
+    ) -> DiscoverAudioVariant:
+        """Select track from audio library."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot select from library: stage is {project.stage}")
+
+        lib_item = db.query(AudioLibrary).filter(
+            AudioLibrary.id == library_item_id,
+        ).first()
+        if not lib_item:
+            raise ValueError("Library item not found")
+
+        variant = DiscoverAudioVariant(
+            project_id=project_id,
+            audio_type="library",
+            prompt=lib_item.prompt,
+            prompt_mode="manual",
+            status="completed",
+            file_path=lib_item.file_path,
+            file_url=lib_item.file_url,
+            full_duration_ms=lib_item.duration_ms,
+            library_item_id=library_item_id,
+            completed_at=datetime.utcnow(),
+        )
+        db.add(variant)
+        project.audio_mode = "library"
+
+        # Run hook detection if track is longer than video
+        video_duration_s = self._parse_video_duration(project.video_duration)
+        video_duration_ms = int(video_duration_s * 1000)
+        if lib_item.duration_ms > video_duration_ms and lib_item.file_path:
+            await self._detect_hooks(variant, lib_item.file_path, video_duration_s)
+
+        db.commit()
+        db.refresh(variant)
+
+        logger.info(f"Library item {library_item_id} selected for project {project_id}")
+        return variant
+
+    async def confirm_audio(
+        self, db: Session, project_id: int, user_id: int,
+        variant_id: int,
+    ) -> DiscoverProject:
+        """Confirm audio selection. Merges video+audio. Advances to extraction."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot confirm audio: stage is {project.stage}")
+
+        variant = db.query(DiscoverAudioVariant).filter(
+            DiscoverAudioVariant.id == variant_id,
+            DiscoverAudioVariant.project_id == project_id,
+            DiscoverAudioVariant.status == "completed",
+        ).first()
+        if not variant:
+            raise ValueError("Audio variant not found or not completed")
+
+        # For music/library, require hook selection (unless single full-track)
+        if variant.audio_type in ("music", "library") and not variant.hook_start_ms:
+            if not variant.detected_hooks or (
+                len(variant.detected_hooks) == 1
+                and variant.detected_hooks[0].get("type") == "full"
+            ):
+                variant.duration_ms = variant.full_duration_ms
+            else:
+                raise ValueError("Select a hook segment before confirming")
+
+        if not variant.file_path:
+            raise ValueError("No audio file available for merge")
+
+        # Trim audio if a hook was selected
+        from app.core.media_processor import media_processor
+        ensure_directories()
+
+        if variant.hook_start_ms is not None and variant.hook_end_ms is not None:
+            trimmed_path = str(
+                MEDIA_BASE_DIR / "audio" / f"discover_{project_id}_confirmed_{variant_id}.mp3"
+            )
+            await media_processor.trim_audio(
+                audio_path=variant.file_path,
+                start=variant.hook_start_ms / 1000.0,
+                end=variant.hook_end_ms / 1000.0,
+                output_path=trimmed_path,
+            )
+            variant.trimmed_file_path = trimmed_path
+            audio_path = trimmed_path
+        else:
+            audio_path = variant.file_path
+
+        # Get video file path
+        finalist_video = db.query(DiscoverItem).filter(
+            DiscoverItem.id == project.finalist_video_item_id,
+        ).first()
+        if not finalist_video:
+            raise ValueError("No finalist video found")
+
+        video_path = finalist_video.local_path
+        if not video_path:
+            # Download video if not local
+            if finalist_video.result_url:
+                video_path = await self._download_discover_media(
+                    finalist_video.result_url, project_id, 0, 0, "video"
+                )
+                finalist_video.local_path = video_path
+            else:
+                raise ValueError("No video file available for merge")
+
+        # Merge video + audio via FFmpeg
+        merged_path = str(
+            MEDIA_BASE_DIR / "videos" / f"discover_{project_id}_merged.mp4"
+        )
+        await media_processor.merge_video_audio(
+            video_path=str(MEDIA_BASE_DIR / video_path) if not video_path.startswith("/") else video_path,
+            audio_path=audio_path if audio_path.startswith("/") else str(MEDIA_BASE_DIR / audio_path),
+            output_path=merged_path,
+        )
+
+        # Update project
+        project.selected_audio_variant_id = variant_id
+        project.audio_mode = variant.audio_type
+        project.stage = DiscoverStage.EXTRACTION.value
+        project.updated_at = datetime.utcnow()
+
+        # Save confirmed audio to library (trimmed version if hook selected)
+        if variant.audio_type != "library":
+            lib_item = AudioLibrary(
+                workspace_id=project.workspace_id,
+                source_type=variant.audio_type,
+                source_discover_project_id=project_id,
+                file_path=audio_path,
+                file_url=variant.file_url,
+                duration_ms=variant.duration_ms or variant.full_duration_ms or 0,
+                prompt=variant.prompt,
+            )
+            db.add(lib_item)
+            db.flush()
+            variant.library_item_id = lib_item.id
+
+        # Increment library use count (for library-sourced variants)
+        if variant.audio_type == "library" and variant.library_item_id:
+            from app.services.audio_library_service import get_audio_library_service
+            lib_service = get_audio_library_service()
+            await lib_service.increment_use_count(db, variant.library_item_id)
+
+        db.commit()
+        logger.info(f"Discover {project_id}: audio confirmed, merged video at {merged_path}")
+        return project
+
+    async def skip_audio(
+        self, db: Session, project_id: int, user_id: int,
+    ) -> DiscoverProject:
+        """Skip audio. Advance to extraction with audio_mode='none'."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot skip audio: stage is {project.stage}")
+
+        project.audio_mode = "none"
+        project.stage = DiscoverStage.EXTRACTION.value
+        project.updated_at = datetime.utcnow()
+        db.commit()
+
+        logger.info(f"Discover {project_id}: audio skipped, advanced to extraction")
+        return project
+
+    async def rollback_from_audio(
+        self, db: Session, project_id: int, user_id: int,
+    ) -> DiscoverProject:
+        """Rollback from audio → videos stage. Deletes all audio variants."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage != DiscoverStage.AUDIO.value:
+            raise ValueError(f"Cannot rollback from audio: stage is {project.stage}")
+
+        # Delete all audio variants
+        db.query(DiscoverAudioVariant).filter(
+            DiscoverAudioVariant.project_id == project_id,
+        ).delete()
+
+        project.stage = DiscoverStage.VIDEOS.value
+        project.audio_mode = None
+        project.selected_audio_variant_id = None
+        project.updated_at = datetime.utcnow()
+        db.commit()
+
+        logger.info(f"Discover {project_id}: rolled back from audio to videos")
+        return project
+
+    async def _download_discover_audio(
+        self, url: str, project_id: int, variant_id: int,
+    ) -> str:
+        """Download audio file to local storage."""
+        ensure_directories()
+        filename = f"discover_{project_id}_audio_{variant_id}.mp3"
+        dest_path = MEDIA_BASE_DIR / "audio" / filename
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        success = await download_file(url, dest_path)
+        if not success:
+            raise RuntimeError(f"Failed to download audio: {url}")
+        return str(dest_path)
+
+    def _parse_video_duration(self, duration_str: str) -> float:
+        """Parse video duration string (e.g. '6s') to seconds."""
+        try:
+            return float(duration_str.rstrip("s"))
+        except (ValueError, AttributeError):
+            return 6.0
 
     # ========== Retry ==========
 

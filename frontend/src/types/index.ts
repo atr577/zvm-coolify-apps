@@ -527,7 +527,7 @@ export interface BatchGenerateResponse {
 
 // --- Discover Workflow ---
 
-export type DiscoverStage = 'images' | 'videos' | 'extraction' | 'completed'
+export type DiscoverStage = 'images' | 'videos' | 'audio' | 'extraction' | 'completed'
 export type DiscoverStatus = 'active' | 'completed' | 'archived'
 export type DiscoverRoundType = 'image' | 'video'
 export type DiscoverRoundStatus = 'pending' | 'generating' | 'completed' | 'failed'
@@ -577,6 +577,51 @@ export interface DiscoverExtraction {
   updated_at: string
 }
 
+export type AudioType = 'sfx' | 'music' | 'library'
+
+export interface AudioHook {
+  start_ms: number
+  end_ms: number
+  energy: string
+  type: string
+}
+
+export interface DiscoverAudioVariant {
+  id: number
+  audio_type: AudioType
+  prompt: string | null
+  prompt_mode: 'manual' | 'auto'
+  status: 'pending' | 'generating' | 'completed' | 'failed'
+  file_url: string | null
+  trimmed_file_url: string | null
+  full_duration_ms: number | null
+  duration_ms: number | null
+  detected_hooks: AudioHook[] | null
+  hook_start_ms: number | null
+  hook_end_ms: number | null
+  error_message: string | null
+  library_item_id: number | null
+  created_at: string
+}
+
+export interface AudioLibraryItem {
+  id: number
+  source_type: 'sfx' | 'music'
+  duration_ms: number
+  file_url: string | null
+  prompt: string | null
+  mood: string | null
+  use_count: number
+  created_at: string
+}
+
+export interface AudioLibrarySearchResponse {
+  items: AudioLibraryItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface DiscoverProject {
   id: number
   concept: string
@@ -591,6 +636,9 @@ export interface DiscoverProject {
   video_duration: string
   finalist_image_item_id: number | null
   finalist_video_item_id: number | null
+  audio_mode: string | null
+  selected_audio_variant_id: number | null
+  audio_variants: DiscoverAudioVariant[]
   created_project_id: number | null
   rounds: DiscoverRound[]
   extraction: DiscoverExtraction | null

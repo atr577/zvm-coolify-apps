@@ -43,6 +43,7 @@ class FalClient:
     IMAGE_MODEL = "fal-ai/nano-banana-pro"
     VIDEO_MODEL = "fal-ai/veo3.1/image-to-video"
     MUSIC_MODEL = "fal-ai/lyria2"
+    MMAUDIO_MODEL = "fal-ai/mmaudio-v2"
 
     def __init__(self):
         self.api_key = settings.FAL_KEY
@@ -569,6 +570,81 @@ class FalClient:
             })
 
             return audio_url
+
+
+    # ============ MMAudio V2 (Sound FX) ============
+
+    async def submit_mmaudio(
+        self,
+        video_url: str,
+        prompt: Optional[str] = None,
+    ) -> str:
+        """Submit MMAudio V2 task for video-to-audio generation, returns request_id.
+
+        Args:
+            video_url: URL of the video to generate audio for
+            prompt: Optional text prompt for audio style. None = auto mode (model decides).
+        """
+        input_data = {"video_url": video_url}
+        if prompt:
+            input_data["prompt"] = prompt
+
+        return await self._submit_task(self.MMAUDIO_MODEL, input_data, max_retries=2)
+
+    async def poll_mmaudio(
+        self,
+        request_id: str,
+        max_wait_time: int = 120,
+        poll_interval: int = 5,
+    ) -> str:
+        """Poll MMAudio V2 generation until complete, returns audio URL."""
+        result = await self._poll_status(
+            self.MMAUDIO_MODEL,
+            request_id,
+            max_wait_time=max_wait_time,
+            poll_interval=poll_interval,
+        )
+
+        # MMAudio V2 returns {audio: {url: "..."}}
+        audio = result.get("audio", {})
+        audio_url = audio.get("url") if isinstance(audio, dict) else audio
+
+        if not audio_url:
+            raise FalClientError(f"No audio URL in MMAudio result: {result}")
+
+        return audio_url
+
+    async def generate_mmaudio(
+        self,
+        video_url: str,
+        prompt: Optional[str] = None,
+    ) -> str:
+        """High-level: submit + poll MMAudio V2, returns audio URL."""
+        # Mock mode
+        if self.mock_mode:
+            logger.info("MOCK MODE: Returning mock MMAudio URL")
+            await asyncio.sleep(1)
+            return "https://mock.fal.ai/audio/mock-mmaudio.wav"
+
+        # Check cache
+        request_data = {"video_url": video_url, "prompt": prompt}
+        cache_key = self._get_cache_key("mmaudio", request_data)
+        cached = self._load_from_cache(cache_key, "mmaudio")
+        if cached:
+            logger.info(f"Cache hit for mmaudio: {cache_key}")
+            return cached.get("audio_url")
+
+        # Submit and poll
+        request_id = await self.submit_mmaudio(video_url=video_url, prompt=prompt)
+        audio_url = await self.poll_mmaudio(request_id)
+
+        # Cache result
+        self._save_to_cache(cache_key, "mmaudio", request_data, {
+            "audio_url": audio_url,
+            "request_id": request_id,
+        })
+
+        return audio_url
 
 
 # Singleton instance
