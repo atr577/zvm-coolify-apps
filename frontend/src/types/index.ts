@@ -406,8 +406,11 @@ export interface TemplateSettings {
   image_aspect_ratio: string
   video_duration: string
   variant_generation_prompt: string | null
+  music_mode: string | null
   music_prompt: string | null
+  audio_hook_url: string | null
   csv_columns: string[] | null
+  reference_video_url: string | null
   created_at: string
   updated_at: string
 }
@@ -421,6 +424,7 @@ export interface TemplateSettingsUpdate {
   image_aspect_ratio?: AspectRatio
   video_duration?: string
   variant_generation_prompt?: string
+  music_mode?: string
   music_prompt?: string
 }
 
@@ -638,6 +642,7 @@ export interface DiscoverProject {
   finalist_video_item_id: number | null
   audio_mode: string | null
   selected_audio_variant_id: number | null
+  merged_video_url: string | null
   audio_variants: DiscoverAudioVariant[]
   created_project_id: number | null
   rounds: DiscoverRound[]

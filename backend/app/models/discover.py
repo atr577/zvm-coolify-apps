@@ -119,6 +119,9 @@ class DiscoverProject(Base):
         nullable=True,
     )
 
+    # Merged video (video + confirmed audio)
+    merged_video_path = Column(String(500), nullable=True)
+
     # Link to created Template project
     created_project_id = Column(
         Integer,

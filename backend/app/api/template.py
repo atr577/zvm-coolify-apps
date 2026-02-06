@@ -182,6 +182,20 @@ async def create_template_project(
     }
 
 
+def _enrich_settings(db: Session, settings: TemplateSettings, project: Project) -> TemplateSettings:
+    """Enrich settings with audio_hook_url from project's audio_source."""
+    if project.audio_source_id:
+        from app.models.audio_library import AudioLibrary
+        lib_item = db.query(AudioLibrary).filter(
+            AudioLibrary.id == project.audio_source_id
+        ).first()
+        if lib_item and lib_item.file_path:
+            from pathlib import Path
+            p = Path(lib_item.file_path)
+            settings.audio_hook_url = f"/api/files/{p.parent.name}/{p.name}"
+    return settings
+
+
 # --- Template Settings Endpoints ---
 
 @router.get(
@@ -204,7 +218,7 @@ async def get_template_settings(
     if not settings:
         raise HTTPException(status_code=404, detail="Template settings not found")
 
-    return settings
+    return _enrich_settings(db, settings, project)
 
 
 @router.put(
@@ -264,7 +278,7 @@ async def update_template_settings(
             db.commit()
             db.refresh(settings)
 
-    return settings
+    return _enrich_settings(db, settings, project)
 
 
 # --- Variants Endpoints ---
@@ -475,12 +489,14 @@ async def _generate_batch_music(project_id: int) -> Optional[str]:
     Generate a music track and return path to trimmed hook audio.
 
     Returns None if project has no music_prompt set (music disabled).
+    If project has audio_source_id (pre-selected hook from Discover), uses that directly.
     """
     from app.db.base import SessionLocal
     from app.core.music_generator import MusicGenerator, sanitize_prompt
     from app.core.hook_analyzer import hook_analyzer
     from app.core.media_processor import media_processor
     from app.services.media_service import media_service
+    from app.models.audio_library import AudioLibrary
 
     db_session = SessionLocal()
     try:
@@ -488,7 +504,35 @@ async def _generate_batch_music(project_id: int) -> Optional[str]:
             TemplateSettings.project_id == project_id
         ).first()
 
-        if not settings or not settings.music_prompt:
+        if not settings:
+            return None
+
+        music_mode = settings.music_mode or "none"
+
+        # "none" — no music
+        if music_mode == "none":
+            return None
+
+        # "library" — use pre-selected audio from library
+        if music_mode == "library":
+            project = db_session.query(Project).filter(
+                Project.id == project_id
+            ).first()
+            if project and project.audio_source_id:
+                lib_item = db_session.query(AudioLibrary).filter(
+                    AudioLibrary.id == project.audio_source_id
+                ).first()
+                if lib_item and lib_item.file_path:
+                    logger.info(
+                        f"Project {project_id}: using library audio "
+                        f"(id={lib_item.id}, {lib_item.file_path})"
+                    )
+                    return lib_item.file_path
+            logger.warning(f"Project {project_id}: music_mode=library but no audio_source found")
+            return None
+
+        # "generate" — generate from prompt
+        if not settings.music_prompt:
             return None
 
         music_prompt = settings.music_prompt

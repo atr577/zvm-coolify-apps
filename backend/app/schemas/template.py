@@ -1,6 +1,6 @@
 """Pydantic schemas for Template project type."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -72,6 +72,7 @@ class TemplateSettingsUpdate(BaseModel):
     image_aspect_ratio: Optional[AspectRatioEnum] = None
     video_duration: Optional[str] = None
     variant_generation_prompt: Optional[str] = None
+    music_mode: Optional[str] = None
     music_prompt: Optional[str] = None
 
 
@@ -86,12 +87,25 @@ class TemplateSettingsResponse(BaseModel):
     image_aspect_ratio: str
     video_duration: str
     variant_generation_prompt: Optional[str] = None
+    music_mode: Optional[str] = None
     music_prompt: Optional[str] = None
+    audio_hook_url: Optional[str] = None
     csv_columns: Optional[List[str]] = None
+    reference_video_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_reference_video_url(cls, data: Any) -> Any:
+        """Build reference_video_url from reference_video_path."""
+        if hasattr(data, "reference_video_path") and data.reference_video_path:
+            from pathlib import Path
+            p = Path(data.reference_video_path)
+            data.reference_video_url = f"/api/files/{p.parent.name}/{p.name}"
+        return data
 
 
 # --- VideoTemplate Schemas ---

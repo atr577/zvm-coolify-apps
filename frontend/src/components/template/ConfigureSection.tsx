@@ -39,6 +39,7 @@ interface EditableSettings {
   video_model: string
   video_duration: string
   variant_generation_prompt: string
+  music_mode: string
   music_prompt: string
 }
 
@@ -119,6 +120,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         video_model: s.video_model,
         video_duration: s.video_duration,
         variant_generation_prompt: s.variant_generation_prompt || '',
+        music_mode: s.music_mode || 'none',
         music_prompt: s.music_prompt || '',
       }
       setInitialSettings(editable)
@@ -217,6 +219,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           video_model: editedSettings.video_model as VideoModel,
           video_duration: editedSettings.video_duration,
           variant_generation_prompt: editedSettings.variant_generation_prompt || undefined,
+          music_mode: editedSettings.music_mode || undefined,
           music_prompt: editedSettings.music_prompt || undefined,
         })
       )
@@ -266,6 +269,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         video_model: s.video_model,
         video_duration: s.video_duration,
         variant_generation_prompt: s.variant_generation_prompt || '',
+        music_mode: s.music_mode || 'none',
         music_prompt: s.music_prompt || '',
       }
       setInitialSettings(fresh)
@@ -387,10 +391,12 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           : 'not set',
       },
       music: {
-        status: (editedSettings?.music_prompt ? 'complete' : 'empty') as StepStatus,
-        summary: editedSettings?.music_prompt
-          ? editedSettings.music_prompt.slice(0, 40) + (editedSettings.music_prompt.length > 40 ? '...' : '')
-          : 'not set',
+        status: (editedSettings?.music_mode && editedSettings.music_mode !== 'none' ? 'complete' : 'empty') as StepStatus,
+        summary: editedSettings?.music_mode === 'library'
+          ? 'Saved hook'
+          : editedSettings?.music_mode === 'generate'
+          ? (editedSettings.music_prompt?.slice(0, 30) + (editedSettings.music_prompt && editedSettings.music_prompt.length > 30 ? '...' : '') || 'No prompt')
+          : 'Disabled',
       },
       distribution: {
         status: (boundAccounts.length > 0 &&
@@ -463,6 +469,27 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
                 </select>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Reference video from Discover */}
+      {settings?.reference_video_url && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex gap-4 items-start">
+          <div className="flex-shrink-0 w-24">
+            <div className="aspect-[9/16] bg-black rounded-lg overflow-hidden">
+              <video
+                src={settings.reference_video_url}
+                controls
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-purple-800">Reference Video</p>
+            <p className="text-xs text-purple-600 mt-1">Created from Discover — video with selected audio merged</p>
           </div>
         </div>
       )}
@@ -551,20 +578,67 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
               isActive={activeStep === 5}
               onToggle={() => handleStepToggle(5)}
             >
-              <div className="space-y-3">
-                <p className="text-sm text-gray-500">
-                  Music style for generated videos. Auto-generated from your pipeline prompts, or edit manually.
-                </p>
-                <textarea
-                  value={editedSettings.music_prompt}
-                  onChange={(e) => updateSetting('music_prompt', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
-                  placeholder="e.g. Upbeat electronic lo-fi beat with soft synth pads and a catchy melody"
-                />
-                <p className="text-xs text-gray-400">
-                  One track is generated per batch and merged with all videos. Leave empty to skip music.
-                </p>
+              <div className="space-y-4">
+                {/* Mode selector */}
+                <div className="flex gap-2">
+                  {([
+                    { value: 'none', label: 'No Music' },
+                    { value: 'library', label: 'Saved Hook' },
+                    { value: 'generate', label: 'Generate from Prompt' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => updateSetting('music_mode', opt.value)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition ${
+                        editedSettings.music_mode === opt.value
+                          ? 'bg-purple-50 border-purple-300 text-purple-700'
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Library mode — player + info */}
+                {editedSettings.music_mode === 'library' && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+                    <p className="text-sm text-green-800">
+                      Using saved audio hook from library. The same trimmed hook will be merged with every generated video.
+                    </p>
+                    {settings?.audio_hook_url && (
+                      <audio
+                        src={settings.audio_hook_url}
+                        controls
+                        preload="metadata"
+                        className="w-full h-8"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Generate mode — prompt */}
+                {editedSettings.music_mode === 'generate' && (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editedSettings.music_prompt}
+                      onChange={(e) => updateSetting('music_prompt', e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                      placeholder="e.g. Upbeat electronic lo-fi beat with soft synth pads and a catchy melody"
+                    />
+                    <p className="text-xs text-gray-400">
+                      A new track is generated per batch — best hook is auto-selected and merged with all videos.
+                    </p>
+                  </div>
+                )}
+
+                {/* None mode */}
+                {editedSettings.music_mode === 'none' && (
+                  <p className="text-sm text-gray-500">
+                    Videos will be generated without music.
+                  </p>
+                )}
               </div>
             </AccordionStep>
 

@@ -76,12 +76,16 @@ class TemplateSettings(Base):
     csv_columns = Column(JSON, nullable=True)
 
     # Music settings
+    music_mode = Column(String(20), nullable=True, default="none")  # "library" | "generate" | "none"
     music_prompt = Column(Text, nullable=True)  # Auto-generated or user-edited music style description
 
     # Publishing metadata prompts
     title_prompt = Column(Text, nullable=True)  # Prompt template for title generation
     description_prompt = Column(Text, nullable=True)  # Prompt template for description generation
     platform_rules = Column(JSON, nullable=True)  # Per-platform rules: {"instagram": {...}, "tiktok": {...}}
+
+    # Reference video from Discover (merged video + audio)
+    reference_video_path = Column(String(500), nullable=True)
 
     # Discover lineage (if created from Discover workflow)
     source_discover_id = Column(

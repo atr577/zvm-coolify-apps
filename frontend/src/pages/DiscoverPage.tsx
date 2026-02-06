@@ -200,7 +200,7 @@ export default function DiscoverPage() {
       const videoPrompt = finalistVideo?.prompt || ''
 
       const res = await discoverApi.createTemplate(projectId, {
-        name: `${project.name} Template`,
+        name: project.name,
         platforms: ['youtube', 'instagram', 'tiktok'],
         video_template_prompt: videoPrompt,
       })
@@ -326,22 +326,87 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* Completed/Extraction banner */}
-      {project.stage === 'completed' && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
-          <span className="text-sm text-green-800 font-medium">Discovery Complete — Template Created</span>
-        </div>
-      )}
-      {project.stage === 'extraction' && (
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6 flex items-center gap-3">
-          <Wand2 className="h-5 w-5 text-purple-600 flex-shrink-0" />
-          <span className="text-sm text-purple-800 font-medium">Ready to create template</span>
-        </div>
-      )}
+      {/* Final Result (extraction + completed — same UI, two states) */}
+      {(project.stage === 'extraction' || project.stage === 'completed') && (() => {
+        const finalistVideo = project.rounds
+          .filter(r => r.round_type === 'video')
+          .flatMap(r => r.items)
+          .find(i => i.id === project.finalist_video_item_id)
+        const finalistImage = project.rounds
+          .filter(r => r.round_type === 'image')
+          .flatMap(r => r.items)
+          .find(i => i.id === project.finalist_image_item_id)
+        const selectedAudio = project.selected_audio_variant_id
+          ? (project.audio_variants || []).find(v => v.id === project.selected_audio_variant_id)
+          : null
+        const videoSrc = project.merged_video_url
+          || (finalistVideo ? getMediaUrl(finalistVideo.local_path, finalistVideo.result_url) : null)
+        const isCompleted = project.stage === 'completed'
+        const borderColor = isCompleted ? 'border-green-200' : 'border-purple-200'
+        const bgColor = isCompleted ? 'bg-green-50' : 'bg-purple-50'
+        const textColor = isCompleted ? 'text-green-800' : 'text-purple-800'
+        const subColor = isCompleted ? 'text-green-500' : 'text-purple-500'
+        const IconComp = isCompleted ? CheckCircle2 : Trophy
+        const iconColor = isCompleted ? 'text-green-600' : 'text-purple-600'
 
-      {/* Finalist reference (video stage) */}
-      {(project.stage === 'videos' || project.stage === 'completed') && project.finalist_image_item_id && (() => {
+        return (
+          <div className={`bg-white border ${borderColor} rounded-xl overflow-hidden mb-6`}>
+            <div className={`${bgColor} px-5 py-3 flex items-center gap-2`}>
+              <IconComp className={`h-4 w-4 ${iconColor}`} />
+              <span className={`text-sm font-semibold ${textColor}`}>
+                {isCompleted ? 'Discovery Complete — Template Created' : 'Final Result'}
+              </span>
+              {project.merged_video_url && (
+                <span className={`ml-auto text-xs ${subColor}`}>Video + Audio merged</span>
+              )}
+            </div>
+            <div className="p-5 flex gap-5">
+              {/* Video preview */}
+              {videoSrc && (
+                <div className="flex-shrink-0 w-40">
+                  <div className="aspect-[9/16] bg-black rounded-lg overflow-hidden">
+                    <video
+                      src={videoSrc}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+              {/* Prompts */}
+              <div className="min-w-0 flex-1 space-y-3">
+                {finalistImage && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Image Prompt</p>
+                    <p className="text-sm text-gray-700">{finalistImage.prompt}</p>
+                  </div>
+                )}
+                {finalistVideo && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Video Prompt</p>
+                    <p className="text-sm text-gray-700">{finalistVideo.prompt}</p>
+                  </div>
+                )}
+                {selectedAudio && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      Audio ({selectedAudio.audio_type === 'sfx' ? 'SFX' : 'Music'})
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      {selectedAudio.prompt || 'Auto-generated'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Finalist reference (video stage only) */}
+      {project.stage === 'videos' && project.finalist_image_item_id && (() => {
         const finalistItem = project.rounds
           .filter(r => r.round_type === 'image')
           .flatMap(r => r.items)
@@ -527,6 +592,28 @@ export default function DiscoverPage() {
               <div className="flex items-center justify-between gap-3">
                 {/* LEFT: Back navigation */}
                 <div className="flex items-center gap-2">
+                  {/* Back to Audio (extraction/completed) */}
+                  {(project.stage === 'extraction' || project.stage === 'completed') && (
+                    <button
+                      onClick={async () => {
+                        setRollingBack(true)
+                        setError(null)
+                        try {
+                          await discoverApi.rollbackExtraction(projectId)
+                          await fetchProject()
+                        } catch (err) {
+                          setError(getErrorMessage(err))
+                        } finally {
+                          setRollingBack(false)
+                        }
+                      }}
+                      disabled={rollingBack}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {rollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+                      Back to Audio
+                    </button>
+                  )}
                   {/* Back to Refine (images stage) */}
                   {project.stage === 'images' && currentRounds.length > 0 && canStartNewRound && (
                     <button
@@ -648,25 +735,14 @@ export default function DiscoverPage() {
 
                   {/* Extraction/Completed */}
                   {(project.stage === 'extraction' || project.stage === 'completed') && (
-                    <>
-                      <button
-                        onClick={handleCreateAnotherTemplate}
-                        disabled={creatingTemplate}
-                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                      >
-                        {creatingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                        {project.stage === 'completed' ? 'Create Another Template' : 'Create Template'}
-                      </button>
-                      {project.created_project_id && (
-                        <button
-                          onClick={() => navigate(`/?project=${project.created_project_id}`)}
-                          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
-                        >
-                          Go to Template
-                          <ArrowRight className="h-4 w-4" />
-                        </button>
-                      )}
-                    </>
+                    <button
+                      onClick={handleCreateAnotherTemplate}
+                      disabled={creatingTemplate}
+                      className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {creatingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      {project.stage === 'completed' ? 'Create New Template' : 'Create Template'}
+                    </button>
                   )}
                 </div>
               </div>

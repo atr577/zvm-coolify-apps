@@ -125,6 +125,7 @@ class DiscoverProjectResponse(BaseModel):
     finalist_video_item_id: Optional[int] = None
     audio_mode: Optional[str] = None
     selected_audio_variant_id: Optional[int] = None
+    merged_video_url: Optional[str] = None
     audio_variants: List[DiscoverAudioVariantResponse] = []
     created_project_id: Optional[int] = None
     rounds: List[DiscoverRoundResponse] = []
@@ -133,6 +134,16 @@ class DiscoverProjectResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_merged_video_url(cls, data: Any) -> Any:
+        """Build merged_video_url from merged_video_path."""
+        if hasattr(data, "merged_video_path") and data.merged_video_path:
+            from pathlib import Path
+            p = Path(data.merged_video_path)
+            data.merged_video_url = f"/api/files/{p.parent.name}/{p.name}"
+        return data
 
 
 class DiscoverProjectListResponse(BaseModel):

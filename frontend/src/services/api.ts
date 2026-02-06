@@ -721,6 +721,9 @@ export const discoverApi = {
 
   rollbackAudio: (projectId: number) =>
     api.post<{ message: string }>(`/api/discover/${projectId}/audio/rollback`),
+
+  rollbackExtraction: (projectId: number) =>
+    api.post<{ message: string }>(`/api/discover/${projectId}/extraction/rollback`),
 }
 
 // Audio Library API

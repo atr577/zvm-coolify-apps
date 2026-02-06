@@ -894,6 +894,8 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
         # Resolve audio inheritance from Discover → Template
         audio_mode = project.audio_mode or "none"
         audio_source_id = None
+        audio_prompt = None
+        selected_variant = None
 
         if audio_mode != "none" and project.selected_audio_variant_id:
             selected_variant = db.query(DiscoverAudioVariant).filter(
@@ -901,6 +903,8 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
             ).first()
 
             if selected_variant:
+                audio_prompt = selected_variant.prompt
+
                 if selected_variant.library_item_id:
                     # Music/library — already in library
                     audio_source_id = selected_variant.library_item_id
@@ -950,6 +954,9 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
             image_aspect_ratio=project.image_aspect_ratio,
             video_duration=project.video_duration,
             source_discover_id=project.id,
+            reference_video_path=project.merged_video_path,
+            music_mode="library" if audio_source_id else ("generate" if audio_prompt else "none"),
+            music_prompt=audio_prompt,
         )
         db.add(settings)
 
@@ -961,6 +968,44 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
             is_default=True,
         )
         db.add(vt)
+        db.flush()
+
+        # Seed generation from Discover results (goes into moderation queue)
+        from app.models.template_generation import TemplateGeneration
+        finalist_image = None
+        finalist_video = None
+        if project.finalist_image_item_id:
+            finalist_image = db.query(DiscoverItem).filter(
+                DiscoverItem.id == project.finalist_image_item_id,
+            ).first()
+        if project.finalist_video_item_id:
+            finalist_video = db.query(DiscoverItem).filter(
+                DiscoverItem.id == project.finalist_video_item_id,
+            ).first()
+
+        # Convert absolute merged_video_path to relative for /api/files/ serving
+        merged_relative = None
+        if project.merged_video_path:
+            mp = Path(project.merged_video_path)
+            merged_relative = f"{mp.parent.name}/{mp.name}"
+
+        seed_gen = TemplateGeneration(
+            project_id=template_project.id,
+            video_template_id=vt.id,
+            llm_model="gpt-4o-mini",
+            image_model=project.image_model,
+            video_model=project.video_model,
+            image_prompt=finalist_image.prompt if finalist_image else None,
+            video_prompt=finalist_video.prompt if finalist_video else None,
+            image_url=finalist_image.result_url if finalist_image else None,
+            image_path=finalist_image.local_path if finalist_image else None,
+            video_url=finalist_video.result_url if finalist_video else None,
+            video_path=finalist_video.local_path if finalist_video else None,
+            video_with_audio_path=merged_relative,
+            status="completed",
+            completed_at=datetime.utcnow(),
+        )
+        db.add(seed_gen)
 
         # Update discover project
         project.created_project_id = template_project.id
@@ -1426,6 +1471,7 @@ No JSON, just the prompt text."""
         # Update project
         project.selected_audio_variant_id = variant_id
         project.audio_mode = variant.audio_type
+        project.merged_video_path = merged_path
         project.stage = DiscoverStage.EXTRACTION.value
         project.updated_at = datetime.utcnow()
 
@@ -1468,6 +1514,30 @@ No JSON, just the prompt text."""
         db.commit()
 
         logger.info(f"Discover {project_id}: audio skipped, advanced to extraction")
+        return project
+
+    async def rollback_from_extraction(
+        self, db: Session, project_id: int, user_id: int,
+    ) -> DiscoverProject:
+        """Rollback from extraction → audio stage. Clears merged video and selection."""
+        project = await self.get_project(db, project_id, user_id)
+        if project.stage not in (DiscoverStage.EXTRACTION.value, DiscoverStage.COMPLETED.value):
+            raise ValueError(f"Cannot rollback to audio: stage is {project.stage}")
+
+        project.stage = DiscoverStage.AUDIO.value
+        project.selected_audio_variant_id = None
+        project.merged_video_path = None
+        project.audio_mode = None
+        project.created_project_id = None
+        project.status = DiscoverStatus.ACTIVE.value
+        project.updated_at = datetime.utcnow()
+
+        # Delete extraction if exists
+        if project.extraction:
+            db.delete(project.extraction)
+
+        db.commit()
+        logger.info(f"Discover {project_id}: rolled back from extraction to audio")
         return project
 
     async def rollback_from_audio(
