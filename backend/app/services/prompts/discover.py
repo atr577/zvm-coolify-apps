@@ -44,6 +44,46 @@ Each prompt should be a standalone image description that could work as the firs
 Make them VERY different from each other — explore the creative space widely."""
 
 
+# --- Image: Round 1 with refined prompt ---
+
+DISCOVER_IMAGE_REFINED_SYSTEM = """You are a creative director for short-form viral video content.
+You receive a detailed, pre-refined image generation prompt. Your job is to generate variations
+that PRESERVE the core direction while introducing visual variety.
+
+IMAGE FORMAT: {aspect_ratio} aspect ratio. Compose ALL prompts for this format.
+
+RULES:
+1. Generate exactly {count} image prompts
+2. Each prompt MUST preserve: subject, action, environment, style, and quality keywords from the base prompt
+3. Vary ONLY these dimensions across prompts:
+   - Camera angle (slightly different angles: front, 3/4, low, eye-level)
+   - Lighting variation (same character but different intensity/direction)
+   - Moment variation (slightly different timing within the same action)
+   - Detail emphasis (focus on different textures or elements)
+4. Do NOT wildly diverge — all prompts should feel like the same scene shot differently
+5. Keep each prompt 80-150 words, in ENGLISH
+6. Preserve negative constraints (no text, no watermarks, etc.) from the base prompt
+7. Preserve quality and style keywords from the base prompt
+
+Return JSON:
+{{
+  "prompts": [
+    "prompt text 1",
+    "prompt text 2"
+  ]
+}}"""
+
+
+def build_discover_refined_prompt(refined_prompt: str, count: int = 4) -> str:
+    """Build user prompt for round 1 when refined prompt is available."""
+    return f"""BASE PROMPT (refined by user):
+{refined_prompt}
+
+Generate {count} variations of this prompt. Keep the same subject, action, environment, style, and quality.
+Vary camera angle, lighting direction, moment timing, and detail emphasis.
+Each variation should feel like the same scene photographed from a different perspective."""
+
+
 # --- Image: Round 2+ (Narrowing) ---
 
 DISCOVER_IMAGE_NARROW_SYSTEM = """You are a creative director refining image prompts based on user preferences.
@@ -104,31 +144,73 @@ Do not repeat previous prompts. Refine the direction based on selection patterns
 
 # --- Video: Mini-scenario generation ---
 
-DISCOVER_VIDEO_SYSTEM = """You are a director for short-form viral videos (5-8 seconds).
-Given a winning image (the first frame) and optional user direction, write detailed VIDEO SCENARIOS — mini-scripts that describe WHAT HAPPENS second by second.
+DISCOVER_VIDEO_SYSTEM = """You are a motion prompt engineer for image-to-video AI models (Kling, Veo, Hailuo, Minimax).
+
+You receive a reference image (described by its prompt) and the user's refined concept.
+Your job: write SHORT, TECHNICAL motion prompts in LABELED FORMAT.
 
 VIDEO FORMAT: {aspect_ratio} aspect ratio.
 
-WHAT A GOOD SCENARIO INCLUDES:
-- **Action beats**: what physically happens to the subject, step by step (e.g. "teeth grip the phone → pause → violent pull inward → shower of fragments")
-- **Camera work**: movement, angle changes, focus shifts
-- **Timing & pacing**: where the tension builds, where the payoff hits
-- **Sensory details**: sparks, cracks, debris, reflections, textures, particles
-- **Emotional arc**: anticipation → climax → aftermath (or surprise → reaction)
+IMAGE-TO-VIDEO MODELS — CAPABILITIES:
+- One continuous shot (NO cuts, NO montage, NO angle switches)
+- Simple subject motion (descends, rotates, deforms, walks, falls)
+- One camera movement (static, slow push-in, pull-out, orbit, pan, tilt)
+- 5-10 seconds = 1-2 actions maximum
+- Approximate physics
+
+CANNOT DO: multiple angles, sound, complex action chains, precise timecodes, text/UI.
+
+OUTPUT FORMAT — each prompt must use these labeled lines:
+Subject: [who/what is in frame]
+Motion: [what physically moves/changes, 1-2 actions, direct verbs]
+Camera: [one movement or static]
+Speed: [slow/medium/fast]
+Details: [secondary effects — particles, debris, reflections, wind]
+Continuity: [preservation instructions]
+
+GOOD EXAMPLE:
+"Subject: industrial hydraulic press, bowling ball
+Motion: press descends steadily onto ball, ball surface cracks and deforms under pressure
+Camera: static, subtle push-in
+Speed: slow
+Details: small fragments fall to sides, dust rises from impact point
+Continuity: maintain consistent lighting, preserve object proportions, no morphing"
+
+GOOD EXAMPLE:
+"Subject: woman in black dress, Porsche 911
+Motion: woman opens car door smoothly, steps out with confidence, stands upright
+Camera: slow dolly out
+Speed: medium
+Details: dress fabric moves naturally with body, hair shifts with movement
+Continuity: preserve face identity, consistent lighting, no warping"
+
+GOOD EXAMPLE:
+"Subject: golden honey, stack of pancakes
+Motion: honey pours from above onto pancakes, drips slowly down the sides
+Camera: static top-down
+Speed: slow
+Details: steam rises gently, honey catches light with glossy reflections
+Continuity: maintain food colors and textures, stable lighting"
+
+BAD (DO NOT):
+- Literary prose ("looms above with ceremonial slowness")
+- Sound descriptions ("a resounding crack echoes")
+- Multiple camera moves ("cuts to close-up, then pulls back")
+- Fake timecodes ("at 2 seconds... at 4 seconds...")
+- Metaphors ("like colored stars", "shower of fragments")
 
 RULES:
-1. Generate exactly {count} scenario variations
-2. Each scenario should be 80-150 words in ENGLISH
-3. Every scenario starts from the given image as frame 1
-4. Vary across scenarios: action intensity, camera style, pacing, emotional tone
-5. Think about what makes a 5-8 second clip IMPOSSIBLE TO SCROLL PAST
-6. Write in present tense, cinematic style ("The blade descends..." not "A blade should descend...")
-7. Do NOT include text overlays, watermarks, or UI elements
+1. Generate exactly {count} motion prompts
+2. Each prompt MUST use the labeled format above
+3. Motion line: direct verbs, 1-2 actions only, physically plausible
+4. Camera line: ONE movement (or "static")
+5. Continuity line: ALWAYS include — prevents AI artifacts
+6. Vary across prompts: motion intensity, camera style, detail focus
 
 Return JSON:
 {{
   "prompts": [
-    "scenario text 1"
+    "Subject: ...\\nMotion: ...\\nCamera: ...\\nSpeed: ...\\nDetails: ...\\nContinuity: ..."
   ]
 }}"""
 
@@ -140,38 +222,47 @@ def build_discover_video_prompt(
     rejected_prompts: list[str] | None = None,
     feedback: str | None = None,
     direction: str | None = None,
+    blocks: dict | None = None,
 ) -> str:
-    """Build user prompt for video scenario generation."""
+    """Build user prompt for video motion generation."""
     context = f"""WINNING IMAGE (first frame):
 {image_prompt}"""
+
+    if blocks:
+        context += "\n\nMOTION CONTEXT (from user's refinement):"
+        for key in ['subject', 'action', 'moment', 'environment', 'camera']:
+            block = blocks.get(key, {})
+            value = block.get('value')
+            if value:
+                label = key.upper()
+                context += f"\n- {label}: {value}"
 
     if direction:
         context += f"""
 
-USER DIRECTION (what should happen in the video):
-{direction}
+USER DIRECTION (what should happen):
+{direction}"""
 
-Generate {count} detailed video scenarios based on this direction. Create variations in camera work, pacing, and intensity — but all should follow the user's creative vision."""
-    else:
-        context += f"""
+    context += f"""
 
-Generate {count} diverse video scenarios for this image. Imagine different ways this scene could come alive in a 5-8 second viral clip."""
+Generate {count} short motion prompts. Describe ONLY what moves/changes from this static image.
+Use ACTION and MOMENT as the starting point — what happens NEXT?"""
 
     if selected_prompts:
         context += f"""
 
-PREVIOUSLY SELECTED SCENARIOS (user liked these):
+PREVIOUSLY SELECTED (user liked these motions):
 {chr(10).join(f'- {p}' for p in selected_prompts)}
 
-PREVIOUSLY REJECTED SCENARIOS (user did NOT like these):
+PREVIOUSLY REJECTED (user did NOT like):
 {chr(10).join(f'- {p}' for p in (rejected_prompts or []))}
 
-Generate new scenarios closer to what the user liked. Keep the creative direction but vary execution."""
+Generate new motion prompts closer to what the user liked."""
 
     if feedback:
         context += f"""
 
-USER FEEDBACK (prioritize this):
+USER FEEDBACK:
 {feedback}"""
 
     return context
@@ -284,3 +375,134 @@ VIDEO SETTINGS:
 Extract a reusable template from this winning prompt.
 Identify what should stay fixed (the "recipe") and what should vary (the "ingredients").
 IMPORTANT: The video_template_prompt timeline MUST be exactly {duration_sec} seconds total."""
+
+
+# --- Prompt Refinement ---
+
+# Block constants
+CREATIVE_BLOCKS = ["subject", "action", "moment", "environment"]
+TECHNICAL_BLOCKS = ["camera", "lighting", "style", "format", "details"]
+ALL_BLOCKS = CREATIVE_BLOCKS + TECHNICAL_BLOCKS
+ALWAYS_RELEVANT = ["subject", "camera", "lighting", "style"]
+
+
+DISCOVER_REFINEMENT_SYSTEM = """You are a creative prompt analyst for AI image generation.
+
+Your job: analyze a user's concept and break it down into structured blocks for a high-quality image prompt.
+
+BLOCKS TO ANALYZE:
+1. Subject — main subject/object (WHO/WHAT is in frame)
+2. Action — what's happening (dynamic aspect, movement)
+3. Moment — which exact moment to capture (timing)
+4. Environment — where it's happening (location, surroundings)
+5. Camera — angle, distance, composition
+6. Lighting — light source, character, mood
+7. Style — visual style (photorealistic, cinematic, anime, etc.)
+8. Format — aspect ratio, frame (DO NOT include, handled by system)
+9. Details — textures, materials, particles, fine elements
+
+TASK:
+1. Parse the concept — extract what's already specified
+   - If concept clearly states the subject → auto_filled
+   - If concept implies action → auto_filled
+   - Values must be in ENGLISH even if concept is in another language
+2. Determine which blocks are RELEVANT:
+   - Subject, Camera, Lighting, Style are ALWAYS relevant
+   - Action: skip if concept is static (portrait, still life)
+   - Moment: skip if only one possible moment (static scene, no timeline)
+   - Environment: skip if abstract/studio/no location implied
+   - Details: skip for simple concepts with no specific textures
+3. For CREATIVE blocks that need user input (no clear answer from concept):
+   - Write a clear question in the user's detected language
+   - Provide exactly 4 diverse options (in ENGLISH, concise, 5-15 words each)
+   - CRITICAL: questions and options must be SPECIFIC to this concept, not generic
+4. For TECHNICAL blocks:
+   - Generate appropriate values automatically based on concept (in ENGLISH)
+   - Status: auto_generated
+5. Do NOT include Format block — it is handled by the system
+
+QUESTIONS AND OPTIONS — MUST BE CONCEPT-SPECIFIC:
+Every question and option must directly relate to the user's concept. Never use generic options.
+
+BAD (generic, useless):
+  concept: "hydraulic press crushing objects"
+  details question: "What details do you want?"
+  details options: ["Detailed textures", "Visible particles", "Shiny metal", "Worn surfaces"]
+
+GOOD (specific, helpful):
+  concept: "hydraulic press crushing objects"
+  details question: "Какие детали должны быть акцентированы?"
+  details options: ["Oil dripping from hydraulic pistons", "Cracks spreading through crushed object", "Metal shavings and debris flying on impact", "Reflections on polished steel press surface"]
+
+BAD (generic):
+  concept: "boston terrier playing with toys"
+  moment question: "Which moment?"
+  moment options: ["Happy moment", "Funny moment", "Action moment", "Calm moment"]
+
+GOOD (specific):
+  concept: "boston terrier playing with toys"
+  moment question: "Какой момент хотите запечатлеть?"
+  moment options: ["Puppy mid-jump catching a ball in the air", "Toy knocked over, puppy frozen in guilty pose", "Tug-of-war with a rope toy, teeth bared playfully", "Puppy buried under pile of scattered toys"]
+
+INPUT LANGUAGE: User may write in any language. Detect it. Ask questions in that language.
+OUTPUT VALUES: All block values and options must be in ENGLISH.
+
+Return JSON:
+{{
+  "detected_language": "ru",
+  "relevant_blocks": ["subject", "action", ...],
+  "blocks": {{
+    "subject": {{
+      "value": "extracted value or null",
+      "status": "auto_filled | needs_input | auto_generated",
+      "question": "question text in user language, or null",
+      "options": ["opt1", "opt2", "opt3", "opt4"] or null
+    }}
+  }}
+}}
+
+IMPORTANT:
+- Do NOT include "format" in blocks or relevant_blocks
+- relevant_blocks must include at least: subject, camera, lighting, style
+- Each block must have exactly the fields shown above
+- Options must be exactly 4 items when provided
+- NEVER generate generic options — every option must be specific to this concept"""
+
+
+DISCOVER_COMPILE_SYSTEM = """You are a technical prompt engineer for AI image generation models (Flux, DALL-E, Midjourney, Kling).
+
+Given a set of completed blocks describing a visual concept, compile them into a precise,
+technical image generation prompt in ENGLISH.
+
+WRITING STYLE — TECHNICAL, NOT LITERARY:
+- Write as an image generation prompt, NOT as creative prose or a story
+- Use concrete visual descriptors, not metaphors ("bright warm sunlight" not "a sun-drenched paradise")
+- Specify camera, composition, and lighting technically ("low angle close-up, 35mm lens, shallow depth of field" not "an intimate glimpse into their world")
+- Be direct and dense with visual information
+
+COMPOSITION (derive from ALL blocks together):
+- Specify depth of field based on subject and camera (e.g. "shallow DoF, bokeh background" or "deep focus, everything sharp")
+- Include framing rules when appropriate (rule of thirds, centered, dynamic diagonal, leading lines)
+- Describe background treatment (blurred, detailed, minimal, environmental context)
+- Mention foreground/background relationship
+
+QUALITY & STYLE KEYWORDS:
+- Based on the Style block, include appropriate technical quality keywords
+- Examples by style: photorealistic → "photorealistic, ultra-detailed, 8K"; cinematic → "cinematic lighting, film grain, anamorphic"; anime → "anime key visual, cel-shaded, vibrant"
+- Do NOT hardcode "photorealistic" — match the style the user chose
+
+RULES:
+1. The prompt should be 80-150 words
+2. Compose for the specified aspect ratio (mention framing orientation)
+3. Incorporate ALL provided blocks — nothing should be lost
+4. The prompt should work as a first frame for a short viral video
+5. Do NOT mention block names — weave content together as a technical prompt
+6. End with: style keywords, then quality keywords
+
+Return JSON:
+{{
+  "refined_prompt": "the compiled prompt text"
+}}"""
+
+
+NEGATIVE_SUFFIX = "No text, no watermarks, no logos, no readable text overlays."

@@ -144,3 +144,41 @@ class CreateTemplateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     platforms: List[str] = ["youtube"]
     video_template_prompt: str
+
+
+# --- Refinement ---
+
+class RefinementBlockSchema(BaseModel):
+    value: Optional[str] = None
+    status: str  # auto_filled | needs_input | auto_generated | confirmed
+    source: Optional[str] = None  # parsed | llm | user | settings
+    question: Optional[str] = None
+    options: Optional[List[str]] = None
+
+
+class RefinementResponse(BaseModel):
+    refinement_id: int
+    original_concept: str
+    score: int
+    relevant_blocks: List[str]
+    blocks: Dict[str, RefinementBlockSchema]
+    refined_prompt: Optional[str] = None
+    ready_to_generate: bool
+
+
+class BlockUpdateRequest(BaseModel):
+    block_name: str = Field(
+        ...,
+        pattern=r'^(subject|action|moment|environment|camera|lighting|style|details)$',
+    )
+    value: str = Field(..., min_length=1)
+
+
+class PromptUpdateRequest(BaseModel):
+    refined_prompt: str = Field(..., min_length=10)
+
+
+class CompileResponse(BaseModel):
+    refined_prompt: str
+    score: int
+    ready_to_generate: bool

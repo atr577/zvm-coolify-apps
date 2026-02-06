@@ -14,6 +14,7 @@ from sqlalchemy import func
 
 from app.models.discover import (
     DiscoverProject, DiscoverRound, DiscoverItem, DiscoverExtraction,
+    DiscoverRefinement,
     DiscoverStage, DiscoverStatus, RoundType, RoundStatus, ItemStatus,
     SelectionStatus,
 )
@@ -23,9 +24,14 @@ from app.services.media_downloader import download_file, ensure_directories, MED
 from app.services.prompts.discover import (
     DISCOVER_IMAGE_WIDE_SYSTEM,
     DISCOVER_IMAGE_NARROW_SYSTEM,
+    DISCOVER_IMAGE_REFINED_SYSTEM,
     DISCOVER_VIDEO_SYSTEM,
     DISCOVER_EXTRACTION_SYSTEM,
+    DISCOVER_REFINEMENT_SYSTEM,
+    DISCOVER_COMPILE_SYSTEM,
+    CREATIVE_BLOCKS, TECHNICAL_BLOCKS, ALL_BLOCKS, ALWAYS_RELEVANT, NEGATIVE_SUFFIX,
     build_discover_wide_prompt,
+    build_discover_refined_prompt,
     build_discover_narrow_prompt,
     build_discover_video_prompt,
     build_discover_extraction_prompt,
@@ -136,6 +142,19 @@ class DiscoverService:
         """
         project = await self.get_project(db, project_id, user_id)
 
+        # Check refinement for image rounds
+        if project.stage == DiscoverStage.IMAGES.value:
+            refinement = db.query(DiscoverRefinement).filter(
+                DiscoverRefinement.project_id == project_id
+            ).first()
+            if project.current_image_round == 0:
+                if not refinement or refinement.score < 80:
+                    raise ValueError(
+                        "Complete prompt refinement first (score must be 80+)"
+                    )
+                if not refinement.refined_prompt:
+                    raise ValueError("Compile the refined prompt first")
+
         # Block concurrent generation
         active_round = (
             db.query(DiscoverRound)
@@ -174,16 +193,30 @@ class DiscoverService:
 
         ar = project.image_aspect_ratio
 
-        if round_number == 1:
-            # Wide: use concept only
+        # Use refined_prompt if available, otherwise raw concept
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project.id
+        ).first()
+        concept = (
+            refinement.refined_prompt
+            if refinement and refinement.refined_prompt
+            else project.concept
+        )
+
+        if round_number == 1 and refinement and refinement.refined_prompt:
+            # Refined: variations of the pre-refined prompt
+            system_prompt = DISCOVER_IMAGE_REFINED_SYSTEM.format(count=count, aspect_ratio=ar)
+            user_prompt = build_discover_refined_prompt(refinement.refined_prompt, count)
+        elif round_number == 1:
+            # Wide: no refinement, explore broadly
             system_prompt = DISCOVER_IMAGE_WIDE_SYSTEM.format(count=count, aspect_ratio=ar)
-            user_prompt = build_discover_wide_prompt(project.concept, count)
+            user_prompt = build_discover_wide_prompt(concept, count)
         else:
             # Narrowing: gather selections from previous rounds
             selected, rejected = self._gather_selections(db, project, RoundType.IMAGE.value)
             system_prompt = DISCOVER_IMAGE_NARROW_SYSTEM.format(count=count, aspect_ratio=ar)
             user_prompt = build_discover_narrow_prompt(
-                project.concept, selected, rejected, feedback, count
+                concept, selected, rejected, feedback, count
             )
 
         # Call LLM for prompts
@@ -256,18 +289,30 @@ class DiscoverService:
         if not finalist_image:
             raise ValueError("No finalist image selected")
 
+        # Get refinement blocks for motion context
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project.id
+        ).first()
+        blocks = None
+        if refinement and refinement.blocks:
+            import json
+            blocks = json.loads(refinement.blocks) if isinstance(refinement.blocks, str) else refinement.blocks
+
         ar = project.image_aspect_ratio
 
         system_prompt = DISCOVER_VIDEO_SYSTEM.format(count=count, aspect_ratio=ar)
 
         if round_number == 1:
             user_prompt = build_discover_video_prompt(
-                finalist_image.prompt, count, direction=feedback,
+                finalist_image.prompt, count,
+                direction=feedback,
+                blocks=blocks,
             )
         else:
             selected, rejected = self._gather_selections(db, project, RoundType.VIDEO.value)
             user_prompt = build_discover_video_prompt(
                 finalist_image.prompt, count, selected, rejected, feedback,
+                blocks=blocks,
             )
 
         result = await self.openai.generate_json(
@@ -279,6 +324,16 @@ class DiscoverService:
         prompts = result.get("prompts", [])
         if not prompts:
             raise ValueError("LLM returned no video prompts")
+
+        # Validate labeled format — all required fields present
+        REQUIRED_LABELS = ["Subject:", "Motion:", "Camera:", "Continuity:"]
+        for i, prompt in enumerate(prompts):
+            missing = [lbl for lbl in REQUIRED_LABELS if lbl not in prompt]
+            if missing:
+                logger.warning(
+                    f"Discover {project.id}: video prompt {i+1} missing labels: {missing}. "
+                    f"Prompt: {prompt[:100]}..."
+                )
 
         round_obj = DiscoverRound(
             project_id=project.id,
@@ -522,10 +577,12 @@ class DiscoverService:
         finalist_item = db.query(DiscoverItem).filter(
             DiscoverItem.id == finalist_item_id,
             DiscoverItem.status == ItemStatus.COMPLETED.value,
-            DiscoverItem.selection == SelectionStatus.SELECTED.value,
         ).first()
         if not finalist_item:
-            raise ValueError("Finalist item not found or not completed/selected")
+            raise ValueError("Finalist item not found or not completed")
+        # Mark as selected if not already
+        if finalist_item.selection != SelectionStatus.SELECTED.value:
+            finalist_item.selection = SelectionStatus.SELECTED.value
 
         # Ensure finalist image is downloaded locally (FAL URLs expire)
         if finalist_item.result_url and not finalist_item.local_path:
@@ -554,10 +611,12 @@ class DiscoverService:
         finalist_item = db.query(DiscoverItem).filter(
             DiscoverItem.id == finalist_video_item_id,
             DiscoverItem.status == ItemStatus.COMPLETED.value,
-            DiscoverItem.selection == SelectionStatus.SELECTED.value,
         ).first()
         if not finalist_item:
-            raise ValueError("Video finalist item not found or not completed/selected")
+            raise ValueError("Video finalist item not found or not completed")
+        # Mark as selected if not already
+        if finalist_item.selection != SelectionStatus.SELECTED.value:
+            finalist_item.selection = SelectionStatus.SELECTED.value
 
         project.stage = DiscoverStage.EXTRACTION.value
         project.finalist_video_item_id = finalist_video_item_id
@@ -967,6 +1026,218 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
         if success:
             return f"{folder}/{filename}"
         return None
+
+
+    # ========== Prompt Refinement ==========
+
+    async def get_refinement(
+        self, db: Session, project_id: int, user_id: int
+    ) -> dict | None:
+        """Get existing refinement or None."""
+        await self.get_project(db, project_id, user_id)
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project_id
+        ).first()
+        if not refinement:
+            return None
+        return self._format_refinement(refinement)
+
+    async def analyze_concept(
+        self, db: Session, project_id: int, user_id: int
+    ) -> dict:
+        """Create refinement: LLM analyzes concept, returns blocks."""
+        project = await self.get_project(db, project_id, user_id)
+
+        existing = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project_id
+        ).first()
+        if existing:
+            raise ValueError("Refinement already exists. Use GET to fetch it.")
+
+        try:
+            result = await self.openai.generate_json(
+                prompt=f"USER CONCEPT:\n{project.concept}",
+                system_prompt=DISCOVER_REFINEMENT_SYSTEM,
+                model="gpt-4o",
+                temperature=0.3,
+            )
+        except Exception as e:
+            logger.error(f"LLM analysis failed for project {project_id}: {e}")
+            raise RuntimeError("AI service temporarily unavailable. Please try again.")
+
+        blocks = result.get("blocks", {})
+
+        # Validate: relevant_blocks must include ALWAYS_RELEVANT
+        relevant = result.get("relevant_blocks", [])
+        for block in ALWAYS_RELEVANT:
+            if block not in relevant:
+                relevant.append(block)
+
+        # Validate: block names must be in ALL_BLOCKS (minus format)
+        valid_block_names = [b for b in ALL_BLOCKS if b != "format"]
+        blocks = {k: v for k, v in blocks.items() if k in valid_block_names}
+
+        # Format block — auto-confirmed from project settings
+        blocks["format"] = {
+            "value": f"{project.image_aspect_ratio} vertical"
+                     if project.image_aspect_ratio == "9:16"
+                     else project.image_aspect_ratio,
+            "status": "confirmed",
+            "source": "settings",
+            "question": None,
+            "options": None,
+        }
+        if "format" not in relevant:
+            relevant.append("format")
+
+        refinement = DiscoverRefinement(
+            project_id=project_id,
+            original_concept=project.concept,
+            relevant_blocks=relevant,
+            blocks=blocks,
+            score=_calculate_score(relevant, blocks),
+            analysis_prompt_used=project.concept,
+            analysis_response=result,
+        )
+        db.add(refinement)
+        db.commit()
+        db.refresh(refinement)
+
+        return self._format_refinement(refinement)
+
+    async def update_block(
+        self, db: Session, project_id: int, user_id: int,
+        block_name: str, value: str,
+    ) -> dict:
+        """Update a single block value. Auto-save + recalculate score."""
+        await self.get_project(db, project_id, user_id)
+
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project_id
+        ).first()
+        if not refinement:
+            raise ValueError("No refinement found. Run analyze first.")
+
+        if block_name not in [b for b in ALL_BLOCKS if b != "format"]:
+            raise ValueError(f"Invalid block_name: {block_name}")
+
+        blocks = dict(refinement.blocks)
+        blocks[block_name] = {
+            "value": value,
+            "status": "confirmed",
+            "source": "user",
+            "question": blocks.get(block_name, {}).get("question"),
+            "options": blocks.get(block_name, {}).get("options"),
+        }
+        refinement.blocks = blocks
+        refinement.score = _calculate_score(refinement.relevant_blocks, blocks)
+        refinement.refined_prompt = None  # Invalidate compiled prompt
+        refinement.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(refinement)
+
+        return self._format_refinement(refinement)
+
+    async def compile_prompt(
+        self, db: Session, project_id: int, user_id: int
+    ) -> dict:
+        """Compile final prompt from blocks. Score >= 80 required."""
+        project = await self.get_project(db, project_id, user_id)
+
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project_id
+        ).first()
+        if not refinement:
+            raise ValueError("No refinement found. Run analyze first.")
+        if refinement.score < 80:
+            raise ValueError(f"Score {refinement.score}% too low. Need 80+.")
+
+        blocks_text = "\n".join(
+            f"{name}: {block.get('value', '')}"
+            for name, block in refinement.blocks.items()
+            if block.get("value") and block.get("status") == "confirmed"
+        )
+
+        try:
+            result = await self.openai.generate_json(
+                prompt=f"BLOCKS:\n{blocks_text}\n\nASPECT RATIO: {project.image_aspect_ratio}",
+                system_prompt=DISCOVER_COMPILE_SYSTEM,
+                model="gpt-4o",
+                temperature=0.5,
+            )
+        except Exception as e:
+            logger.error(f"LLM compile failed for project {project_id}: {e}")
+            raise RuntimeError("AI service temporarily unavailable. Please try again.")
+
+        compiled = result.get("refined_prompt", "")
+        refinement.refined_prompt = f"{compiled} {NEGATIVE_SUFFIX}"
+        refinement.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(refinement)
+
+        return self._format_refinement(refinement)
+
+    async def update_refined_prompt(
+        self, db: Session, project_id: int, user_id: int,
+        refined_prompt: str,
+    ) -> dict:
+        """User edits the compiled prompt before generation."""
+        await self.get_project(db, project_id, user_id)
+
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project_id
+        ).first()
+        if not refinement:
+            raise ValueError("No refinement found.")
+
+        refinement.refined_prompt = refined_prompt
+        refinement.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(refinement)
+
+        return self._format_refinement(refinement)
+
+    async def delete_refinement(
+        self, db: Session, project_id: int, user_id: int
+    ) -> None:
+        """Delete refinement for re-analysis."""
+        await self.get_project(db, project_id, user_id)
+
+        refinement = db.query(DiscoverRefinement).filter(
+            DiscoverRefinement.project_id == project_id
+        ).first()
+        if not refinement:
+            raise ValueError("No refinement found.")
+
+        db.delete(refinement)
+        db.commit()
+
+    def _format_refinement(self, refinement: DiscoverRefinement) -> dict:
+        """Format refinement for API response."""
+        return {
+            "refinement_id": refinement.id,
+            "original_concept": refinement.original_concept,
+            "score": refinement.score,
+            "relevant_blocks": refinement.relevant_blocks,
+            "blocks": refinement.blocks,
+            "refined_prompt": refinement.refined_prompt,
+            "ready_to_generate": (
+                refinement.score >= 80
+                and refinement.refined_prompt is not None
+            ),
+        }
+
+
+def _calculate_score(relevant_blocks: list[str], blocks: dict) -> int:
+    """Score = confirmed blocks / relevant blocks * 100.
+    Only 'confirmed' status counts."""
+    if not relevant_blocks:
+        return 0
+    confirmed = sum(
+        1 for name in relevant_blocks
+        if blocks.get(name, {}).get("status") == "confirmed"
+    )
+    return int(confirmed / len(relevant_blocks) * 100)
 
 
 # ========== Singleton ==========

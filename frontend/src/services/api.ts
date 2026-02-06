@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -662,6 +662,29 @@ export const discoverApi = {
   finalize: (projectId: number, finalistVideoItemId: number) =>
     api.post<{ project_id: number; message: string }>(`/api/discover/${projectId}/finalize`, {
       finalist_video_item_id: finalistVideoItemId,
+    }),
+
+  // Prompt Refinement
+  getRefinement: (projectId: number) =>
+    api.get<DiscoverRefinement>(`/api/discover/${projectId}/refine`),
+
+  analyzePrompt: (projectId: number) =>
+    api.post<DiscoverRefinement>(`/api/discover/${projectId}/refine`),
+
+  deleteRefinement: (projectId: number) =>
+    api.delete(`/api/discover/${projectId}/refine`),
+
+  updateBlock: (projectId: number, blockName: string, value: string) =>
+    api.put<DiscoverRefinement>(`/api/discover/${projectId}/refine`, {
+      block_name: blockName, value,
+    }),
+
+  compilePrompt: (projectId: number) =>
+    api.post<{ refined_prompt: string; score: number; ready_to_generate: boolean }>(`/api/discover/${projectId}/refine/compile`),
+
+  updatePrompt: (projectId: number, refinedPrompt: string) =>
+    api.put<DiscoverRefinement>(`/api/discover/${projectId}/refine/prompt`, {
+      refined_prompt: refinedPrompt,
     }),
 }
 

@@ -19,6 +19,10 @@ from app.schemas.discover import (
     AdvanceExtractionRequest,
     ExtractionUpdateRequest,
     CreateTemplateRequest,
+    RefinementResponse,
+    BlockUpdateRequest,
+    PromptUpdateRequest,
+    CompileResponse,
 )
 from app.services.discover_service import get_discover_service
 
@@ -367,5 +371,109 @@ async def finalize_and_create_template(
             "project_id": template_project_id,
             "message": "Template project created",
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Prompt Refinement ---
+
+@router.get("/{project_id}/refine", response_model=RefinementResponse)
+async def get_refinement(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get existing prompt refinement for a project."""
+    service = get_discover_service()
+    try:
+        result = await service.get_refinement(db, project_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if result is None:
+        raise HTTPException(status_code=404, detail="No refinement found")
+    return result
+
+
+@router.post("/{project_id}/refine", response_model=RefinementResponse)
+async def analyze_concept(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Analyze concept and create prompt refinement with blocks."""
+    service = get_discover_service()
+    try:
+        return await service.analyze_concept(db, project_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.delete("/{project_id}/refine", status_code=204)
+async def delete_refinement(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete refinement for re-analysis."""
+    service = get_discover_service()
+    try:
+        await service.delete_refinement(db, project_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.put("/{project_id}/refine", response_model=RefinementResponse)
+async def update_block(
+    project_id: int,
+    data: BlockUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a single block value (accept, edit, or answer)."""
+    service = get_discover_service()
+    try:
+        return await service.update_block(
+            db, project_id, current_user.id, data.block_name, data.value,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/refine/compile", response_model=CompileResponse)
+async def compile_prompt(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compile final prompt from confirmed blocks. Score >= 80 required."""
+    service = get_discover_service()
+    try:
+        result = await service.compile_prompt(db, project_id, current_user.id)
+        return {
+            "refined_prompt": result["refined_prompt"],
+            "score": result["score"],
+            "ready_to_generate": result["ready_to_generate"],
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.put("/{project_id}/refine/prompt", response_model=RefinementResponse)
+async def update_prompt(
+    project_id: int,
+    data: PromptUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edit the compiled prompt before generation."""
+    service = get_discover_service()
+    try:
+        return await service.update_refined_prompt(
+            db, project_id, current_user.id, data.refined_prompt,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -75,5 +75,6 @@ async def serve_file(file_type: str, filename: str):
         path=file_path,
         media_type=media_type,
         filename=filename,
-        headers={"Cache-Control": "public, max-age=31536000, immutable"}
+        stat_result=file_path.stat(),
+        headers={"Cache-Control": "public, max-age=60, must-revalidate"}
     )

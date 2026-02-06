@@ -76,8 +76,8 @@ function ItemCard({ item, roundType, selectable, selection, onSelectionChange, i
           >
             <Check className="h-3 w-3" />
           </button>
-          {/* Crown button for video items */}
-          {roundType === 'video' && onCrownClick && (
+          {/* Crown button — pick finalist */}
+          {onCrownClick && (
             <button
               onClick={(e) => {
                 e.stopPropagation()

@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Loader2, ArrowLeft, ArrowRight, Play, RotateCcw, Image, Video, Wand2,
-  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, X, Trophy, Plus,
+  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Trophy, Plus,
 } from 'lucide-react'
 import { discoverApi } from '@/services/api'
-import type { DiscoverProject, DiscoverItem } from '@/types'
+import type { DiscoverProject } from '@/types'
 import { getErrorMessage } from '@/types'
 import { RoundView } from '@/components/discover/RoundView'
+import { PromptRefinement } from '@/components/discover/PromptRefinement'
 import { getMediaUrl } from '@/utils/video'
 
 const POLL_INTERVAL = 3000
@@ -28,6 +29,7 @@ const VIDEO_MODELS = [
 ]
 
 const STAGE_LABELS: Record<string, string> = {
+  refine: 'Prompt Refinement',
   images: 'Image Exploration',
   videos: 'Video Exploration',
   extraction: 'Template Extraction',
@@ -58,7 +60,7 @@ export default function DiscoverPage() {
   const [itemCount, setItemCount] = useState(4)
   const [pendingSelections, setPendingSelections] = useState<Record<number, Record<string, 'selected' | 'rejected'>>>({})
   const [feedback, setFeedback] = useState('')
-  const [finalistCandidates, setFinalistCandidates] = useState<{ items: DiscoverItem[]; type: 'image' } | null>(null)
+  const [imageFinalistId, setImageFinalistId] = useState<number | null>(null)
   const [videoFinalistId, setVideoFinalistId] = useState<number | null>(null)
   const [creatingTemplate, setCreatingTemplate] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -145,42 +147,12 @@ export default function DiscoverPage() {
     }
   }
 
-  const handleAdvanceToVideo = async () => {
-    if (!project) return
-    setError(null)
-    try {
-      // Auto-submit selections before advancing
-      const ok = await submitAllSelections()
-      if (!ok) return
-
-      // Re-fetch to get updated selections
-      const freshProject = await fetchProject()
-      if (!freshProject) return
-
-      const imageRounds = freshProject.rounds.filter(r => r.round_type === 'image')
-      const allSelectedItems = imageRounds.flatMap(r =>
-        r.items.filter(i => i.selection === 'selected' && i.status === 'completed')
-      )
-      if (allSelectedItems.length === 0) {
-        setError('Select at least one image to advance')
-        return
-      }
-      if (allSelectedItems.length > 1) {
-        setFinalistCandidates({ items: allSelectedItems, type: 'image' })
-        return
-      }
-      await doAdvanceToVideo(allSelectedItems[0].id)
-    } catch (err) {
-      setError(getErrorMessage(err))
-    }
-  }
-
   const doAdvanceToVideo = async (finalistId: number) => {
     setAdvancing(true)
     setError(null)
     try {
       await discoverApi.advanceToVideo(projectId, finalistId)
-      setFinalistCandidates(null)
+      setImageFinalistId(null)
       await fetchProject()
     } catch (err) {
       setError(getErrorMessage(err))
@@ -284,14 +256,7 @@ export default function DiscoverPage() {
   const latestRound = currentRounds.length > 0 ? currentRounds[currentRounds.length - 1] : null
   const isGenerating = latestRound?.items.some(i => i.status === 'pending' || i.status === 'generating') || false
   const canStartNewRound = !isGenerating && project.stage !== 'extraction' && project.stage !== 'completed'
-
-  // Check if we have selections (saved or unsaved) that allow advancing
-  const hasUnsavedSelected = Object.values(pendingSelections).some(sel =>
-    Object.values(sel).some(v => v === 'selected')
-  )
-  const hasSelectedImages = project.rounds
-    .filter(r => r.round_type === 'image')
-    .some(r => r.items.some(i => i.selection === 'selected')) || (project.stage === 'images' && hasUnsavedSelected)
+  const showRefinement = project.stage === 'images' && currentRounds.length === 0
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -309,17 +274,18 @@ export default function DiscoverPage() {
         </div>
         <div className="flex items-center gap-2">
           <StageIcon className="h-5 w-5 text-purple-600" />
-          <span className="text-sm font-medium text-purple-600">{STAGE_LABELS[project.stage]}</span>
+          <span className="text-sm font-medium text-purple-600">{showRefinement ? STAGE_LABELS.refine : STAGE_LABELS[project.stage]}</span>
         </div>
       </div>
 
       {/* Stage progress */}
       <div className="mb-6">
         <div className="flex items-center gap-1">
-          {['images', 'videos', 'completed'].map((stage, idx) => {
-            const stages = ['images', 'videos', 'completed']
-            // extraction is internal, map to completed for display
-            const displayStage = project.stage === 'extraction' ? 'completed' : project.stage
+          {['refine', 'images', 'videos', 'completed'].map((stage, idx) => {
+            const stages = ['refine', 'images', 'videos', 'completed']
+            const displayStage = project.stage === 'extraction' ? 'completed'
+              : showRefinement ? 'refine'
+              : project.stage
             const currentIdx = stages.indexOf(displayStage)
             const isActive = idx === currentIdx
             const isPast = idx < currentIdx
@@ -335,6 +301,7 @@ export default function DiscoverPage() {
           })}
         </div>
         <div className="flex justify-between mt-1 text-xs text-gray-500">
+          <span>Refine</span>
           <span>Images</span>
           <span>Videos</span>
           <span>Done</span>
@@ -392,8 +359,19 @@ export default function DiscoverPage() {
         )
       })()}
 
+      {/* Prompt Refinement (before first image round) */}
+      {showRefinement && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <PromptRefinement
+            projectId={projectId}
+            onReady={() => handleGenerateRound()}
+            generating={generating}
+          />
+        </div>
+      )}
+
       {/* Rounds */}
-      <div className="space-y-6">
+      {!showRefinement && <div className="space-y-6">
           {currentRounds.map((round, idx) => {
             const isLatest = idx === currentRounds.length - 1 && project.stage !== 'completed'
             const isCollapsed = collapsedRounds.has(round.id)
@@ -420,11 +398,11 @@ export default function DiscoverPage() {
                       onRefresh={fetchProject}
                       onSelectionsChange={handleSelectionsChange}
                       finalistItemId={
-                        round.round_type === 'image' ? project.finalist_image_item_id :
+                        round.round_type === 'image' ? (imageFinalistId || project.finalist_image_item_id) :
                         round.round_type === 'video' ? (videoFinalistId || project.finalist_video_item_id) :
                         null
                       }
-                      onCrownClick={round.round_type === 'video' ? setVideoFinalistId : undefined}
+                      onCrownClick={round.round_type === 'video' ? setVideoFinalistId : setImageFinalistId}
                       readOnly={project.stage === 'extraction' || project.stage === 'completed'}
                     />
                   </div>
@@ -454,167 +432,154 @@ export default function DiscoverPage() {
                 />
               )}
 
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Model selector */}
-                {canStartNewRound && (
-                  <select
-                    value={project.stage === 'videos' ? selectedVideoModel : selectedImageModel}
-                    onChange={(e) => {
-                      if (project.stage === 'videos') setSelectedVideoModel(e.target.value)
-                      else setSelectedImageModel(e.target.value)
-                    }}
-                    className="px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    {(project.stage === 'videos' ? VIDEO_MODELS : IMAGE_MODELS).map(m => (
-                      <option key={m.id} value={m.id}>{m.label}</option>
-                    ))}
-                  </select>
-                )}
-
-                {/* Count selector */}
-                {canStartNewRound && (
-                  <select
-                    value={itemCount}
-                    onChange={(e) => setItemCount(Number(e.target.value))}
-                    className="px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                      <option key={n} value={n}>{n} {n === 1 ? 'variant' : 'variants'}</option>
-                    ))}
-                  </select>
-                )}
-
-                {canStartNewRound && (
-                  <button
-                    onClick={handleGenerateRound}
-                    disabled={generating}
-                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                    {currentRounds.length === 0 ? 'Start Round 1' : 'Generate Next Round'}
-                  </button>
-                )}
-
-                {/* Regenerate: rollback + generate with current model */}
-                {currentRounds.length > 0 && canStartNewRound && (
-                  <button
-                    onClick={async () => {
-                      if (!confirm('Regenerate current round? It will be deleted and re-generated with the selected model.')) return
-                      setRollingBack(true)
-                      setError(null)
-                      try {
-                        await discoverApi.rollback(projectId)
-                        await handleGenerateRound()
-                      } catch (err) {
-                        setError(getErrorMessage(err))
-                      } finally {
-                        setRollingBack(false)
-                      }
-                    }}
-                    disabled={rollingBack || generating}
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {rollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                    Regenerate
-                  </button>
-                )}
-
-                {/* Advance to next stage */}
-                {project.stage === 'images' && hasSelectedImages && !isGenerating && (
-                  <button
-                    onClick={handleAdvanceToVideo}
-                    disabled={advancing}
-                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                    Advance to Video
-                  </button>
-                )}
-
-                {project.stage === 'videos' && videoFinalistId && !isGenerating && (
-                  <button
-                    onClick={handleCreateTemplate}
-                    disabled={advancing}
-                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    {advancing ? 'Creating Template...' : 'Create Template'}
-                  </button>
-                )}
-
-                {/* Extraction/Completed stage actions */}
-                {(project.stage === 'extraction' || project.stage === 'completed') && (
-                  <>
+              <div className="flex items-center justify-between gap-3">
+                {/* LEFT: Back navigation */}
+                <div className="flex items-center gap-2">
+                  {/* Back to Refine (images stage) */}
+                  {project.stage === 'images' && currentRounds.length > 0 && canStartNewRound && (
                     <button
-                      onClick={handleCreateAnotherTemplate}
-                      disabled={creatingTemplate}
+                      onClick={async () => {
+                        if (!confirm('Go back to prompt refinement? All generated rounds will be deleted.')) return
+                        setRollingBack(true)
+                        setError(null)
+                        try {
+                          for (let i = 0; i < currentRounds.length; i++) {
+                            await discoverApi.rollback(projectId)
+                          }
+                          setPendingSelections({})
+                          setImageFinalistId(null)
+                          setFeedback('')
+                          await fetchProject()
+                        } catch (err) {
+                          setError(getErrorMessage(err))
+                        } finally {
+                          setRollingBack(false)
+                        }
+                      }}
+                      disabled={rollingBack || generating}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {rollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+                      Back to Refine
+                    </button>
+                  )}
+                </div>
+
+                {/* RIGHT: Actions */}
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {/* Selectors */}
+                  {canStartNewRound && (
+                    <select
+                      value={project.stage === 'videos' ? selectedVideoModel : selectedImageModel}
+                      onChange={(e) => {
+                        if (project.stage === 'videos') setSelectedVideoModel(e.target.value)
+                        else setSelectedImageModel(e.target.value)
+                      }}
+                      className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {(project.stage === 'videos' ? VIDEO_MODELS : IMAGE_MODELS).map(m => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  {canStartNewRound && (
+                    <select
+                      value={itemCount}
+                      onChange={(e) => setItemCount(Number(e.target.value))}
+                      className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                        <option key={n} value={n}>{n} {n === 1 ? 'variant' : 'variants'}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Regenerate (amber) */}
+                  {currentRounds.length > 0 && canStartNewRound && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Regenerate current round? It will be deleted and re-generated with the selected model.')) return
+                        setRollingBack(true)
+                        setError(null)
+                        try {
+                          await discoverApi.rollback(projectId)
+                          await handleGenerateRound()
+                        } catch (err) {
+                          setError(getErrorMessage(err))
+                        } finally {
+                          setRollingBack(false)
+                        }
+                      }}
+                      disabled={rollingBack || generating}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      {rollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                      Regenerate
+                    </button>
+                  )}
+
+                  {/* Generate (purple — primary action) */}
+                  {canStartNewRound && (
+                    <button
+                      onClick={handleGenerateRound}
+                      disabled={generating}
                       className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
                     >
-                      {creatingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      {project.stage === 'completed' ? 'Create Another Template' : 'Create Template'}
+                      {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      {currentRounds.length === 0 ? 'Start Round 1' : 'Next Round'}
                     </button>
-                    {project.created_project_id && (
+                  )}
+
+                  {/* Advance to Video (green — forward) */}
+                  {project.stage === 'images' && imageFinalistId && !isGenerating && (
+                    <button
+                      onClick={() => doAdvanceToVideo(imageFinalistId)}
+                      disabled={advancing}
+                      className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                      Advance to Video
+                    </button>
+                  )}
+
+                  {/* Create Template (green — forward) */}
+                  {project.stage === 'videos' && videoFinalistId && !isGenerating && (
+                    <button
+                      onClick={handleCreateTemplate}
+                      disabled={advancing}
+                      className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      {advancing ? 'Creating Template...' : 'Create Template'}
+                    </button>
+                  )}
+
+                  {/* Extraction/Completed */}
+                  {(project.stage === 'extraction' || project.stage === 'completed') && (
+                    <>
                       <button
-                        onClick={() => navigate(`/?project=${project.created_project_id}`)}
-                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                        onClick={handleCreateAnotherTemplate}
+                        disabled={creatingTemplate}
+                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
                       >
-                        Go to Template
-                        <ArrowRight className="h-4 w-4" />
+                        {creatingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        {project.stage === 'completed' ? 'Create Another Template' : 'Create Template'}
                       </button>
-                    )}
-                  </>
-                )}
+                      {project.created_project_id && (
+                        <button
+                          onClick={() => navigate(`/?project=${project.created_project_id}`)}
+                          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+                        >
+                          Go to Template
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-        </div>
-
-      {/* Finalist Picker Modal (images only) */}
-      {finalistCandidates && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Choose finalist image
-              </h3>
-              <button
-                onClick={() => setFinalistCandidates(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="px-6 pt-3 text-sm text-gray-500">
-              You selected {finalistCandidates.items.length} images. Pick the one to use as the basis for video generation.
-            </p>
-            <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[60vh]">
-              {finalistCandidates.items.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => doAdvanceToVideo(item.id)}
-                  disabled={advancing}
-                  className="group relative rounded-lg overflow-hidden border-2 border-transparent hover:border-purple-500 transition disabled:opacity-50"
-                >
-                  <img
-                    src={item.result_url || ''}
-                    alt={`Item ${item.position}`}
-                    className="w-full aspect-square object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
-                    <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition">
-                      Use this
-                    </span>
-                  </div>
-                  {advancing && (
-                    <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+        </div>}
 
     </div>
   )

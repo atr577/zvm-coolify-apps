@@ -111,7 +111,7 @@ export function RoundView({ projectId, round, isLatestRound, onRefresh, onSelect
         selections={selections}
         onSelectionChange={handleSelectionChange}
         finalistItemId={finalistItemId}
-        onCrownClick={round.round_type === 'video' ? onCrownClick : undefined}
+        onCrownClick={onCrownClick}
       />
 
       {/* Retry failed */}

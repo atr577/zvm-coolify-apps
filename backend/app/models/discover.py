@@ -136,6 +136,12 @@ class DiscoverProject(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    refinement = relationship(
+        "DiscoverRefinement",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     created_project = relationship("Project")
 
 
@@ -288,3 +294,47 @@ class DiscoverExtraction(Base):
 
     # Relationships
     project = relationship("DiscoverProject", back_populates="extraction")
+
+
+class DiscoverRefinement(Base):
+    """
+    Prompt refinement data for a Discover project.
+    Stores block-by-block analysis and the compiled refined prompt.
+    One refinement per project (unique on project_id).
+    """
+    __tablename__ = "discover_refinements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(
+        Integer,
+        ForeignKey("discover_projects.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    # Original concept (snapshot from project)
+    original_concept = Column(Text, nullable=False)
+
+    # LLM-determined relevant blocks
+    relevant_blocks = Column(JSON, nullable=False)  # ["subject", "action", ...]
+
+    # Block data (JSON dict: block_name → {value, status, source, question, options})
+    blocks = Column(JSON, nullable=False, default=dict)
+
+    # Compiled prompt (English, assembled from blocks by LLM)
+    refined_prompt = Column(Text, nullable=True)
+
+    # Current completeness score (0-100)
+    score = Column(Integer, nullable=False, default=0)
+
+    # LLM audit trail
+    analysis_prompt_used = Column(Text, nullable=True)
+    analysis_response = Column(JSON, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    project = relationship("DiscoverProject", back_populates="refinement")

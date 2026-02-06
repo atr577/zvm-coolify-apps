@@ -632,6 +632,28 @@ export interface DiscoverCreateTemplateRequest {
   video_template_prompt: string
 }
 
+// --- Refinement ---
+
+export type BlockStatus = 'auto_filled' | 'needs_input' | 'auto_generated' | 'confirmed'
+
+export interface DiscoverRefinementBlock {
+  value: string | null
+  status: BlockStatus
+  source: 'parsed' | 'llm' | 'user' | 'settings' | null
+  question?: string | null
+  options?: string[] | null
+}
+
+export interface DiscoverRefinement {
+  refinement_id: number
+  original_concept: string
+  score: number
+  relevant_blocks: string[]
+  blocks: Record<string, DiscoverRefinementBlock>
+  refined_prompt: string | null
+  ready_to_generate: boolean
+}
+
 // --- API Error Type ---
 
 export interface ApiError {
