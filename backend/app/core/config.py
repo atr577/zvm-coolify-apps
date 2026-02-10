@@ -6,6 +6,7 @@ from pydantic import field_validator
 class Settings(BaseSettings):
     # Application
     APP_NAME: str = "REGGY"
+    APP_BASE_URL: str = ""  # Public URL, e.g. https://reggy.expremiental.com
     DEBUG: bool = True
     SECRET_KEY: str
     MOCK_MODE: bool = False

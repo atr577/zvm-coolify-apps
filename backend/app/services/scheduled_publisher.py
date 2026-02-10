@@ -18,6 +18,7 @@ from app.models.publishing_config import PublishingConfig
 from app.models.approved_generation import ApprovedGeneration
 from app.models.template_generation import TemplateGeneration
 from app.models.user import SocialAccount
+from app.core.config import settings
 from app.services.social_service import social_publisher
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,24 @@ async def publish_approved_generation(
         db.commit()
         return
 
+    # Video must have merged audio
+    if not generation.video_with_audio_path:
+        logger.error(f"Item {item.id}: Video has no merged audio")
+        item.status = "failed"
+        item.last_error = "Video has no merged audio. Re-generate with audio enabled."
+        db.commit()
+        return
+
+    if not settings.APP_BASE_URL:
+        logger.error(f"Item {item.id}: APP_BASE_URL not configured")
+        item.status = "failed"
+        item.last_error = "APP_BASE_URL not configured. Set it in environment variables."
+        db.commit()
+        return
+
+    video_url = f"{settings.APP_BASE_URL}/api/files/{generation.video_with_audio_path}"
+    logger.info(f"Item {item.id}: Publishing video with audio: {video_url}")
+
     # Mark as publishing (prevents duplicate processing)
     item.status = "publishing"
     db.commit()
@@ -263,7 +282,7 @@ async def publish_approved_generation(
         try:
             result = await publish_to_platform(
                 platform=platform,
-                video_url=generation.video_url,
+                video_url=video_url,
                 metadata=platform_metadata,
                 social_account=social_account
             )
