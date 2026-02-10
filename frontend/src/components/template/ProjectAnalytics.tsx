@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import {
   Eye,
   TrendingUp,
@@ -14,6 +14,7 @@ import type {
   GenerationMetrics,
   GenerationPlatformMetrics,
 } from '@/types'
+import axios from 'axios'
 
 interface ProjectAnalyticsProps {
   projectId: number
@@ -39,6 +40,15 @@ function formatNumber(n: number): string {
 function formatRate(rate: number | null): string {
   if (rate === null) return '--'
   return `${rate.toFixed(1)}%`
+}
+
+function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -96,6 +106,29 @@ export function ProjectAnalytics({ projectId }: ProjectAnalyticsProps) {
   const [sortBy, setSortBy] = useState<SortField>('published_at')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
 
+  // Refresh state (T44)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null)
+  const [cooldownUntil, setCooldownUntil] = useState<Date | null>(null)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [, setTick] = useState(0) // force re-render for cooldown countdown
+
+  const cooldownActive = cooldownUntil ? cooldownUntil > new Date() : false
+
+  // Cooldown countdown timer
+  useEffect(() => {
+    if (cooldownActive) {
+      cooldownTimer.current = setInterval(() => setTick((t) => t + 1), 10_000)
+    } else if (cooldownTimer.current) {
+      clearInterval(cooldownTimer.current)
+      cooldownTimer.current = null
+    }
+    return () => {
+      if (cooldownTimer.current) clearInterval(cooldownTimer.current)
+    }
+  }, [cooldownActive])
+
   const fetchData = useCallback(async () => {
     try {
       setError(null)
@@ -117,6 +150,34 @@ export function ProjectAnalytics({ projectId }: ProjectAnalyticsProps) {
     fetchData()
   }, [fetchData])
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    setRefreshError(null)
+    try {
+      const { data: result } = await metricsApi.refreshProjectMetrics(projectId)
+      setLastRefreshedAt(new Date())
+      if (result.cooldown_until) {
+        setCooldownUntil(new Date(result.cooldown_until))
+      }
+      // Re-fetch table data with fresh metrics
+      await fetchData()
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 429) {
+        const detail = err.response.data?.detail
+        if (detail?.cooldown_until) {
+          setCooldownUntil(new Date(detail.cooldown_until))
+        }
+        setRefreshError('Cooldown active')
+      } else if (axios.isAxiosError(err) && err.response?.status === 400) {
+        setRefreshError(err.response.data?.detail || 'Too many videos')
+      } else {
+        setRefreshError('Failed to refresh')
+      }
+    } finally {
+      setRefreshing(false)
+    }
+  }, [projectId, fetchData])
+
   const toggleRow = (id: number) => {
     setExpandedRows((prev) => {
       const next = new Set(prev)
@@ -129,6 +190,11 @@ export function ProjectAnalytics({ projectId }: ProjectAnalyticsProps) {
   const handleSort = (field: SortField) => {
     setSortBy(field)
   }
+
+  // Cooldown tooltip text
+  const cooldownTooltip = cooldownActive && cooldownUntil
+    ? `Available in ${Math.max(1, Math.ceil((cooldownUntil.getTime() - Date.now()) / 60_000))} min`
+    : 'Refresh from YouTube'
 
   // Loading state
   if (loading && !data) {
@@ -193,14 +259,26 @@ export function ProjectAnalytics({ projectId }: ProjectAnalyticsProps) {
   return (
     <div className="bg-white rounded-lg border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium text-gray-900">Analytics</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="text-lg font-medium text-gray-900">Analytics</h3>
+          {lastRefreshedAt && (
+            <span className="text-xs text-gray-400">Updated {timeAgo(lastRefreshedAt)}</span>
+          )}
+          {refreshError && (
+            <span className="text-xs text-red-400">{refreshError}</span>
+          )}
+        </div>
         <button
-          onClick={fetchData}
-          disabled={loading}
-          className="p-1.5 text-gray-400 hover:text-gray-600 transition"
-          title="Refresh"
+          onClick={handleRefresh}
+          disabled={refreshing || cooldownActive}
+          className={`p-1.5 transition ${
+            cooldownActive
+              ? 'text-gray-300 cursor-not-allowed'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+          title={cooldownTooltip}
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
 

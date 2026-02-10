@@ -261,6 +261,17 @@ export const metricsApi = {
   // Get project-level generation metrics (T42)
   getProjectMetrics: (projectId: number, params?: { period?: string; sort_by?: string }) =>
     api.get<ProjectMetricsResponse>(`/api/metrics/project/${projectId}/generations`, { params }),
+
+  // Refresh metrics from platform APIs (T44)
+  refreshProjectMetrics: (projectId: number) =>
+    api.post<{
+      status: string
+      project_id: number
+      refreshed_count: number
+      skipped_count: number
+      errors: string[]
+      cooldown_until: string | null
+    }>(`/api/metrics/project/${projectId}/refresh`),
 }
 
 // Template Project API

@@ -26,6 +26,7 @@ from app.schemas.video import (
     ProjectMetricsResponse,
 )
 from app.services.metrics_fetcher import metrics_fetcher
+from app.services.scheduled_publisher import get_project_social_account
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +153,8 @@ async def get_video_metrics_summary(
     engagement_rates = []
 
     for platform_data in platforms.values():
-        # Prefer 7d, then 24h, then 6h, then 30m
-        for period in ["7d", "24h", "6h", "30m"]:
+        # Use priority: latest first, then 7d, 24h, 6h, 30m
+        for period in _PERIOD_PRIORITY:
             if period in platform_data:
                 m = platform_data[period]
                 total_views += m.views
@@ -499,7 +500,7 @@ def _save_rate(views: int, saves: int) -> Optional[float]:
 
 
 # Period priority for "latest available"
-_PERIOD_PRIORITY = ["7d", "24h", "6h", "30m"]
+_PERIOD_PRIORITY = ["latest", "7d", "24h", "6h", "30m"]
 
 
 @router.get("/project/{project_id}/generations", response_model=ProjectMetricsResponse)
@@ -710,4 +711,185 @@ async def fetch_all_published_metrics(
     return {
         "status": "fetching",
         "total_tasks_scheduled": total_scheduled
+    }
+
+
+# --- On-demand refresh (T44) ---
+
+REFRESH_COOLDOWN_MINUTES = 5
+REFRESH_MAX_GENERATIONS = 25
+
+
+@router.post("/project/{project_id}/refresh")
+async def refresh_project_metrics(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Fetch fresh metrics from platform APIs for all published generations in a project.
+    Stores results as period=LATEST (upserts existing latest snapshots).
+    Cooldown: 5 minutes per project.
+    """
+    # Verify project access
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+    if project.workspace_id not in workspace_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get all published generations with post_ids
+    published_items = db.query(ApprovedGeneration).filter(
+        ApprovedGeneration.project_id == project_id,
+        ApprovedGeneration.status.in_(["published", "partially_published"])
+    ).all()
+
+    if not published_items:
+        return {
+            "status": "completed",
+            "project_id": project_id,
+            "refreshed_count": 0,
+            "skipped_count": 0,
+            "errors": [],
+            "cooldown_until": None,
+        }
+
+    # Guard: too many generations
+    if len(published_items) > REFRESH_MAX_GENERATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many published videos ({len(published_items)}). Refresh is limited to projects with {REFRESH_MAX_GENERATIONS} or fewer."
+        )
+
+    # Cooldown check: look for latest recent snapshot for any generation in this project
+    gen_ids = [item.id for item in published_items]
+    last_refresh = db.query(VideoMetrics.recorded_at).filter(
+        VideoMetrics.approved_generation_id.in_(gen_ids),
+        VideoMetrics.period == MetricsPeriod.LATEST,
+    ).order_by(VideoMetrics.recorded_at.desc()).first()
+
+    if last_refresh and (datetime.utcnow() - last_refresh[0]) < timedelta(minutes=REFRESH_COOLDOWN_MINUTES):
+        cooldown_until = last_refresh[0] + timedelta(minutes=REFRESH_COOLDOWN_MINUTES)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Refresh on cooldown",
+                "cooldown_until": cooldown_until.isoformat() + "Z",
+            }
+        )
+
+    # Commit a cooldown marker BEFORE fetching (prevents race with concurrent requests)
+    cooldown_until = datetime.utcnow() + timedelta(minutes=REFRESH_COOLDOWN_MINUTES)
+
+    # Find first eligible generation+platform to write marker row
+    marker_written = False
+    for item in published_items:
+        for platform in (item.post_ids or {}):
+            existing_marker = db.query(VideoMetrics).filter(
+                VideoMetrics.approved_generation_id == item.id,
+                VideoMetrics.platform == platform,
+                VideoMetrics.period == MetricsPeriod.LATEST,
+            ).first()
+            if existing_marker:
+                existing_marker.recorded_at = datetime.utcnow()
+            else:
+                db.add(VideoMetrics(
+                    approved_generation_id=item.id,
+                    platform=platform,
+                    period=MetricsPeriod.LATEST,
+                    views=0, likes=0, comments=0, shares=0, saves=0, reach=0,
+                    is_manual=False,
+                ))
+            db.commit()
+            marker_written = True
+            break
+        if marker_written:
+            break
+
+    refreshed_count = 0
+    skipped_count = 0
+    errors = []
+
+    for item in published_items:
+        post_ids = item.post_ids or {}
+        if not post_ids:
+            skipped_count += 1
+            continue
+
+        for platform, post_id in post_ids.items():
+            # Get project-linked social account (not global)
+            social_account = get_project_social_account(db, project, platform)
+            if not social_account:
+                errors.append(f"No active account for {platform}")
+                continue
+
+            try:
+                metrics_data = await metrics_fetcher.fetch(
+                    platform=platform,
+                    post_id=post_id,
+                    access_token=social_account.access_token,
+                    refresh_token=social_account.refresh_token,
+                )
+
+                if not metrics_data:
+                    skipped_count += 1
+                    continue
+
+                views = metrics_data.get("views", 0)
+                likes = metrics_data.get("likes", 0)
+                comments = metrics_data.get("comments", 0)
+                shares = metrics_data.get("shares", 0)
+                saves = metrics_data.get("saves", 0)
+                reach = metrics_data.get("reach", 0)
+
+                engagement_rate = calculate_engagement_rate(views, likes, comments, shares, saves)
+
+                # Upsert: find existing LATEST for this generation+platform
+                existing = db.query(VideoMetrics).filter(
+                    VideoMetrics.approved_generation_id == item.id,
+                    VideoMetrics.platform == platform,
+                    VideoMetrics.period == MetricsPeriod.LATEST,
+                ).first()
+
+                if existing:
+                    existing.views = views
+                    existing.likes = likes
+                    existing.comments = comments
+                    existing.shares = shares
+                    existing.saves = saves
+                    existing.reach = reach
+                    existing.engagement_rate = engagement_rate
+                    existing.recorded_at = datetime.utcnow()
+                    existing.is_manual = False
+                else:
+                    db.add(VideoMetrics(
+                        approved_generation_id=item.id,
+                        platform=platform,
+                        period=MetricsPeriod.LATEST,
+                        views=views,
+                        likes=likes,
+                        comments=comments,
+                        shares=shares,
+                        saves=saves,
+                        reach=reach,
+                        engagement_rate=engagement_rate,
+                        is_manual=False,
+                    ))
+
+                db.commit()
+                refreshed_count += 1
+
+            except Exception as e:
+                logger.error(f"Failed to fetch metrics for gen {item.id} on {platform}: {e}")
+                errors.append(f"gen {item.id}/{platform}: {str(e)[:100]}")
+
+    return {
+        "status": "completed",
+        "project_id": project_id,
+        "refreshed_count": refreshed_count,
+        "skipped_count": skipped_count,
+        "errors": errors,
+        "cooldown_until": cooldown_until.isoformat() + "Z",
     }

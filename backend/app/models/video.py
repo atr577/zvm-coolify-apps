@@ -144,6 +144,7 @@ class MetricsPeriod(str, enum.Enum):
     HOURS_6 = "6h"
     HOURS_24 = "24h"
     DAYS_7 = "7d"
+    LATEST = "latest"  # On-demand refresh snapshot
 
 
 class VideoMetrics(Base):
