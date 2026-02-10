@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import HomePage from './pages/HomePage'
 import Dashboard from './pages/Dashboard'
 import ProjectEdit from './pages/ProjectEdit'
 import CreateVideo from './pages/CreateVideo'
@@ -15,6 +16,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route
@@ -23,7 +25,7 @@ function App() {
           <ProtectedRoute>
             <Layout>
               <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/project/:id/edit" element={<ProjectEdit />} />
                 <Route path="/project/:projectId/create-video" element={<CreateVideo />} />
                 <Route path="/video/:id" element={<VideoDetail />} />

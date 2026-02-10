@@ -237,7 +237,7 @@ export default function DiscoverPage() {
       <div className="text-center py-16">
         <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Project not found</h3>
-        <button onClick={() => navigate('/')} className="text-purple-600 hover:text-purple-800">
+        <button onClick={() => navigate('/dashboard')} className="text-purple-600 hover:text-purple-800">
           Back to Dashboard
         </button>
       </div>
@@ -269,7 +269,7 @@ export default function DiscoverPage() {
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="text-gray-400 hover:text-gray-600"
         >
           <ArrowLeft className="h-5 w-5" />

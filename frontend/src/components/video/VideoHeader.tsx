@@ -29,9 +29,9 @@ export default function VideoHeader({
   const handleBack = () => {
     // Navigate back to project if we came from one
     if (projectId) {
-      navigate(`/?project=${projectId}`)
+      navigate(`/dashboard?project=${projectId}`)
     } else {
-      navigate('/')
+      navigate('/dashboard')
     }
   }
 

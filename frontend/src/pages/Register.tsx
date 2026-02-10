@@ -73,7 +73,7 @@ export default function Register() {
 
     try {
       await register(email, password, fullName || undefined, inviteToken)
-      navigate('/')
+      navigate('/dashboard')
     } catch (err: unknown) {
       setError(getErrorMessage(err))
     } finally {
