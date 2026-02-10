@@ -16,7 +16,6 @@ import type { BatchGenerateResponse } from '@/types'
 interface TemplateProjectViewProps {
   projectId: number
   projectName: string
-  projectTimezone?: string
 }
 
 type ScreenType = 'dashboard' | 'generate' | 'review' | 'details'

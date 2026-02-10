@@ -71,12 +71,21 @@ class ProjectUpdate(BaseModel):
     project_type: Optional[ProjectType] = None
     require_image_approval: Optional[bool] = None
     system_prompts: Optional[Dict[str, str]] = None
+    timezone: Optional[str] = None
 
     # Remix-specific fields
     source_video_ids: Optional[List[int]] = None
     scenario_template: Optional[Dict[str, str]] = None  # Legacy
     placeholders: Optional[List[str]] = None
     placeholder_suggestions: Optional[Dict[str, List[str]]] = None
+
+    @model_validator(mode="after")
+    def validate_timezone(self):
+        if self.timezone:
+            import pytz
+            if self.timezone not in pytz.all_timezones:
+                raise ValueError(f"Invalid timezone: {self.timezone}")
+        return self
 
 
 class ProjectResponse(ProjectBase):

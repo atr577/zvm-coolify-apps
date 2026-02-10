@@ -1,6 +1,33 @@
 import { ExternalLink } from 'lucide-react'
 import type { SocialAccount } from '@/types'
 
+const COMMON_TIMEZONES = [
+  { value: 'UTC', label: 'UTC' },
+  { value: 'America/New_York', label: 'America/New_York (UTC-5)' },
+  { value: 'America/Chicago', label: 'America/Chicago (UTC-6)' },
+  { value: 'America/Denver', label: 'America/Denver (UTC-7)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (UTC-8)' },
+  { value: 'America/Toronto', label: 'America/Toronto (UTC-5)' },
+  { value: 'America/Mexico_City', label: 'America/Mexico_City (UTC-6)' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo (UTC-3)' },
+  { value: 'Europe/London', label: 'Europe/London (UTC+0)' },
+  { value: 'Europe/Paris', label: 'Europe/Paris (UTC+1)' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin (UTC+1)' },
+  { value: 'Europe/Moscow', label: 'Europe/Moscow (UTC+3)' },
+  { value: 'Europe/Istanbul', label: 'Europe/Istanbul (UTC+3)' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai (UTC+4)' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (UTC+5:30)' },
+  { value: 'Asia/Bangkok', label: 'Asia/Bangkok (UTC+7)' },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai (UTC+8)' },
+  { value: 'Asia/Hong_Kong', label: 'Asia/Hong_Kong (UTC+8)' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (UTC+9)' },
+  { value: 'Asia/Seoul', label: 'Asia/Seoul (UTC+9)' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore (UTC+8)' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney (UTC+11)' },
+  { value: 'Pacific/Auckland', label: 'Pacific/Auckland (UTC+13)' },
+  { value: 'Africa/Cairo', label: 'Africa/Cairo (UTC+2)' },
+]
+
 interface DistributionStepProps {
   projectId: number
   workspaceId: number | null
@@ -21,6 +48,7 @@ interface DistributionStepProps {
     depth_days: number
   }>) => void
   timezone: string
+  onTimezoneChange: (tz: string) => void
 }
 
 const DAYS = [
@@ -41,6 +69,7 @@ export function DistributionStep({
   publishingConfig,
   onPublishingChange,
   timezone,
+  onTimezoneChange,
 }: DistributionStepProps) {
   const { days, preferred_times: preferredTimes, depth_days: depthDays, is_paused: isPaused } = publishingConfig
 
@@ -199,9 +228,19 @@ export function DistributionStep({
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Timezone: {timezone} · Up to 4 times per day
-          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <label className="text-xs text-gray-500 shrink-0">Timezone:</label>
+            <select
+              value={timezone}
+              onChange={(e) => onTimezoneChange(e.target.value)}
+              className="text-xs px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {COMMON_TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+            <span className="text-xs text-gray-400">· Up to 4 times per day</span>
+          </div>
         </div>
 
         {/* Depth */}

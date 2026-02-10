@@ -74,7 +74,6 @@ export default function Dashboard() {
         <TemplateProjectView
           projectId={selectedProjectId!}
           projectName={selectedProject.name}
-          projectTimezone={selectedProject.timezone || 'UTC'}
         />
       ) : (
       <div className="flex-1 flex flex-col overflow-hidden">

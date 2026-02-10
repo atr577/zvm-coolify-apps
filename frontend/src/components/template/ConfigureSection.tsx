@@ -86,6 +86,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
   const [workspaceAccounts, setWorkspaceAccounts] = useState<SocialAccount[]>([])
   const [workspaceId, setWorkspaceId] = useState<number | null>(null)
   const [timezone, setTimezone] = useState('UTC')
+  const [initialTimezone, setInitialTimezone] = useState('UTC')
   const [bindingLoading, setBindingLoading] = useState<string | null>(null)
 
   // Project info (for Details tab)
@@ -129,7 +130,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       const project = projectRes.data
       setBoundAccounts(project.social_accounts || [])
       setWorkspaceId(project.workspace_id)
-      setTimezone(project.timezone || 'UTC')
+      const tz = project.timezone || 'UTC'
+      setTimezone(tz)
+      setInitialTimezone(tz)
 
       // Project info for Details tab
       const projInfo: EditableProjectInfo = {
@@ -198,8 +201,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
     const projectDirty = showProjectSettings &&
       initialProjectInfo && editedProjectInfo &&
       JSON.stringify(initialProjectInfo) !== JSON.stringify(editedProjectInfo)
-    return settingsDirty || publishingDirty || !!projectDirty
-  }, [initialSettings, editedSettings, initialPublishing, editedPublishing, initialProjectInfo, editedProjectInfo, showProjectSettings])
+    const timezoneDirty = timezone !== initialTimezone
+    return settingsDirty || publishingDirty || !!projectDirty || timezoneDirty
+  }, [initialSettings, editedSettings, initialPublishing, editedPublishing, initialProjectInfo, editedProjectInfo, showProjectSettings, timezone, initialTimezone])
 
   // Save
   const handleSave = async () => {
@@ -253,6 +257,13 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       )
     }
 
+    // Timezone dirty?
+    if (timezone !== initialTimezone) {
+      promises.push(
+        projectsApi.update(projectId, { timezone })
+      )
+    }
+
     await Promise.all(promises)
 
     // Re-fetch settings to get auto-generated variant_generation_prompt
@@ -280,6 +291,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
     }
 
     setInitialPublishing({ ...editedPublishing })
+    setInitialTimezone(timezone)
     if (editedProjectInfo) setInitialProjectInfo({ ...editedProjectInfo })
   }
 
@@ -288,6 +300,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
     if (initialSettings) setEditedSettings({ ...initialSettings })
     if (initialPublishing) setEditedPublishing({ ...initialPublishing })
     if (initialProjectInfo) setEditedProjectInfo({ ...initialProjectInfo })
+    setTimezone(initialTimezone)
   }
 
   // Settings field update
@@ -660,6 +673,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
                 publishingConfig={editedPublishing}
                 onPublishingChange={updatePublishing}
                 timezone={timezone}
+                onTimezoneChange={setTimezone}
               />
             </AccordionStep>
           </div>
