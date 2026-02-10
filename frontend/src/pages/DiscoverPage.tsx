@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Loader2, ArrowLeft, ArrowRight, Play, RotateCcw, Image, Video, Wand2,
-  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Trophy, Plus,
+  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Trophy, Plus, Music, Volume2,
 } from 'lucide-react'
 import { discoverApi } from '@/services/api'
 import type { DiscoverProject } from '@/types'
@@ -567,6 +567,84 @@ export default function DiscoverPage() {
               </div>
             )
           })}
+
+          {/* Audio section (extraction/completed — read-only, like a round) */}
+          {(project.stage === 'extraction' || project.stage === 'completed') && (() => {
+            const selectedAudio = project.selected_audio_variant_id
+              ? (project.audio_variants || []).find(v => v.id === project.selected_audio_variant_id)
+              : null
+            if (!selectedAudio) return null
+            const isAudioCollapsed = collapsedRounds.has(-1) // use -1 as synthetic ID for audio
+            const formatMs = (ms: number) => {
+              const s = Math.floor(ms / 1000)
+              const m = Math.floor(s / 60)
+              return `${m}:${String(s % 60).padStart(2, '0')}`
+            }
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => toggleRoundCollapse(-1)}
+                  className="w-full flex items-center justify-between px-6 py-3 bg-gray-50 hover:bg-gray-100 transition"
+                >
+                  <span className="text-sm font-medium text-gray-700">
+                    Audio — {selectedAudio.audio_type === 'sfx' ? 'Sound FX' : 'Music'} (selected)
+                  </span>
+                  {isAudioCollapsed ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronUp className="h-4 w-4 text-gray-400" />}
+                </button>
+
+                {!isAudioCollapsed && (
+                  <div className="p-6 space-y-4">
+                    {/* Prompt */}
+                    {selectedAudio.prompt && (
+                      <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                        <div className="flex items-start gap-2">
+                          <Music className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-sm text-purple-700">{selectedAudio.prompt}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hook player */}
+                    {selectedAudio.trimmed_file_url && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Volume2 className="h-4 w-4 text-gray-500" />
+                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Hook</span>
+                          {selectedAudio.hook_start_ms != null && selectedAudio.hook_end_ms != null && (
+                            <span className="text-xs text-gray-400">
+                              {formatMs(selectedAudio.hook_start_ms)} – {formatMs(selectedAudio.hook_end_ms)}
+                            </span>
+                          )}
+                          {selectedAudio.duration_ms != null && (
+                            <span className="text-xs text-gray-400">
+                              · {(selectedAudio.duration_ms / 1000).toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+                        <audio src={selectedAudio.trimmed_file_url} controls preload="metadata" className="w-full h-10" />
+                      </div>
+                    )}
+
+                    {/* Full track player */}
+                    {selectedAudio.file_url && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Music className="h-4 w-4 text-gray-500" />
+                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Full Track</span>
+                          {selectedAudio.full_duration_ms != null && (
+                            <span className="text-xs text-gray-400">
+                              · {(selectedAudio.full_duration_ms / 1000).toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+                        <audio src={selectedAudio.file_url} controls preload="metadata" className="w-full h-10" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Action bar — sticky at bottom */}
           <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 -mx-6 px-6 py-4 space-y-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">

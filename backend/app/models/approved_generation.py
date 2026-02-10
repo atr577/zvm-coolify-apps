@@ -50,6 +50,9 @@ class ApprovedGeneration(Base):
     retry_count = Column(Integer, nullable=False, default=0)
     last_error = Column(Text, nullable=True)
 
+    # Scheduled slot that triggered this publish (e.g. 2026-02-10 18:00 UTC)
+    scheduled_for = Column(DateTime, nullable=True)
+
     # When published (at least one platform succeeded)
     published_at = Column(DateTime, nullable=True)
 

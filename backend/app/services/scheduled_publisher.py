@@ -137,9 +137,19 @@ async def scheduled_publish_job():
             if not project or project.project_type != "template":
                 continue
 
-            # Check if we should publish now
-            should_publish = check_should_publish_now(config, project.timezone)
-            if not should_publish:
+            # Check if we should publish now (returns slot UTC datetime or None)
+            slot_utc = check_should_publish_now(config, project.timezone)
+            if not slot_utc:
+                continue
+
+            # Guard: skip if this slot already handled
+            already_handled = db.query(ApprovedGeneration).filter(
+                ApprovedGeneration.project_id == project.id,
+                ApprovedGeneration.scheduled_for == slot_utc,
+            ).first()
+
+            if already_handled:
+                logger.info(f"Project {project.id}: Slot {slot_utc} already handled, skipping")
                 continue
 
             # Get next item to publish
@@ -154,6 +164,10 @@ async def scheduled_publish_job():
                 logger.info(f"Project {project.id}: No approved items to publish")
                 continue
 
+            # Stamp slot before publishing (prevents duplicates across job runs)
+            item.scheduled_for = slot_utc
+            db.commit()
+
             # Publish
             await publish_approved_generation(db, project, item)
 
@@ -164,16 +178,18 @@ async def scheduled_publish_job():
         db.close()
 
 
-def check_should_publish_now(config: PublishingConfig, timezone: str) -> bool:
+def check_should_publish_now(config: PublishingConfig, timezone: str) -> Optional[datetime]:
     """
     Check if current time matches a publishing slot.
 
-    Returns True if:
+    Returns the matched slot as UTC datetime if:
     - Current day is in config.days
     - Current time is within 5 minutes of any preferred_time
+
+    Returns None if no slot matches.
     """
     if not config.days:
-        return False
+        return None
 
     DAY_MAP = {
         0: 'mon', 1: 'tue', 2: 'wed', 3: 'thu', 4: 'fri', 5: 'sat', 6: 'sun'
@@ -189,7 +205,7 @@ def check_should_publish_now(config: PublishingConfig, timezone: str) -> bool:
 
     # Check if today is a publishing day
     if current_day not in [d.lower() for d in config.days]:
-        return False
+        return None
 
     # Check each preferred time
     preferred_times = config.preferred_times or ["18:00"]
@@ -205,9 +221,11 @@ def check_should_publish_now(config: PublishingConfig, timezone: str) -> bool:
 
         # Within 5 minute window (job runs every 5 mins, so we catch it once)
         if time_diff < 300:  # 5 minutes
-            return True
+            # Return slot as UTC datetime for storage
+            slot_utc = preferred_time.astimezone(pytz.UTC).replace(tzinfo=None)
+            return slot_utc
 
-    return False
+    return None
 
 
 async def publish_approved_generation(
