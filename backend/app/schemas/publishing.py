@@ -186,5 +186,6 @@ class PipelineStatsResponse(BaseModel):
     approved_count: int = 0
     scheduled_count: int = 0
     total_schedule_slots: int = 0
+    published_count: int = 0
     variants_count: int = 0
     templates_count: int = 0

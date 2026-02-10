@@ -468,6 +468,12 @@ async def get_pipeline_stats(
     total_schedule_slots = len(slots)
     scheduled_count = min(approved_count, total_schedule_slots)
 
+    # Published count
+    published_count = db.query(func.count(ApprovedGeneration.id)).filter(
+        ApprovedGeneration.project_id == project_id,
+        ApprovedGeneration.status.in_(["published", "partially_published"])
+    ).scalar()
+
     # Variants count
     variants_count = db.query(func.count(Variant.id)).filter(
         Variant.project_id == project_id
@@ -485,6 +491,7 @@ async def get_pipeline_stats(
         approved_count=approved_count,
         scheduled_count=scheduled_count,
         total_schedule_slots=total_schedule_slots,
+        published_count=published_count,
         variants_count=variants_count,
         templates_count=templates_count
     )

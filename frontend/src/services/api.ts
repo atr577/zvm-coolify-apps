@@ -513,6 +513,7 @@ export interface PipelineStats {
   approved_count: number
   scheduled_count: number
   total_schedule_slots: number
+  published_count: number
   variants_count: number
   templates_count: number
 }

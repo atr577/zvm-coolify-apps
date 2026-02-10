@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, PlayCircle, Eye, CheckCircle, Calendar } from 'lucide-react'
+import { Loader2, PlayCircle, Eye, CheckCircle, Calendar, Send } from 'lucide-react'
 import { publishingScheduleApi, type PipelineStats } from '@/services/api'
 
 interface PipelineFunnelProps {
@@ -67,12 +67,19 @@ export function PipelineFunnel({ projectId, onNavigate }: PipelineFunnelProps) {
       onClick: () => onNavigate('calendar'),
       highlight: stats.total_schedule_slots > 0 && stats.scheduled_count < stats.total_schedule_slots,
     },
+    {
+      label: 'Published',
+      count: stats.published_count,
+      icon: Send,
+      onClick: () => onNavigate('queue'),
+      highlight: false,
+    },
   ]
 
   return (
     <div className="bg-white rounded-lg border p-6">
       <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline Status</h3>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         {counters.map((c) => (
           <button
             key={c.label}
