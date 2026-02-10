@@ -17,8 +17,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add 'latest' value to metricsperiod enum in PostgreSQL
-    op.execute("ALTER TYPE metricsperiod ADD VALUE IF NOT EXISTS 'latest'")
+    # Add 'LATEST' to metricsperiod enum in PostgreSQL
+    # Note: SQLAlchemy stores Python enum .name (uppercase), not .value
+    op.execute("ALTER TYPE metricsperiod ADD VALUE IF NOT EXISTS 'LATEST'")
 
 
 def downgrade() -> None:
