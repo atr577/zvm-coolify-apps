@@ -59,13 +59,17 @@ class VideoMetricsUpdate(BaseModel):
 
 class VideoMetricsResponse(BaseModel):
     id: int
-    video_id: int
+    video_id: Optional[int] = None
+    approved_generation_id: Optional[int] = None
     platform: str
     period: str
     views: int
     likes: int
     comments: int
     shares: int
+    saves: int = 0
+    reach: int = 0
+    avg_watch_time_ms: Optional[int] = None
     engagement_rate: Optional[float] = None  # percentage (e.g., 5.5 = 5.5%)
     recorded_at: datetime
     is_manual: bool
@@ -133,3 +137,45 @@ class VideoResponse(BaseModel):
     metrics: List[VideoMetricsResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Project-level analytics schemas (T42) ---
+
+class GenerationPlatformMetrics(BaseModel):
+    """Metrics for a single platform of a published generation"""
+    post_id: Optional[str] = None
+    post_url: Optional[str] = None
+    period: str
+    views: int = 0
+    likes: int = 0
+    comments: int = 0
+    shares: int = 0
+    saves: int = 0
+    reach: int = 0
+    engagement_rate: Optional[float] = None
+    virality_rate: Optional[float] = None
+    save_rate: Optional[float] = None
+
+
+class GenerationMetrics(BaseModel):
+    """Metrics for a single published generation across all platforms"""
+    approved_generation_id: int
+    template_generation_id: int
+    thumbnail_url: Optional[str] = None
+    published_at: Optional[datetime] = None
+    platforms: Dict[str, GenerationPlatformMetrics] = {}
+    metrics_status: Literal["complete", "pending", "not_collected", "no_post_id"]
+
+
+class ProjectMetricsTotals(BaseModel):
+    """Aggregated totals across all generations in a project"""
+    total_published: int = 0
+    total_views: int = 0
+    avg_engagement_rate: Optional[float] = None
+    avg_virality_rate: Optional[float] = None
+
+
+class ProjectMetricsResponse(BaseModel):
+    """Full response for project-level analytics"""
+    generations: List[GenerationMetrics] = []
+    totals: ProjectMetricsTotals = ProjectMetricsTotals()

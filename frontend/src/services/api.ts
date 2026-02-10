@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement, DiscoverAudioVariant, AudioLibrarySearchResponse } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, ProjectMetricsResponse, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement, DiscoverAudioVariant, AudioLibrarySearchResponse } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -257,6 +257,10 @@ export const metricsApi = {
     api.get<VideoMetricsSummary[]>('/api/metrics/leaderboard', {
       params: { period, sort_by: sortBy, limit }
     }),
+
+  // Get project-level generation metrics (T42)
+  getProjectMetrics: (projectId: number, params?: { period?: string; sort_by?: string }) =>
+    api.get<ProjectMetricsResponse>(`/api/metrics/project/${projectId}/generations`, { params }),
 }
 
 // Template Project API

@@ -215,13 +215,17 @@ export type MetricsPeriod = '30m' | '6h' | '24h' | '7d'
 
 export interface VideoMetrics {
   id: number
-  video_id: number
+  video_id: number | null
+  approved_generation_id: number | null
   platform: string
   period: MetricsPeriod
   views: number
   likes: number
   comments: number
   shares: number
+  saves: number
+  reach: number
+  avg_watch_time_ms: number | null
   engagement_rate: number | null
   recorded_at: string
   is_manual: boolean
@@ -245,6 +249,46 @@ export interface VideoMetricsSummary {
   total_comments: number
   total_shares: number
   avg_engagement_rate: number | null
+}
+
+// --- Project Analytics Types (T42) ---
+
+export type MetricsStatus = 'complete' | 'pending' | 'not_collected' | 'no_post_id'
+
+export interface GenerationPlatformMetrics {
+  post_id: string | null
+  post_url: string | null
+  period: string
+  views: number
+  likes: number
+  comments: number
+  shares: number
+  saves: number
+  reach: number
+  engagement_rate: number | null
+  virality_rate: number | null
+  save_rate: number | null
+}
+
+export interface GenerationMetrics {
+  approved_generation_id: number
+  template_generation_id: number
+  thumbnail_url: string | null
+  published_at: string | null
+  platforms: Record<string, GenerationPlatformMetrics>
+  metrics_status: MetricsStatus
+}
+
+export interface ProjectMetricsTotals {
+  total_published: number
+  total_views: number
+  avg_engagement_rate: number | null
+  avg_virality_rate: number | null
+}
+
+export interface ProjectMetricsResponse {
+  generations: GenerationMetrics[]
+  totals: ProjectMetricsTotals
 }
 
 // --- Invite & Workspace Types ---

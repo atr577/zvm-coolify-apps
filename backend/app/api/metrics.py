@@ -3,7 +3,7 @@ Video Metrics API - Track performance of published videos
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
@@ -12,13 +12,18 @@ from app.db.base import get_db
 from app.core.deps import get_current_user
 from app.models.video import Video, VideoMetrics, MetricsPeriod
 from app.models.project import PublishResult, Project
+from app.models.approved_generation import ApprovedGeneration
 from app.models.user import User, SocialAccount, WorkspaceMember
 from app.api.workflow_helpers import verify_video_ownership, get_user_workspace_ids
 from app.schemas.video import (
     VideoMetricsCreate,
     VideoMetricsUpdate,
     VideoMetricsResponse,
-    VideoMetricsSummary
+    VideoMetricsSummary,
+    GenerationPlatformMetrics,
+    GenerationMetrics,
+    ProjectMetricsTotals,
+    ProjectMetricsResponse,
 )
 from app.services.metrics_fetcher import metrics_fetcher
 
@@ -27,11 +32,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
-def calculate_engagement_rate(views: int, likes: int, comments: int, shares: int) -> Optional[float]:
+def calculate_engagement_rate(views: int, likes: int, comments: int, shares: int, saves: int = 0) -> Optional[float]:
     """Calculate engagement rate as percentage (e.g., 5.5 = 5.5%)"""
     if views == 0:
         return None
-    rate = ((likes + comments + shares) / views) * 100
+    rate = ((likes + comments + shares + saves) / views) * 100
     return round(rate, 2)
 
 
@@ -211,7 +216,7 @@ async def update_metrics(
 
     # Recalculate engagement rate
     db_metrics.engagement_rate = calculate_engagement_rate(
-        db_metrics.views, db_metrics.likes, db_metrics.comments, db_metrics.shares
+        db_metrics.views, db_metrics.likes, db_metrics.comments, db_metrics.shares, db_metrics.saves or 0
     )
     db_metrics.recorded_at = datetime.utcnow()
 
@@ -374,8 +379,10 @@ async def fetch_and_store_metrics(
         likes = metrics_data.get("likes", 0)
         comments = metrics_data.get("comments", 0)
         shares = metrics_data.get("shares", 0)
+        saves = metrics_data.get("saves", 0)
+        reach = metrics_data.get("reach", 0)
 
-        engagement_rate = calculate_engagement_rate(views, likes, comments, shares)
+        engagement_rate = calculate_engagement_rate(views, likes, comments, shares, saves)
 
         # Check if metrics for this period already exist
         existing = db.query(VideoMetrics).filter(
@@ -389,6 +396,8 @@ async def fetch_and_store_metrics(
             existing.likes = likes
             existing.comments = comments
             existing.shares = shares
+            existing.saves = saves
+            existing.reach = reach
             existing.engagement_rate = engagement_rate
             existing.recorded_at = datetime.utcnow()
             existing.is_manual = False
@@ -401,6 +410,8 @@ async def fetch_and_store_metrics(
                 likes=likes,
                 comments=comments,
                 shares=shares,
+                saves=saves,
+                reach=reach,
                 engagement_rate=engagement_rate,
                 is_manual=False
             )
@@ -473,6 +484,182 @@ async def fetch_video_metrics(
         "video_id": video_id,
         "tasks": tasks_scheduled
     }
+
+
+def _virality_rate(views: int, shares: int) -> Optional[float]:
+    if views == 0:
+        return None
+    return round((shares / views) * 100, 2)
+
+
+def _save_rate(views: int, saves: int) -> Optional[float]:
+    if views == 0:
+        return None
+    return round((saves / views) * 100, 2)
+
+
+# Period priority for "latest available"
+_PERIOD_PRIORITY = ["7d", "24h", "6h", "30m"]
+
+
+@router.get("/project/{project_id}/generations", response_model=ProjectMetricsResponse)
+async def get_project_generation_metrics(
+    project_id: int,
+    period: Optional[str] = None,
+    sort_by: str = "published_at",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get per-platform metrics for all published generations in a Template project.
+    Metrics are shown per-platform (not aggregated).
+    """
+    # Verify project access
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+    if project.workspace_id not in workspace_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get all published/partially_published generations (eager-load template_generation for thumbnails)
+    published_items = db.query(ApprovedGeneration).options(
+        joinedload(ApprovedGeneration.template_generation)
+    ).filter(
+        ApprovedGeneration.project_id == project_id,
+        ApprovedGeneration.status.in_(["published", "partially_published"])
+    ).order_by(ApprovedGeneration.published_at.desc()).all()
+
+    if not published_items:
+        return ProjectMetricsResponse(
+            generations=[],
+            totals=ProjectMetricsTotals(total_published=0)
+        )
+
+    # Batch-load all metrics for these generations
+    gen_ids = [item.id for item in published_items]
+    all_metrics = db.query(VideoMetrics).filter(
+        VideoMetrics.approved_generation_id.in_(gen_ids)
+    ).all()
+
+    # Group metrics by generation_id -> platform -> period
+    metrics_map: dict = {}
+    for m in all_metrics:
+        gen_id = m.approved_generation_id
+        if gen_id not in metrics_map:
+            metrics_map[gen_id] = {}
+        if m.platform not in metrics_map[gen_id]:
+            metrics_map[gen_id][m.platform] = {}
+        metrics_map[gen_id][m.platform][m.period.value] = m
+
+    # Build response
+    generations = []
+    total_views = 0
+    engagement_rates = []
+    virality_rates = []
+
+    for item in published_items:
+        gen_metrics = metrics_map.get(item.id, {})
+        post_ids = item.post_ids or {}
+        post_urls = item.post_urls or {}
+
+        # Determine metrics_status
+        if not post_ids:
+            metrics_status = "no_post_id"
+        elif not gen_metrics:
+            # Check if published recently (< 30 min ago)
+            if item.published_at and (datetime.utcnow() - item.published_at).total_seconds() < 1800:
+                metrics_status = "pending"
+            else:
+                metrics_status = "not_collected"
+        else:
+            metrics_status = "complete"
+
+        # Build per-platform metrics
+        platforms = {}
+        for platform_name, periods_data in gen_metrics.items():
+            # Pick the right period
+            if period:
+                m = periods_data.get(period)
+                if not m:
+                    # Requested period not available for this platform
+                    metrics_status = "not_collected"
+                    continue
+            else:
+                # Find latest available
+                m = None
+                for p in _PERIOD_PRIORITY:
+                    if p in periods_data:
+                        m = periods_data[p]
+                        break
+                if not m:
+                    continue
+
+            views = m.views or 0
+            likes = m.likes or 0
+            comments = m.comments or 0
+            shares = m.shares or 0
+            saves = m.saves or 0
+            reach = m.reach or 0
+
+            platforms[platform_name] = GenerationPlatformMetrics(
+                post_id=post_ids.get(platform_name),
+                post_url=post_urls.get(platform_name),
+                period=m.period.value,
+                views=views,
+                likes=likes,
+                comments=comments,
+                shares=shares,
+                saves=saves,
+                reach=reach,
+                engagement_rate=calculate_engagement_rate(views, likes, comments, shares, saves),
+                virality_rate=_virality_rate(views, shares),
+                save_rate=_save_rate(views, saves),
+            )
+
+            # Accumulate totals
+            total_views += views
+            er = calculate_engagement_rate(views, likes, comments, shares, saves)
+            if er is not None:
+                engagement_rates.append(er)
+            vr = _virality_rate(views, shares)
+            if vr is not None:
+                virality_rates.append(vr)
+
+        # Thumbnail URL
+        thumbnail_url = None
+        if item.template_generation and item.template_generation.image_path:
+            thumbnail_url = f"/api/files/{item.template_generation.image_path}"
+
+        generations.append(GenerationMetrics(
+            approved_generation_id=item.id,
+            template_generation_id=item.template_generation_id,
+            thumbnail_url=thumbnail_url,
+            published_at=item.published_at,
+            platforms=platforms,
+            metrics_status=metrics_status,
+        ))
+
+    # Sort
+    if sort_by == "views":
+        generations.sort(key=lambda g: sum(p.views for p in g.platforms.values()), reverse=True)
+    elif sort_by == "engagement_rate":
+        generations.sort(key=lambda g: max((p.engagement_rate or 0 for p in g.platforms.values()), default=0), reverse=True)
+    elif sort_by == "virality_rate":
+        generations.sort(key=lambda g: max((p.virality_rate or 0 for p in g.platforms.values()), default=0), reverse=True)
+    elif sort_by == "saves":
+        generations.sort(key=lambda g: sum(p.saves for p in g.platforms.values()), reverse=True)
+    # default: published_at desc (already sorted above)
+
+    totals = ProjectMetricsTotals(
+        total_published=len(published_items),
+        total_views=total_views,
+        avg_engagement_rate=round(sum(engagement_rates) / len(engagement_rates), 2) if engagement_rates else None,
+        avg_virality_rate=round(sum(virality_rates) / len(virality_rates), 2) if virality_rates else None,
+    )
+
+    return ProjectMetricsResponse(generations=generations, totals=totals)
 
 
 @router.post("/fetch-all")

@@ -153,8 +153,10 @@ async def fetch_video_metrics_job(
         likes = metrics_data.get("likes", 0)
         comments = metrics_data.get("comments", 0)
         shares = metrics_data.get("shares", 0)
+        saves = metrics_data.get("saves", 0)
+        reach = metrics_data.get("reach", 0)
 
-        engagement_rate = calculate_engagement_rate(views, likes, comments, shares)
+        engagement_rate = calculate_engagement_rate(views, likes, comments, shares, saves)
 
         # Store metrics
         period_enum = MetricsPeriod(period)
@@ -170,6 +172,8 @@ async def fetch_video_metrics_job(
             existing.likes = likes
             existing.comments = comments
             existing.shares = shares
+            existing.saves = saves
+            existing.reach = reach
             existing.engagement_rate = engagement_rate
             existing.recorded_at = datetime.utcnow()
             existing.is_manual = False
@@ -182,6 +186,8 @@ async def fetch_video_metrics_job(
                 likes=likes,
                 comments=comments,
                 shares=shares,
+                saves=saves,
+                reach=reach,
                 engagement_rate=engagement_rate,
                 is_manual=False
             )
@@ -246,6 +252,132 @@ def get_scheduled_jobs_for_video(video_id: int) -> list:
             })
 
     return jobs
+
+
+async def fetch_generation_metrics_job(
+    approved_generation_id: int,
+    platform: str,
+    post_id: str,
+    period: str
+):
+    """
+    Job function to fetch metrics for a published template generation.
+    Called by scheduler at scheduled times (30m, 6h, 24h, 7d after publish).
+    """
+    from app.db.base import SessionLocal
+    from app.models.video import VideoMetrics, MetricsPeriod
+    from app.models.user import SocialAccount
+    from app.services.metrics_fetcher import metrics_fetcher
+    from app.api.metrics import calculate_engagement_rate
+
+    logger.info(f"Fetching {period} metrics for generation {approved_generation_id} on {platform}")
+
+    db = SessionLocal()
+    try:
+        social_account = db.query(SocialAccount).filter(
+            SocialAccount.platform == platform,
+            SocialAccount.is_active == True
+        ).first()
+
+        if not social_account:
+            logger.warning(f"No active social account for {platform}")
+            return
+
+        metrics_data = await metrics_fetcher.fetch(
+            platform=platform,
+            post_id=post_id,
+            access_token=social_account.access_token,
+            refresh_token=social_account.refresh_token
+        )
+
+        if not metrics_data:
+            logger.warning(f"No metrics returned for generation {approved_generation_id}")
+            return
+
+        views = metrics_data.get("views", 0)
+        likes = metrics_data.get("likes", 0)
+        comments = metrics_data.get("comments", 0)
+        shares = metrics_data.get("shares", 0)
+        saves = metrics_data.get("saves", 0)
+        reach = metrics_data.get("reach", 0)
+
+        engagement_rate = calculate_engagement_rate(views, likes, comments, shares, saves)
+
+        period_enum = MetricsPeriod(period)
+
+        existing = db.query(VideoMetrics).filter(
+            VideoMetrics.approved_generation_id == approved_generation_id,
+            VideoMetrics.platform == platform,
+            VideoMetrics.period == period_enum
+        ).first()
+
+        if existing:
+            existing.views = views
+            existing.likes = likes
+            existing.comments = comments
+            existing.shares = shares
+            existing.saves = saves
+            existing.reach = reach
+            existing.engagement_rate = engagement_rate
+            existing.recorded_at = datetime.utcnow()
+            existing.is_manual = False
+        else:
+            db_metrics = VideoMetrics(
+                approved_generation_id=approved_generation_id,
+                platform=platform,
+                period=period_enum,
+                views=views,
+                likes=likes,
+                comments=comments,
+                shares=shares,
+                saves=saves,
+                reach=reach,
+                engagement_rate=engagement_rate,
+                is_manual=False
+            )
+            db.add(db_metrics)
+
+        db.commit()
+        logger.info(f"Stored {period} metrics for generation {approved_generation_id}: {views} views, {likes} likes")
+
+    except Exception as e:
+        logger.error(f"Failed to fetch metrics for generation {approved_generation_id}: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def schedule_metrics_for_generation(
+    approved_generation_id: int,
+    platform: str,
+    post_id: str,
+    published_at: datetime
+):
+    """
+    Schedule all 4 metrics fetch jobs for a published template generation.
+    Called from scheduled_publisher after successful publication.
+    """
+    sched = get_scheduler()
+
+    for period, delta in METRICS_INTERVALS.items():
+        run_time = published_at + delta
+        job_id = f"metrics_gen_{approved_generation_id}_{platform}_{period}"
+
+        try:
+            sched.remove_job(job_id)
+        except:
+            pass
+
+        sched.add_job(
+            fetch_generation_metrics_job,
+            trigger="date",
+            run_date=run_time,
+            id=job_id,
+            args=[approved_generation_id, platform, post_id, period],
+            replace_existing=True
+        )
+
+        logger.info(f"Scheduled {period} metrics fetch for generation {approved_generation_id} at {run_time}")
 
 
 def cancel_metrics_jobs_for_video(video_id: int):

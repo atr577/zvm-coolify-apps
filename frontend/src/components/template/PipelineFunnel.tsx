@@ -4,7 +4,7 @@ import { publishingScheduleApi, type PipelineStats } from '@/services/api'
 
 interface PipelineFunnelProps {
   projectId: number
-  onNavigate: (target: 'review' | 'generate' | 'queue' | 'calendar') => void
+  onNavigate: (target: 'review' | 'generate' | 'queue' | 'calendar' | 'analytics') => void
 }
 
 export function PipelineFunnel({ projectId, onNavigate }: PipelineFunnelProps) {
@@ -71,7 +71,7 @@ export function PipelineFunnel({ projectId, onNavigate }: PipelineFunnelProps) {
       label: 'Published',
       count: stats.published_count,
       icon: Send,
-      onClick: () => onNavigate('queue'),
+      onClick: () => onNavigate('analytics'),
       highlight: false,
     },
   ]
