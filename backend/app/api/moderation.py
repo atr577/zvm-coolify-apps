@@ -249,10 +249,11 @@ async def approve_generation(
                 detail=f"Metadata generation failed: {str(e)}. Please retry."
             )
 
-    # Get next position with FOR UPDATE to prevent race conditions
-    max_position = db.query(func.max(ApprovedGeneration.position)).filter(
+    # Get next position — lock the last row to prevent race conditions
+    last_approved = db.query(ApprovedGeneration.position).filter(
         ApprovedGeneration.project_id == project_id
-    ).with_for_update().scalar()
+    ).order_by(ApprovedGeneration.position.desc()).with_for_update().first()
+    max_position = last_approved.position if last_approved else 0
 
     next_position = (max_position or 0) + 1
 
