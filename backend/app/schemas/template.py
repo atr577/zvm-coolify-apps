@@ -45,6 +45,7 @@ class GenerationStatusEnum(str, Enum):
     MERGING_AUDIO = "merging_audio"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 # --- TemplateSettings Schemas ---

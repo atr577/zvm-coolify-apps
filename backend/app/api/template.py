@@ -1314,17 +1314,25 @@ async def start_batch_generation(
         for gen_id in generation_ids:
             db_session = SessionLocal()
             try:
+                # Check if cancelled before starting
+                gen = db_session.query(TemplateGeneration).filter(
+                    TemplateGeneration.id == gen_id
+                ).first()
+                if gen and gen.status == "cancelled":
+                    logger.info(f"Generation {gen_id} cancelled, skipping")
+                    continue
+
                 await service.run_generation(
                     db_session, gen_id,
                     hook_audio_path=hook_audio_path,
                 )
             except Exception as e:
-                # Mark as failed but continue with the rest
+                # Mark as failed but continue — PROTECT cancelled status
                 try:
                     gen = db_session.query(TemplateGeneration).filter(
                         TemplateGeneration.id == gen_id
                     ).first()
-                    if gen and gen.status != "completed":
+                    if gen and gen.status not in ("completed", "cancelled"):
                         gen.status = "failed"
                         gen.error_message = str(e)[:500]
                         db_session.commit()
@@ -1526,3 +1534,62 @@ async def delete_generation(
     db.commit()
 
     return None
+
+
+@router.post(
+    "/projects/{project_id}/batches/{batch_id}/cancel",
+    response_model=dict,
+    tags=["template"]
+)
+async def cancel_batch(
+    project_id: int,
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Cancel an active batch. Marks pending/in-progress generations as cancelled.
+    Completed and failed generations are not affected.
+    """
+    project = get_template_project(db, project_id, current_user)
+
+    generations = db.query(TemplateGeneration).filter(
+        TemplateGeneration.project_id == project_id,
+        TemplateGeneration.batch_id == batch_id,
+        TemplateGeneration.is_deleted == False
+    ).all()
+
+    if not generations:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    terminal_statuses = {"completed", "failed", "cancelled"}
+    cancelled_count = 0
+    already_completed = 0
+    already_failed = 0
+    already_cancelled = 0
+
+    for gen in generations:
+        if gen.status == "completed":
+            already_completed += 1
+        elif gen.status == "failed":
+            already_failed += 1
+        elif gen.status == "cancelled":
+            already_cancelled += 1
+        else:
+            gen.status = "cancelled"
+            cancelled_count += 1
+
+    db.commit()
+
+    logger.info(
+        f"Batch {batch_id} cancelled: {cancelled_count} cancelled, "
+        f"{already_completed} completed, {already_failed} failed"
+    )
+
+    return {
+        "batch_id": batch_id,
+        "cancelled_count": cancelled_count,
+        "already_completed": already_completed,
+        "already_failed": already_failed,
+        "already_cancelled": already_cancelled,
+    }

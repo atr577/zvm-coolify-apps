@@ -4,6 +4,7 @@ import type { Generation } from '@/types'
 import {
   Loader2, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
   Clock, ChevronDown, ChevronRight, ThumbsUp, ThumbsDown, RefreshCw,
+  Ban,
 } from 'lucide-react'
 
 interface BatchProgressProps {
@@ -69,6 +70,7 @@ function formatRelativeDate(dateStr: string): string {
 function getModerationStats(generations: Generation[]) {
   const completed = generations.filter(g => g.status === 'completed')
   const failed = generations.filter(g => g.status === 'failed')
+  const cancelled = generations.filter(g => g.status === 'cancelled')
   const approved = completed.filter(g => g.moderation_status === 'approved')
   const rejected = completed.filter(g => g.moderation_status === 'rejected')
   const regenerated = completed.filter(g => g.moderation_status === 'regenerated')
@@ -78,6 +80,7 @@ function getModerationStats(generations: Generation[]) {
     total: generations.length,
     completed: completed.length,
     failed: failed.length,
+    cancelled: cancelled.length,
     approved: approved.length,
     rejected: rejected.length,
     regenerated: regenerated.length,
@@ -89,6 +92,55 @@ const MODERATION_LABEL: Record<string, { text: string; className: string }> = {
   approved: { text: 'Approved', className: 'text-green-600' },
   rejected: { text: 'Rejected', className: 'text-red-500' },
   regenerated: { text: 'Regen', className: 'text-orange-500' },
+}
+
+function CancelConfirmModal({
+  batch,
+  onConfirm,
+  onClose,
+  cancelling,
+}: {
+  batch: BatchInfo
+  onConfirm: () => void
+  onClose: () => void
+  cancelling: boolean
+}) {
+  const completed = batch.generations.filter(g => g.status === 'completed').length
+  const willCancel = batch.generations.filter(g => IN_PROGRESS_STATUSES.includes(g.status)).length
+  const total = batch.generations.length
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-5">
+        <h3 className="text-base font-semibold text-gray-900 mb-2">Cancel batch?</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          {completed > 0
+            ? `${completed} of ${total} videos are ready and will be kept. `
+            : ''}
+          {willCancel > 0
+            ? `${willCancel} in progress or pending will be cancelled.`
+            : 'All videos have already finished.'}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={cancelling}
+            className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition disabled:opacity-50"
+          >
+            Keep running
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={cancelling}
+            className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md transition disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {cancelling && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Cancel batch
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
@@ -108,9 +160,10 @@ function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
             ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
             : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
           }
-          {stats.failed === 0 && <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />}
-          {stats.failed > 0 && stats.failed < stats.total && <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />}
-          {stats.failed === stats.total && <XCircle className="h-3.5 w-3.5 text-red-400" />}
+          {stats.cancelled === stats.total && <Ban className="h-3.5 w-3.5 text-gray-400" />}
+          {stats.cancelled < stats.total && stats.failed === 0 && <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />}
+          {stats.cancelled < stats.total && stats.failed > 0 && stats.failed < stats.total && <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />}
+          {stats.cancelled < stats.total && stats.failed === stats.total && <XCircle className="h-3.5 w-3.5 text-red-400" />}
           <span className="text-gray-700 font-medium">
             {isSingle ? '1 video' : `${stats.total} videos`}
           </span>
@@ -137,6 +190,9 @@ function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
             )}
             {stats.failed > 0 && (
               <span className="text-xs text-red-400">{stats.failed} failed</span>
+            )}
+            {stats.cancelled > 0 && (
+              <span className="text-xs text-gray-400">{stats.cancelled} cancelled</span>
             )}
           </div>
         </div>
@@ -166,6 +222,9 @@ function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
                   {gen.status === 'failed' && (
                     <span className="text-red-500">failed</span>
                   )}
+                  {gen.status === 'cancelled' && (
+                    <span className="text-gray-400">cancelled</span>
+                  )}
                   {gen.status === 'completed' && modStyle && (
                     <span className={modStyle.className}>{modStyle.text}</span>
                   )}
@@ -182,12 +241,40 @@ function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
   )
 }
 
-function BatchProgressBar({ batch }: { batch: BatchInfo }) {
+function BatchProgressBar({
+  batch,
+  projectId,
+  onCancelled,
+}: {
+  batch: BatchInfo
+  projectId: number
+  onCancelled: () => void
+}) {
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+
   const total = batch.generations.length
   const completed = batch.generations.filter(g => g.status === 'completed').length
   const failed = batch.generations.filter(g => g.status === 'failed').length
+  const cancelled = batch.generations.filter(g => g.status === 'cancelled').length
   const inProgress = batch.generations.filter(g => IN_PROGRESS_STATUSES.includes(g.status)).length
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0
+
+  const canCancel = batch.batch_id && inProgress > 0
+
+  const handleCancel = async () => {
+    if (!batch.batch_id) return
+    setCancelling(true)
+    try {
+      await templateApi.cancelBatch(projectId, batch.batch_id)
+      setShowCancelModal(false)
+      onCancelled()
+    } catch (err) {
+      console.error('Failed to cancel batch:', err)
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   // Single generation (no batch)
   if (!batch.batch_id) {
@@ -207,55 +294,83 @@ function BatchProgressBar({ batch }: { batch: BatchInfo }) {
   const allDone = inProgress === 0
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-2">
-          {!allDone && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
-          {allDone && failed === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-          {allDone && failed > 0 && <AlertTriangle className="h-4 w-4 text-yellow-500" />}
-          <span className="text-gray-700 font-medium">
-            Batch — {total} video{total !== 1 ? 's' : ''}
+    <>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            {!allDone && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+            {allDone && failed === 0 && cancelled === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+            {allDone && (failed > 0 || cancelled > 0) && <AlertTriangle className="h-4 w-4 text-yellow-500" />}
+            <span className="text-gray-700 font-medium">
+              Batch — {total} video{total !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {canCancel && (
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="text-xs text-red-500 hover:text-red-700 font-medium transition"
+              >
+                Cancel
+              </button>
+            )}
+            <span className="text-xs text-gray-400">
+              {new Date(batch.created_at).toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full flex">
+            {completed > 0 && (
+              <div
+                className="bg-green-500 transition-all duration-500"
+                style={{ width: `${(completed / total) * 100}%` }}
+              />
+            )}
+            {failed > 0 && (
+              <div
+                className="bg-red-400 transition-all duration-500"
+                style={{ width: `${(failed / total) * 100}%` }}
+              />
+            )}
+            {cancelled > 0 && (
+              <div
+                className="bg-gray-300 transition-all duration-500"
+                style={{ width: `${(cancelled / total) * 100}%` }}
+              />
+            )}
+            {inProgress > 0 && (
+              <div
+                className="bg-blue-400 animate-pulse transition-all duration-500"
+                style={{ width: `${(inProgress / total) * 100}%` }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Status text */}
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>
+            {completed > 0 && <span className="text-green-600">{completed} done</span>}
+            {failed > 0 && <span className="text-red-500 ml-2">{failed} failed</span>}
+            {cancelled > 0 && <span className="text-gray-400 ml-2">{cancelled} cancelled</span>}
+            {inProgress > 0 && <span className="text-blue-500 ml-2">{inProgress} in progress</span>}
           </span>
-        </div>
-        <span className="text-xs text-gray-400">
-          {new Date(batch.created_at).toLocaleString()}
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full flex">
-          {completed > 0 && (
-            <div
-              className="bg-green-500 transition-all duration-500"
-              style={{ width: `${(completed / total) * 100}%` }}
-            />
-          )}
-          {failed > 0 && (
-            <div
-              className="bg-red-400 transition-all duration-500"
-              style={{ width: `${(failed / total) * 100}%` }}
-            />
-          )}
-          {inProgress > 0 && (
-            <div
-              className="bg-blue-400 animate-pulse transition-all duration-500"
-              style={{ width: `${(inProgress / total) * 100}%` }}
-            />
-          )}
+          <span>{pct}%</span>
         </div>
       </div>
 
-      {/* Status text */}
-      <div className="flex items-center justify-between text-xs text-gray-500">
-        <span>
-          {completed > 0 && <span className="text-green-600">{completed} done</span>}
-          {failed > 0 && <span className="text-red-500 ml-2">{failed} failed</span>}
-          {inProgress > 0 && <span className="text-blue-500 ml-2">{inProgress} in progress</span>}
-        </span>
-        <span>{pct}%</span>
-      </div>
-    </div>
+      {showCancelModal && (
+        <CancelConfirmModal
+          batch={batch}
+          onConfirm={handleCancel}
+          onClose={() => setShowCancelModal(false)}
+          cancelling={cancelling}
+        />
+      )}
+    </>
   )
 }
 
@@ -369,6 +484,8 @@ export function BatchProgress({ projectId, refreshTrigger }: BatchProgressProps)
             <BatchProgressBar
               key={batch.batch_id || `single-${i}`}
               batch={batch}
+              projectId={projectId}
+              onCancelled={loadGenerations}
             />
           ))}
 

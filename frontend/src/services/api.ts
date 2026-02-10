@@ -362,6 +362,11 @@ export const templateApi = {
 
   startBatchGeneration: (projectId: number, data: BatchGenerateRequest) =>
     api.post<BatchGenerateResponse>(`/api/projects/${projectId}/generate/batch`, data),
+
+  cancelBatch: (projectId: number, batchId: string) =>
+    api.post<{ batch_id: string; cancelled_count: number; already_completed: number; already_failed: number; already_cancelled: number }>(
+      `/api/projects/${projectId}/batches/${batchId}/cancel`
+    ),
 }
 
 // Moderation API (Template projects)
