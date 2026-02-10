@@ -11,6 +11,13 @@ from typing import Optional
 router = APIRouter()
 
 
+def get_base_url(request: Request) -> str:
+    """Get base URL respecting X-Forwarded-Proto from reverse proxy."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost"))
+    return f"{proto}://{host}/"
+
+
 # OAuth configuration
 OAUTH_CONFIGS = {
     "instagram": {
@@ -63,7 +70,7 @@ async def initiate_oauth(
         )
 
     # Формируем redirect_uri (callback URL)
-    redirect_uri = str(request.base_url) + f"api/oauth/callback/{platform}"
+    redirect_uri = get_base_url(request) + f"api/oauth/callback/{platform}"
 
     # Формируем state для CSRF protection (можно использовать JWT с user_id)
     state = f"{current_user.id}:{platform}"
@@ -140,7 +147,7 @@ async def oauth_callback(
         )
 
     config = OAUTH_CONFIGS[platform]
-    redirect_uri = str(request.base_url) + f"api/oauth/callback/{platform}"
+    redirect_uri = get_base_url(request) + f"api/oauth/callback/{platform}"
 
     # Обмениваем authorization code на access token
     try:
