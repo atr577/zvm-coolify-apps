@@ -33,6 +33,7 @@ class ProjectBase(BaseModel):
     audio_provider: Optional[AudioProvider] = None  # None = use default for audio_mode
     project_type: ProjectType = "discover"
     require_image_approval: bool = False  # Pause after image for approval
+    timezone: str = "UTC"  # IANA timezone for scheduled publishing
     system_prompts: Optional[Dict[str, str]] = None
 
     # Remix-specific fields (optional for discover projects)
