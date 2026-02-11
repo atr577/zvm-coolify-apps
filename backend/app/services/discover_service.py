@@ -922,6 +922,7 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
                         duration_ms=selected_variant.duration_ms or selected_variant.full_duration_ms or 0,
                         prompt=selected_variant.prompt,
                         source_discover_project_id=project.id,
+                        track_path=selected_variant.file_path,
                     )
                     audio_source_id = lib_item.id
 
@@ -1482,6 +1483,7 @@ No JSON, just the prompt text."""
                 source_type=variant.audio_type,
                 source_discover_project_id=project_id,
                 file_path=audio_path,
+                track_path=variant.file_path,  # full original track for re-trimming
                 file_url=variant.file_url,
                 duration_ms=variant.duration_ms or variant.full_duration_ms or 0,
                 prompt=variant.prompt,

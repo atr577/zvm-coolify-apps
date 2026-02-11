@@ -37,7 +37,7 @@ OAUTH_CONFIGS = {
     "youtube": {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
-        "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.email",
+        "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/userinfo.email",
         "client_id": getattr(settings, "YOUTUBE_CLIENT_ID", None),
         "client_secret": getattr(settings, "YOUTUBE_CLIENT_SECRET", None),
     }

@@ -489,6 +489,8 @@ export interface TemplateSettings {
   music_mode: string | null
   music_prompt: string | null
   audio_hook_url: string | null
+  audio_hook_duration_ms: number | null
+  audio_hook_retrim: boolean
   csv_columns: string[] | null
   reference_video_url: string | null
   created_at: string

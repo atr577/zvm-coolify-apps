@@ -27,7 +27,10 @@ class AudioLibrary(Base):
     )
 
     # Audio file
-    file_path = Column(String(500), nullable=False)
+    file_path = Column(String(500), nullable=False)       # trimmed hook
+    track_path = Column(String(500), nullable=True)       # full original track (for re-trimming)
+    hook_start_ms = Column(Integer, nullable=True)        # verified hook start in full track
+    hook_end_ms = Column(Integer, nullable=True)          # verified hook end in full track
     file_url = Column(String(500), nullable=True)
     duration_ms = Column(Integer, nullable=False)
 

@@ -89,10 +89,50 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
   const [initialTimezone, setInitialTimezone] = useState('UTC')
   const [bindingLoading, setBindingLoading] = useState<string | null>(null)
 
+  // Audio hook preview URL (re-trimmed for current video_duration)
+  const [hookPreviewUrl, setHookPreviewUrl] = useState<string | null>(null)
+
   // Project info (for Details tab)
   const [initialProjectInfo, setInitialProjectInfo] = useState<EditableProjectInfo | null>(null)
   const [editedProjectInfo, setEditedProjectInfo] = useState<EditableProjectInfo | null>(null)
   const [allWorkspaces, setAllWorkspaces] = useState<Workspace[]>([])
+
+  // Fetch re-trimmed hook preview as blob when duration changes
+  useEffect(() => {
+    if (
+      settings?.audio_hook_retrim &&
+      editedSettings?.music_mode === 'library' &&
+      editedSettings?.video_duration
+    ) {
+      let cancelled = false
+      const token = localStorage.getItem('auth_token')
+      fetch(`/api/projects/${projectId}/audio-hook-preview?duration=${editedSettings.video_duration}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then(res => {
+          if (!res.ok) throw new Error(`${res.status}`)
+          return res.blob()
+        })
+        .then(blob => {
+          if (!cancelled) {
+            const url = URL.createObjectURL(blob)
+            setHookPreviewUrl(prev => {
+              if (prev) URL.revokeObjectURL(prev)
+              return url
+            })
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setHookPreviewUrl(null)
+        })
+      return () => { cancelled = true }
+    } else {
+      setHookPreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+    }
+  }, [settings?.audio_hook_retrim, editedSettings?.video_duration, editedSettings?.music_mode, projectId])
 
   // Refresh triggers for child components
   const [variantsRefresh, setVariantsRefresh] = useState(0)
@@ -406,7 +446,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       music: {
         status: (editedSettings?.music_mode && editedSettings.music_mode !== 'none' ? 'complete' : 'empty') as StepStatus,
         summary: editedSettings?.music_mode === 'library'
-          ? 'Saved hook'
+          ? (settings?.audio_hook_retrim
+            ? `Hook ${((settings?.audio_hook_duration_ms || 0) / 1000).toFixed(0)}s → ${editedSettings.video_duration}s`
+            : `Hook ${((settings?.audio_hook_duration_ms || 0) / 1000).toFixed(0)}s`)
           : editedSettings?.music_mode === 'generate'
           ? (editedSettings.music_prompt?.slice(0, 30) + (editedSettings.music_prompt && editedSettings.music_prompt.length > 30 ? '...' : '') || 'No prompt')
           : 'Disabled',
@@ -617,16 +659,17 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
                 {editedSettings.music_mode === 'library' && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
                     <p className="text-sm text-green-800">
-                      Using saved audio hook from library. The same trimmed hook will be merged with every generated video.
+                      {hookPreviewUrl
+                        ? `Hook ${((settings?.audio_hook_duration_ms || 0) / 1000).toFixed(0)}s → ${editedSettings.video_duration}s`
+                        : 'Using saved audio hook from library'
+                      }
                     </p>
-                    {settings?.audio_hook_url && (
-                      <audio
-                        src={settings.audio_hook_url}
-                        controls
-                        preload="metadata"
-                        className="w-full h-8"
-                      />
-                    )}
+                    <audio
+                      src={hookPreviewUrl || settings?.audio_hook_url || ''}
+                      controls
+                      preload="metadata"
+                      className="w-full h-8"
+                    />
                   </div>
                 )}
 

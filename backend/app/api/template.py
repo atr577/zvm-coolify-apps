@@ -1,6 +1,7 @@
 """API endpoints for Template project type."""
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -183,7 +184,7 @@ async def create_template_project(
 
 
 def _enrich_settings(db: Session, settings: TemplateSettings, project: Project) -> TemplateSettings:
-    """Enrich settings with audio_hook_url from project's audio_source."""
+    """Enrich settings with audio_hook_url and re-trim info from project's audio_source."""
     if project.audio_source_id:
         from app.models.audio_library import AudioLibrary
         lib_item = db.query(AudioLibrary).filter(
@@ -193,7 +194,90 @@ def _enrich_settings(db: Session, settings: TemplateSettings, project: Project) 
             from pathlib import Path
             p = Path(lib_item.file_path)
             settings.audio_hook_url = f"/api/files/{p.parent.name}/{p.name}"
+            settings.audio_hook_duration_ms = lib_item.duration_ms
+
+            # Check if hook will be re-trimmed at batch time
+            duration_str = settings.video_duration or "5"
+            hook_duration_ms = int(float(duration_str.rstrip("s")) * 1000)
+            settings.audio_hook_retrim = (
+                lib_item.duration_ms < hook_duration_ms
+                and lib_item.track_path is not None
+            )
     return settings
+
+
+@router.get(
+    "/projects/{project_id}/audio-hook-preview",
+    tags=["template"],
+)
+async def get_audio_hook_preview(
+    project_id: int,
+    duration: str = Query(..., description="Target video duration, e.g. '10'"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return a trimmed audio hook preview matching the target video duration."""
+    project = get_template_project(db, project_id, current_user)
+    if not project.audio_source_id:
+        raise HTTPException(status_code=404, detail="No audio source configured")
+
+    from app.models.audio_library import AudioLibrary
+    lib_item = db.query(AudioLibrary).filter(
+        AudioLibrary.id == project.audio_source_id
+    ).first()
+    if not lib_item or not lib_item.file_path:
+        raise HTTPException(status_code=404, detail="Audio library item not found")
+
+    hook_duration = float(duration.rstrip("s"))
+    hook_duration_ms = int(hook_duration * 1000)
+
+    # If hook already long enough, return original
+    if lib_item.duration_ms >= hook_duration_ms:
+        return FileResponse(lib_item.file_path, media_type="audio/mpeg")
+
+    # Need re-trim from full track
+    if not lib_item.track_path or not os.path.exists(lib_item.track_path):
+        # No full track — return original hook as fallback
+        return FileResponse(lib_item.file_path, media_type="audio/mpeg")
+
+    from app.core.media_processor import media_processor
+    from app.core.hook_analyzer import hook_analyzer
+    from app.core.config import settings as app_settings
+
+    if lib_item.hook_start_ms is not None and lib_item.hook_end_ms is not None:
+        start_s = lib_item.hook_start_ms / 1000.0
+        end_s = start_s + hook_duration
+    else:
+        hooks = await hook_analyzer.find_hooks(
+            audio_path=lib_item.track_path,
+            video=None,
+            num_hooks=4,
+            hook_duration=hook_duration,
+        )
+        if not hooks:
+            track_duration = await media_processor.get_audio_duration(lib_item.track_path)
+            hooks = hook_analyzer._create_fallback_hooks(
+                total_duration=track_duration,
+                hook_duration=hook_duration,
+                num_hooks=1,
+            )
+        start_s = hooks[0].start
+        end_s = hooks[0].end
+
+    audio_dir = os.path.join(app_settings.MEDIA_DIR, "audio")
+    os.makedirs(audio_dir, exist_ok=True)
+    preview_path = os.path.join(audio_dir, f"project_{project_id}_hook_preview.mp3")
+
+    await media_processor.trim_audio(
+        audio_path=lib_item.track_path,
+        start=start_s,
+        end=end_s,
+        fade_in=0.5,
+        fade_out=0.5,
+        output_path=preview_path,
+    )
+
+    return FileResponse(preview_path, media_type="audio/mpeg")
 
 
 # --- Template Settings Endpoints ---
@@ -523,6 +607,72 @@ async def _generate_batch_music(project_id: int) -> Optional[str]:
                     AudioLibrary.id == project.audio_source_id
                 ).first()
                 if lib_item and lib_item.file_path:
+                    # Check if hook needs re-trimming for longer video
+                    duration_str = settings.video_duration or "5"
+                    hook_duration = float(duration_str.rstrip("s"))
+                    hook_duration_ms = int(hook_duration * 1000)
+
+                    if lib_item.duration_ms < hook_duration_ms and lib_item.track_path:
+                        if os.path.exists(lib_item.track_path):
+                            logger.info(
+                                f"Project {project_id}: library hook {lib_item.duration_ms}ms < "
+                                f"video {hook_duration_ms}ms, re-trimming from full track"
+                            )
+
+                            # Use saved coordinates if available, otherwise analyze
+                            if lib_item.hook_start_ms is not None and lib_item.hook_end_ms is not None:
+                                # Scale coordinates to match target duration
+                                start_s = lib_item.hook_start_ms / 1000.0
+                                end_s = start_s + hook_duration
+                            else:
+                                hooks = await hook_analyzer.find_hooks(
+                                    audio_path=lib_item.track_path,
+                                    video=None,
+                                    num_hooks=4,
+                                    hook_duration=hook_duration,
+                                )
+                                if not hooks:
+                                    track_duration = await media_processor.get_audio_duration(
+                                        lib_item.track_path
+                                    )
+                                    hooks = hook_analyzer._create_fallback_hooks(
+                                        total_duration=track_duration,
+                                        hook_duration=hook_duration,
+                                        num_hooks=1,
+                                    )
+                                start_s = hooks[0].start
+                                end_s = hooks[0].end
+
+                            from app.core.config import settings as app_settings
+                            audio_dir = os.path.join(app_settings.MEDIA_DIR, "audio")
+                            os.makedirs(audio_dir, exist_ok=True)
+                            hook_filename = f"project_{project_id}_hook.mp3"
+                            hook_output_path = os.path.join(audio_dir, hook_filename)
+
+                            trimmed_path = await media_processor.trim_audio(
+                                audio_path=lib_item.track_path,
+                                start=start_s,
+                                end=end_s,
+                                fade_in=0.5,
+                                fade_out=0.5,
+                                output_path=hook_output_path,
+                            )
+                            logger.info(
+                                f"Project {project_id}: re-trimmed hook "
+                                f"{start_s:.1f}-{end_s:.1f}s → {trimmed_path}"
+                            )
+                            return trimmed_path
+                        else:
+                            logger.error(
+                                f"Project {project_id}: track_path not found on disk: "
+                                f"{lib_item.track_path}"
+                            )
+                    elif lib_item.duration_ms < hook_duration_ms:
+                        logger.warning(
+                            f"Project {project_id}: hook {lib_item.duration_ms}ms < "
+                            f"video {hook_duration_ms}ms but no track_path, using hook as-is"
+                        )
+
                     logger.info(
                         f"Project {project_id}: using library audio "
                         f"(id={lib_item.id}, {lib_item.file_path})"

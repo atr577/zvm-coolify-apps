@@ -72,12 +72,14 @@ class AudioLibraryService:
         prompt: Optional[str] = None,
         mood: Optional[str] = None,
         source_discover_project_id: Optional[int] = None,
+        track_path: Optional[str] = None,
     ) -> AudioLibrary:
         """Add a new audio track to the library from a Discover variant."""
         item = AudioLibrary(
             workspace_id=workspace_id,
             source_type=source_type,
             file_path=file_path,
+            track_path=track_path,
             file_url=file_url,
             duration_ms=duration_ms,
             prompt=prompt,

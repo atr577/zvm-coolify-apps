@@ -91,6 +91,8 @@ class TemplateSettingsResponse(BaseModel):
     music_mode: Optional[str] = None
     music_prompt: Optional[str] = None
     audio_hook_url: Optional[str] = None
+    audio_hook_duration_ms: Optional[int] = None
+    audio_hook_retrim: bool = False
     csv_columns: Optional[List[str]] = None
     reference_video_url: Optional[str] = None
     created_at: datetime
