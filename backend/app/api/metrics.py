@@ -10,9 +10,14 @@ import logging
 
 from app.db.base import get_db
 from app.core.deps import get_current_user
+from sqlalchemy import func
+
 from app.models.video import Video, VideoMetrics, MetricsPeriod
 from app.models.project import PublishResult, Project
 from app.models.approved_generation import ApprovedGeneration
+from app.models.template_generation import TemplateGeneration
+from app.models.publishing_config import PublishingConfig
+from app.models.rejection_archive import RejectionArchive
 from app.models.user import User, SocialAccount, WorkspaceMember
 from app.api.workflow_helpers import verify_video_ownership, get_user_workspace_ids
 from app.schemas.video import (
@@ -24,6 +29,9 @@ from app.schemas.video import (
     GenerationMetrics,
     ProjectMetricsTotals,
     ProjectMetricsResponse,
+    DashboardProjectSummary,
+    DashboardProjectHealth,
+    DashboardSummaryResponse,
 )
 from app.services.metrics_fetcher import metrics_fetcher
 from app.services.scheduled_publisher import get_project_social_account
@@ -661,6 +669,226 @@ async def get_project_generation_metrics(
     )
 
     return ProjectMetricsResponse(generations=generations, totals=totals)
+
+
+# --- Dashboard Analytics Summary (T48) ---
+
+@router.get("/dashboard-summary", response_model=DashboardSummaryResponse)
+async def get_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Aggregated analytics summary across all Template projects.
+    Returns summary cards, per-project table, and publishing health.
+    """
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+
+    # Query 1: All Template projects with publishing config (eager-loaded)
+    template_projects = db.query(Project).options(
+        joinedload(Project.publishing_config)
+    ).filter(
+        Project.workspace_id.in_(workspace_ids),
+        Project.project_type == "template",
+    ).all()
+
+    if not template_projects:
+        return DashboardSummaryResponse(
+            total_published=0,
+            total_views=0,
+            avg_views_per_video=0,
+            publishing_cadence_actual=0,
+            publishing_cadence_target=0,
+            projects=[],
+            health=[],
+        )
+
+    project_ids = [p.id for p in template_projects]
+
+    # Query 2: All approved generations for these projects
+    all_approved = db.query(ApprovedGeneration).filter(
+        ApprovedGeneration.project_id.in_(project_ids),
+    ).all()
+
+    # Group by project
+    approved_by_project: dict[int, list] = {pid: [] for pid in project_ids}
+    for ag in all_approved:
+        approved_by_project[ag.project_id].append(ag)
+
+    # Query 3: All metrics for published generation IDs
+    published_gen_ids = [
+        ag.id for ag in all_approved
+        if ag.status in ("published", "partially_published")
+    ]
+
+    metrics_by_gen: dict[int, dict[str, dict[str, VideoMetrics]]] = {}
+    if published_gen_ids:
+        all_metrics = db.query(VideoMetrics).filter(
+            VideoMetrics.approved_generation_id.in_(published_gen_ids),
+        ).all()
+
+        for m in all_metrics:
+            gen_id = m.approved_generation_id
+            if gen_id not in metrics_by_gen:
+                metrics_by_gen[gen_id] = {}
+            if m.platform not in metrics_by_gen[gen_id]:
+                metrics_by_gen[gen_id][m.platform] = {}
+            metrics_by_gen[gen_id][m.platform][m.period.value] = m
+
+    # Query 4: Pending moderation counts per project
+    # Completed generations not in approved_generations and not in rejection_archive, not deleted, not regenerated
+    approved_gen_tg_ids = {ag.template_generation_id for ag in all_approved}
+    rejected_tg_ids_rows = db.query(RejectionArchive.template_generation_id).filter(
+        RejectionArchive.project_id.in_(project_ids),
+    ).all()
+    rejected_tg_ids = {r[0] for r in rejected_tg_ids_rows}
+
+    pending_gens = db.query(
+        TemplateGeneration.project_id, func.count(TemplateGeneration.id)
+    ).filter(
+        TemplateGeneration.project_id.in_(project_ids),
+        TemplateGeneration.status == "completed",
+        TemplateGeneration.is_deleted == False,
+        TemplateGeneration.regenerated == False,
+        ~TemplateGeneration.id.in_(approved_gen_tg_ids | rejected_tg_ids) if (approved_gen_tg_ids | rejected_tg_ids) else True,
+    ).group_by(TemplateGeneration.project_id).all()
+
+    pending_by_project = {pid: cnt for pid, cnt in pending_gens}
+
+    # Helper: get views for a generation (sum across platforms, best period)
+    def _gen_views(gen_id: int) -> int:
+        gen_metrics = metrics_by_gen.get(gen_id, {})
+        total = 0
+        for _platform, periods_data in gen_metrics.items():
+            for p in _PERIOD_PRIORITY:
+                if p in periods_data:
+                    total += periods_data[p].views or 0
+                    break
+        return total
+
+    # Build per-project data
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+
+    projects_summary = []
+    projects_health = []
+    global_published = 0
+    global_views = 0
+    global_cadence_actual = 0.0
+    global_cadence_target = 0.0
+
+    for proj in template_projects:
+        proj_approved = approved_by_project.get(proj.id, [])
+        published_items = [ag for ag in proj_approved if ag.status in ("published", "partially_published")]
+        queue_items = [ag for ag in proj_approved if ag.status == "approved"]
+
+        published_count = len(published_items)
+        queue_size = len(queue_items)
+
+        # Total views & best video
+        total_views = 0
+        best_video = 0
+        for ag in published_items:
+            v = _gen_views(ag.id)
+            total_views += v
+            if v > best_video:
+                best_video = v
+
+        avg_views = total_views / published_count if published_count > 0 else 0
+
+        last_published_at = None
+        if published_items:
+            dates = [ag.published_at for ag in published_items if ag.published_at]
+            if dates:
+                last_published_at = max(dates)
+
+        projects_summary.append(DashboardProjectSummary(
+            project_id=proj.id,
+            project_name=proj.name,
+            published_count=published_count,
+            total_views=total_views,
+            avg_views_per_video=round(avg_views, 1),
+            best_video_views=best_video,
+            last_published_at=last_published_at,
+        ))
+
+        # Publishing health
+        config = proj.publishing_config
+        days_list = config.days if config and config.days else []
+        times_list = config.preferred_times if config and config.preferred_times else []
+
+        if not times_list:
+            times_list = ["18:00"]  # fallback per edge case #7
+
+        weekly_publishes = len(days_list) * len(times_list)
+        daily_rate = weekly_publishes / 7.0
+
+        # Actual cadence: publishes in last 7 days
+        recent_publishes = sum(
+            1 for ag in published_items
+            if ag.published_at and ag.published_at >= seven_days_ago
+        )
+        actual_cadence = recent_publishes / 7.0
+
+        # Health status
+        if not config:
+            queue_days = None
+            health_status = "red"
+            health_note = "Schedule not configured"
+        elif not config.enabled:
+            queue_days = queue_size / daily_rate if daily_rate > 0 else None
+            health_status = "yellow"
+            health_note = "Publishing disabled"
+        elif config.is_paused:
+            queue_days = queue_size / daily_rate if daily_rate > 0 else None
+            health_status = "yellow"
+            health_note = "Publishing paused"
+        elif daily_rate == 0:
+            queue_days = None
+            health_status = "red"
+            health_note = "No days configured"
+        elif queue_size == 0:
+            queue_days = 0.0
+            health_status = "red"
+            health_note = "Queue empty"
+        else:
+            queue_days = queue_size / daily_rate
+            if queue_days >= 7:
+                health_status = "green"
+            elif queue_days >= 3:
+                health_status = "yellow"
+            else:
+                health_status = "red"
+            health_note = None
+
+        projects_health.append(DashboardProjectHealth(
+            project_id=proj.id,
+            project_name=proj.name,
+            queue_size=queue_size,
+            daily_publish_rate=round(daily_rate, 2),
+            queue_days=round(queue_days, 1) if queue_days is not None else None,
+            health_status=health_status,
+            health_note=health_note,
+            pending_moderation=pending_by_project.get(proj.id, 0),
+            actual_cadence_last_7d=round(actual_cadence, 2),
+            target_cadence=round(daily_rate, 2),
+        ))
+
+        global_published += published_count
+        global_views += total_views
+        global_cadence_actual += actual_cadence
+        global_cadence_target += daily_rate
+
+    global_avg = global_views / global_published if global_published > 0 else 0
+
+    return DashboardSummaryResponse(
+        total_published=global_published,
+        total_views=global_views,
+        avg_views_per_video=round(global_avg, 1),
+        publishing_cadence_actual=round(global_cadence_actual, 2),
+        publishing_cadence_target=round(global_cadence_target, 2),
+        projects=projects_summary,
+        health=projects_health,
+    )
 
 
 @router.post("/fetch-all")

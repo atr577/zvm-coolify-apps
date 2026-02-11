@@ -291,6 +291,41 @@ export interface ProjectMetricsResponse {
   totals: ProjectMetricsTotals
 }
 
+// --- Dashboard Analytics Summary (T48) ---
+
+export interface DashboardProjectSummary {
+  project_id: number
+  project_name: string
+  published_count: number
+  total_views: number
+  avg_views_per_video: number
+  best_video_views: number
+  last_published_at: string | null
+}
+
+export interface DashboardProjectHealth {
+  project_id: number
+  project_name: string
+  queue_size: number
+  daily_publish_rate: number
+  queue_days: number | null
+  health_status: 'green' | 'yellow' | 'red'
+  health_note: string | null
+  pending_moderation: number
+  actual_cadence_last_7d: number
+  target_cadence: number
+}
+
+export interface DashboardSummaryResponse {
+  total_published: number
+  total_views: number
+  avg_views_per_video: number
+  publishing_cadence_actual: number
+  publishing_cadence_target: number
+  projects: DashboardProjectSummary[]
+  health: DashboardProjectHealth[]
+}
+
 // --- Invite & Workspace Types ---
 
 export type InviteType = 'standalone' | 'workspace'

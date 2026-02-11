@@ -179,3 +179,38 @@ class ProjectMetricsResponse(BaseModel):
     """Full response for project-level analytics"""
     generations: List[GenerationMetrics] = []
     totals: ProjectMetricsTotals = ProjectMetricsTotals()
+
+
+# --- Dashboard Analytics Summary (T48) ---
+
+class DashboardProjectSummary(BaseModel):
+    project_id: int
+    project_name: str
+    published_count: int
+    total_views: int
+    avg_views_per_video: float
+    best_video_views: int
+    last_published_at: Optional[datetime]
+
+
+class DashboardProjectHealth(BaseModel):
+    project_id: int
+    project_name: str
+    queue_size: int
+    daily_publish_rate: float
+    queue_days: Optional[float] = None
+    health_status: Literal["green", "yellow", "red"]
+    health_note: Optional[str] = None
+    pending_moderation: int
+    actual_cadence_last_7d: float
+    target_cadence: float
+
+
+class DashboardSummaryResponse(BaseModel):
+    total_published: int
+    total_views: int
+    avg_views_per_video: float
+    publishing_cadence_actual: float
+    publishing_cadence_target: float
+    projects: List[DashboardProjectSummary]
+    health: List[DashboardProjectHealth]

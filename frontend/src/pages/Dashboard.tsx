@@ -9,6 +9,7 @@ import { DiscoverProjectForm, type DiscoverProjectFormData } from '@/components/
 import { templateApi, discoverApi } from '@/services/api'
 import ProjectSidebar from '@/components/dashboard/ProjectSidebar'
 import VideoGridCard from '@/components/dashboard/VideoGridCard'
+import DashboardAnalytics from '@/components/dashboard/DashboardAnalytics'
 
 type ProjectTypeSelection = 'discover' | 'remix' | 'template' | null
 
@@ -75,6 +76,8 @@ export default function Dashboard() {
           projectId={selectedProjectId!}
           projectName={selectedProject.name}
         />
+      ) : selectedProjectId === null ? (
+        <DashboardAnalytics onSelectProject={setSelectedProjectId} />
       ) : (
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with tabs */}
