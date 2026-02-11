@@ -18,6 +18,7 @@ class GenerationStatus(str, enum.Enum):
     MERGING_AUDIO = "merging_audio"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class TemplateGeneration(Base):

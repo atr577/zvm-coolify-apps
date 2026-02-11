@@ -215,13 +215,17 @@ export type MetricsPeriod = '30m' | '6h' | '24h' | '7d'
 
 export interface VideoMetrics {
   id: number
-  video_id: number
+  video_id: number | null
+  approved_generation_id: number | null
   platform: string
   period: MetricsPeriod
   views: number
   likes: number
   comments: number
   shares: number
+  saves: number
+  reach: number
+  avg_watch_time_ms: number | null
   engagement_rate: number | null
   recorded_at: string
   is_manual: boolean
@@ -245,6 +249,81 @@ export interface VideoMetricsSummary {
   total_comments: number
   total_shares: number
   avg_engagement_rate: number | null
+}
+
+// --- Project Analytics Types (T42) ---
+
+export type MetricsStatus = 'complete' | 'pending' | 'not_collected' | 'no_post_id'
+
+export interface GenerationPlatformMetrics {
+  post_id: string | null
+  post_url: string | null
+  period: string
+  views: number
+  likes: number
+  comments: number
+  shares: number
+  saves: number
+  reach: number
+  engagement_rate: number | null
+  virality_rate: number | null
+  save_rate: number | null
+}
+
+export interface GenerationMetrics {
+  approved_generation_id: number
+  template_generation_id: number
+  thumbnail_url: string | null
+  published_at: string | null
+  platforms: Record<string, GenerationPlatformMetrics>
+  metrics_status: MetricsStatus
+}
+
+export interface ProjectMetricsTotals {
+  total_published: number
+  total_views: number
+  avg_engagement_rate: number | null
+  avg_virality_rate: number | null
+}
+
+export interface ProjectMetricsResponse {
+  generations: GenerationMetrics[]
+  totals: ProjectMetricsTotals
+}
+
+// --- Dashboard Analytics Summary (T48) ---
+
+export interface DashboardProjectSummary {
+  project_id: number
+  project_name: string
+  published_count: number
+  total_views: number
+  avg_views_per_video: number
+  best_video_views: number
+  last_published_at: string | null
+}
+
+export interface DashboardProjectHealth {
+  project_id: number
+  project_name: string
+  queue_size: number
+  daily_publish_rate: number
+  queue_days: number | null
+  health_status: 'green' | 'yellow' | 'red'
+  health_note: string | null
+  pending_moderation: number
+  actual_cadence_last_7d: number
+  target_cadence: number
+}
+
+export interface DashboardSummaryResponse {
+  total_published: number
+  total_views: number
+  avg_views_per_video: number
+  publishing_cadence_actual: number
+  publishing_cadence_target: number
+  projects: DashboardProjectSummary[]
+  health: DashboardProjectHealth[]
 }
 
 // --- Invite & Workspace Types ---
@@ -394,7 +473,7 @@ export interface AdaptationData {
 export type LLMModel = 'gpt-4o-mini' | 'gpt-4o'
 export type ImageModel = 'fal-ai/nano-banana-pro' | 'fal-ai/flux-pro/v1.1-ultra' | 'fal-ai/flux-pro/v1.1' | 'fal-ai/ideogram/v3' | 'fal-ai/imagen3'
 export type VideoModel = 'fal-ai/veo3/fast/image-to-video' | 'fal-ai/veo3/image-to-video' | 'fal-ai/veo3.1/reference-to-video' | 'fal-ai/kling-video/v2.1/standard/image-to-video' | 'fal-ai/kling-video/v2.1/pro/image-to-video' | 'fal-ai/minimax/video-01'
-export type GenerationStatus = 'pending' | 'preprocessing' | 'generating_image' | 'generating_video' | 'generating_audio' | 'merging_audio' | 'completed' | 'failed'
+export type GenerationStatus = 'pending' | 'preprocessing' | 'generating_image' | 'generating_video' | 'generating_audio' | 'merging_audio' | 'completed' | 'failed' | 'cancelled'
 
 export interface TemplateSettings {
   id: number

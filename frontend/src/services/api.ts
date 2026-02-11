@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement, DiscoverAudioVariant, AudioLibrarySearchResponse } from '@/types'
+import type { Project, CreateProjectDto, UpdateProjectDto, Video, CreateVideoDto, UpdateVideoDto, ContentVariant, GenerateVariantsResponse, VideoMetrics, CreateVideoMetricsDto, VideoMetricsSummary, MetricsPeriod, ProjectMetricsResponse, DashboardSummaryResponse, Invite, CreateInviteDto, InviteValidation, Workspace, WorkspaceDetail, CreateWorkspaceDto, PaginatedResponse, SocialAccount, TemplateSettings, TemplateSettingsUpdate, Variant, VariantListResponse, CSVUploadResponse, VariantUpdate, VideoTemplate, VideoTemplateCreate, VideoTemplateUpdate, GenerateRequest, Generation, GenerationListResponse, BatchGenerateRequest, BatchGenerateResponse, DiscoverProject, DiscoverProjectListResponse, DiscoverProjectCreate, DiscoverRound, DiscoverSelectionRequest, DiscoverSelectionResponse, DiscoverExtraction, DiscoverCreateTemplateRequest, DiscoverRefinement, DiscoverAudioVariant, AudioLibrarySearchResponse } from '@/types'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -257,6 +257,25 @@ export const metricsApi = {
     api.get<VideoMetricsSummary[]>('/api/metrics/leaderboard', {
       params: { period, sort_by: sortBy, limit }
     }),
+
+  // Get project-level generation metrics (T42)
+  getProjectMetrics: (projectId: number, params?: { period?: string; sort_by?: string }) =>
+    api.get<ProjectMetricsResponse>(`/api/metrics/project/${projectId}/generations`, { params }),
+
+  // Refresh metrics from platform APIs (T44)
+  refreshProjectMetrics: (projectId: number) =>
+    api.post<{
+      status: string
+      project_id: number
+      refreshed_count: number
+      skipped_count: number
+      errors: string[]
+      cooldown_until: string | null
+    }>(`/api/metrics/project/${projectId}/refresh`),
+
+  // Dashboard analytics summary (T48)
+  getDashboardSummary: () =>
+    api.get<DashboardSummaryResponse>('/api/metrics/dashboard-summary'),
 }
 
 // Template Project API
@@ -358,6 +377,11 @@ export const templateApi = {
 
   startBatchGeneration: (projectId: number, data: BatchGenerateRequest) =>
     api.post<BatchGenerateResponse>(`/api/projects/${projectId}/generate/batch`, data),
+
+  cancelBatch: (projectId: number, batchId: string) =>
+    api.post<{ batch_id: string; cancelled_count: number; already_completed: number; already_failed: number; already_cancelled: number }>(
+      `/api/projects/${projectId}/batches/${batchId}/cancel`
+    ),
 }
 
 // Moderation API (Template projects)

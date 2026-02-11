@@ -53,6 +53,12 @@ class ApprovedGeneration(Base):
     # Scheduled slot that triggered this publish (e.g. 2026-02-10 18:00 UTC)
     scheduled_for = Column(DateTime, nullable=True)
 
+    # Post IDs and URLs from platforms (saved after publish)
+    # Format: {"instagram": "abc123", "tiktok": "xyz789"}
+    post_ids = Column(JSON, nullable=True)
+    # Format: {"instagram": "https://...", "tiktok": "https://..."}
+    post_urls = Column(JSON, nullable=True)
+
     # When published (at least one platform succeeded)
     published_at = Column(DateTime, nullable=True)
 
@@ -63,6 +69,7 @@ class ApprovedGeneration(Base):
     # Relationships
     project = relationship("Project", back_populates="approved_generations")
     template_generation = relationship("TemplateGeneration", back_populates="approved_generation")
+    metrics = relationship("VideoMetrics", back_populates="approved_generation", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index('ix_approved_gen_project_status', 'project_id', 'status'),

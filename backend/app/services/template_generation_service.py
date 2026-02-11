@@ -109,6 +109,12 @@ class TemplateGenerationService:
 
         try:
             for step in steps[start_index:]:
+                # Re-read from DB to check for cancellation
+                db.refresh(generation)
+                if generation.status == GenerationStatus.CANCELLED.value:
+                    logger.info(f"Generation {generation.id} cancelled, stopping pipeline")
+                    return generation
+
                 if step == "preprocessing":
                     await self._step_preprocessing(db, generation, settings, variant)
                 elif step == "image_prompt":
@@ -412,7 +418,10 @@ class TemplateGenerationService:
         step: str,
         message: str
     ):
-        """Mark generation as failed."""
+        """Mark generation as failed — but do NOT overwrite cancelled status."""
+        if generation.status == GenerationStatus.CANCELLED.value:
+            logger.info(f"Generation {generation.id} is cancelled, not marking as failed")
+            return
         generation.status = GenerationStatus.FAILED.value
         generation.failed_at_step = step
         generation.error_message = message

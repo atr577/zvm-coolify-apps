@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react'
 import { PipelineFunnel } from './PipelineFunnel'
 import { PublishingScheduleView } from './PublishingScheduleView'
 import { PublishingQueueView } from './PublishingQueueView'
+import { ProjectAnalytics } from './ProjectAnalytics'
 import type { PublishingScheduleResponse, PublishingConfig } from '@/services/api'
 
 interface DashboardScreenProps {
@@ -25,7 +26,7 @@ export function DashboardScreen({
   const [view, setView] = useState<'calendar' | 'queue'>('calendar')
   const [isPauseToggling, setIsPauseToggling] = useState(false)
 
-  const handleFunnelNavigate = (target: 'review' | 'generate' | 'queue' | 'calendar') => {
+  const handleFunnelNavigate = (target: 'review' | 'generate' | 'queue' | 'calendar' | 'analytics') => {
     if (target === 'review') {
       onNavigate('review')
     } else if (target === 'generate') {
@@ -36,6 +37,8 @@ export function DashboardScreen({
     } else if (target === 'calendar') {
       setView('calendar')
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' })
+    } else if (target === 'analytics') {
+      document.getElementById('analytics-section')?.scrollIntoView({ behavior: 'smooth' })
     }
   }
 
@@ -170,6 +173,11 @@ export function DashboardScreen({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Analytics Section */}
+      <div id="analytics-section">
+        <ProjectAnalytics projectId={projectId} />
       </div>
     </div>
   )

@@ -400,7 +400,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           ? 'complete'
           : 'incomplete') as StepStatus,
         summary: editedSettings?.video_model
-          ? `${getModelLabel(editedSettings.video_model)} · ${templatesCount} tmpl`
+          ? `${getModelLabel(editedSettings.video_model)} · ${editedSettings.video_duration}s · ${templatesCount} tmpl`
           : 'not set',
       },
       music: {

@@ -309,6 +309,31 @@ async def publish_approved_generation(
             any_success = True
             logger.info(f"Published to {platform}: {result}")
 
+            # Save post_id and post_url
+            post_id = result.get("post_id")
+            post_url = result.get("post_url")
+            if not item.post_ids:
+                item.post_ids = {}
+            if not item.post_urls:
+                item.post_urls = {}
+            if post_id:
+                item.post_ids = {**item.post_ids, platform: post_id}
+            if post_url:
+                item.post_urls = {**item.post_urls, platform: post_url}
+
+            # Schedule metrics collection (isolated — must not affect publish status)
+            if post_id:
+                try:
+                    from app.core.scheduler import schedule_metrics_for_generation
+                    schedule_metrics_for_generation(
+                        approved_generation_id=item.id,
+                        platform=platform,
+                        post_id=post_id,
+                        published_at=datetime.utcnow()
+                    )
+                except Exception as sched_err:
+                    logger.error(f"Failed to schedule metrics for {platform}: {sched_err}")
+
         except Exception as e:
             error_msg = str(e)
             friendly_error = get_user_friendly_error(error_msg)

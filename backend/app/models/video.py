@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, Boolean, ForeignKey, DateTime, Enum as SQLEnum, Float, select, exists
+from sqlalchemy import Column, Integer, String, Text, JSON, Boolean, ForeignKey, DateTime, Enum as SQLEnum, Float, select, exists, CheckConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 from datetime import datetime
@@ -144,17 +144,20 @@ class MetricsPeriod(str, enum.Enum):
     HOURS_6 = "6h"
     HOURS_24 = "24h"
     DAYS_7 = "7d"
+    LATEST = "latest"  # On-demand refresh snapshot
 
 
 class VideoMetrics(Base):
     """
     Performance metrics snapshot for a video at a specific time period.
     Tracks views, likes, comments, shares for each platform.
+    Links to either Video (Discover/Remix) or ApprovedGeneration (Template).
     """
     __tablename__ = "video_metrics"
 
     id = Column(Integer, primary_key=True, index=True)
-    video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), nullable=True, index=True)
+    approved_generation_id = Column(Integer, ForeignKey("approved_generations.id", ondelete="CASCADE"), nullable=True, index=True)
 
     # Which platform and time period
     platform = Column(String(50), nullable=False)  # instagram, tiktok, youtube
@@ -165,8 +168,11 @@ class VideoMetrics(Base):
     likes = Column(Integer, default=0)
     comments = Column(Integer, default=0)
     shares = Column(Integer, default=0)
+    saves = Column(Integer, default=0)
+    reach = Column(Integer, default=0)
+    avg_watch_time_ms = Column(Integer, nullable=True)  # Reserved for future use
 
-    # Calculated engagement rate (likes + comments + shares) / views * 100
+    # Calculated engagement rate (likes + comments + shares + saves) / views * 100
     engagement_rate = Column(Float, nullable=True)  # stored as percentage (e.g., 5.5 = 5.5%)
 
     # When this snapshot was recorded
@@ -177,6 +183,14 @@ class VideoMetrics(Base):
 
     # Relationships
     video = relationship("Video", back_populates="metrics")
+    approved_generation = relationship("ApprovedGeneration", back_populates="metrics")
+
+    __table_args__ = (
+        CheckConstraint(
+            "video_id IS NOT NULL OR approved_generation_id IS NOT NULL",
+            name="ck_video_metrics_has_parent"
+        ),
+    )
 
     def __repr__(self):
-        return f"<VideoMetrics(video_id={self.video_id}, platform='{self.platform}', period='{self.period.value}')>"
+        return f"<VideoMetrics(id={self.id}, video_id={self.video_id}, approved_generation_id={self.approved_generation_id}, platform='{self.platform}', period='{self.period.value}')>"
