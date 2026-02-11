@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CheckCircle, XCircle, RefreshCw, Loader2 } from 'lucide-react'
+import { formatDate } from '@/utils/date'
 import type { ScheduleSlot } from '@/services/api'
 
 interface ReviewActionsProps {
@@ -8,15 +9,6 @@ interface ReviewActionsProps {
   onRedo: (feedback?: string) => void
   targetSlot: ScheduleSlot | null
   disabled?: boolean
-}
-
-function formatSlotTime(scheduledAt: string): string {
-  const date = new Date(scheduledAt)
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const day = days[date.getDay()]
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  return `${day} ${hours}:${minutes}`
 }
 
 export function ReviewActions({ onApprove, onReject, onRedo, targetSlot, disabled }: ReviewActionsProps) {
@@ -44,7 +36,7 @@ export function ReviewActions({ onApprove, onReject, onRedo, targetSlot, disable
   }
 
   const approveLabel = targetSlot
-    ? `Approve → ${formatSlotTime(targetSlot.scheduled_at)}`
+    ? `Approve → ${formatDate(targetSlot.scheduled_at)}`
     : 'Approve → Queue'
 
   return (

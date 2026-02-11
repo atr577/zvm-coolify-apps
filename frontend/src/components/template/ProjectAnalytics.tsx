@@ -9,6 +9,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react'
 import { metricsApi } from '@/services/api'
+import { formatDate } from '@/utils/date'
 import type {
   ProjectMetricsResponse,
   GenerationMetrics,
@@ -429,7 +430,7 @@ export function ProjectAnalytics({ projectId }: ProjectAnalyticsProps) {
                     </td>
                     <td className="py-2 px-2 text-gray-700">
                       {gen.published_at
-                        ? new Date(gen.published_at).toLocaleDateString()
+                        ? formatDate(gen.published_at, 'date')
                         : '--'}
                     </td>
                     <td className="py-2 px-2">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertCircle } from 'lucide-react'
+import { formatDate } from '@/utils/date'
 import { PipelineFunnel } from './PipelineFunnel'
 import { PublishingScheduleView } from './PublishingScheduleView'
 import { PublishingQueueView } from './PublishingQueueView'
@@ -74,7 +75,7 @@ export function DashboardScreen({
             {schedule && schedule.slots.length > 0 && !config?.is_paused && (
               <p className="text-sm text-gray-600">
                 Next publish:{' '}
-                {new Date(schedule.slots[0]?.scheduled_at).toLocaleString()}
+                {formatDate(schedule.slots[0]?.scheduled_at)}
               </p>
             )}
             {schedule &&

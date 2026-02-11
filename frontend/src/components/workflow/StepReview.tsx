@@ -7,6 +7,7 @@
  * - History of variants
  */
 import { useState } from 'react'
+import { formatDate } from '@/utils/date'
 import {
   CheckCircle,
   RefreshCw,
@@ -303,7 +304,7 @@ export default function StepReview({
                           )}
                         </span>
                         <span className="text-xs text-gray-400">
-                          {new Date(variant.created_at).toLocaleTimeString()}
+                          {formatDate(variant.created_at, 'time')}
                         </span>
                       </div>
                       {variant.feedback && (

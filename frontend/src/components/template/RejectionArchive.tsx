@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Archive, Loader2, AlertCircle } from 'lucide-react'
 import { moderationApi, type RejectionArchiveItem } from '@/services/api'
+import { formatDate } from '@/utils/date'
 
 interface RejectionArchiveProps {
   projectId: number
@@ -126,7 +127,7 @@ export function RejectionArchive({ projectId }: RejectionArchiveProps) {
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className="text-sm text-gray-500">
-                    {new Date(item.rejected_at).toLocaleDateString()}
+                    {formatDate(item.rejected_at, 'date')}
                   </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">

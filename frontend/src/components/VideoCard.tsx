@@ -1,5 +1,6 @@
 import { Video } from '@/types'
 import { Clock, CheckCircle, XCircle, Film } from 'lucide-react'
+import { formatDate } from '@/utils/date'
 
 interface VideoCardProps {
   video: Video
@@ -53,7 +54,7 @@ export default function VideoCard({ video, onClick }: VideoCardProps) {
           <div className="flex items-center space-x-2 mt-1 text-xs text-gray-500">
             <span>Step: {getStepLabel(video.current_step)}</span>
             <span>•</span>
-            <span>{new Date(video.created_at).toLocaleDateString()}</span>
+            <span>{formatDate(video.created_at, 'date')}</span>
           </div>
         </div>
       </div>

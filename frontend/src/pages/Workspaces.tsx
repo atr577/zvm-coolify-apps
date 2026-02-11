@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Users, Plus, Trash2, Edit2, Loader2, AlertCircle, Crown, UserMinus, ChevronRight, X, Copy, Check, Link2 } from 'lucide-react'
 import { workspacesApi } from '@/services/api'
+import { formatDate } from '@/utils/date'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Workspace, WorkspaceDetail, Invite } from '@/types'
 import { getErrorMessage } from '@/types'
@@ -228,23 +229,6 @@ export default function Workspaces() {
     setTimeout(() => setCopiedInviteId(null), 2000)
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  }
-
-  const formatDateTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -425,7 +409,7 @@ export default function Workspaces() {
                       </div>
                     )}
                     <p className="text-sm text-gray-500 mt-1">
-                      Created {formatDate(selectedWorkspace.created_at)}
+                      Created {formatDate(selectedWorkspace.created_at, 'date')}
                     </p>
                   </div>
                   {selectedWorkspace.is_owner && editingId !== selectedWorkspace.id && (
@@ -613,7 +597,7 @@ export default function Workspaces() {
                                     )}
                                   </div>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    Expires {formatDateTime(invite.expires_at)}
+                                    Expires {formatDate(invite.expires_at)}
                                   </p>
                                 </div>
                                 <div className="flex items-center space-x-1 ml-2">
@@ -668,9 +652,9 @@ export default function Workspaces() {
                                   </div>
                                   <p className="text-xs text-gray-400 mt-1">
                                     {invite.used_at ? (
-                                      <span className="text-green-600">Used {formatDateTime(invite.used_at)}</span>
+                                      <span className="text-green-600">Used {formatDate(invite.used_at)}</span>
                                     ) : (
-                                      <span className="text-red-500">Expired {formatDateTime(invite.expires_at)}</span>
+                                      <span className="text-red-500">Expired {formatDate(invite.expires_at)}</span>
                                     )}
                                   </p>
                                 </div>

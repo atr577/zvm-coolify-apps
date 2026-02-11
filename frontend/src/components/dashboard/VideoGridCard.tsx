@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle, Clock, Eye, Heart, Image, MessageCircle, Share2 } from 'lucide-react'
 import { InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PlatformIcons'
 import { getImageUrl } from '@/utils/video'
+import { formatDate } from '@/utils/date'
 import type { Video, StepType, Project } from '@/types'
 
 // Derive platforms from social_accounts (mirrors backend get_project_platforms)
@@ -24,13 +25,6 @@ const STEP_LABELS: Record<StepType, string> = {
   image: 'Image',
   video: 'Video',
   audio: 'Audio',
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  const datePart = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-  const timePart = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false })
-  return `${datePart} ${timePart}`
 }
 
 function formatNumber(num: number): string {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { templateApi } from '@/services/api'
+import { formatDate } from '@/utils/date'
 import type { Generation } from '@/types'
 import VideoPreview from '@/components/video/VideoPreview'
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
@@ -108,7 +109,7 @@ function GenerationCard({
           </span>
           <span className="text-xs text-gray-500">#{gen.id}</span>
           <span className="text-xs text-gray-400">
-            {new Date(gen.created_at).toLocaleString()}
+            {formatDate(gen.created_at)}
           </span>
         </div>
 
@@ -236,7 +237,7 @@ function BatchGroupView({
         <div className="flex items-center gap-3">
           <span className={`text-sm ${status.color}`}>{status.label}</span>
           <span className="text-xs text-gray-400">
-            {new Date(group.created_at).toLocaleString()}
+            {formatDate(group.created_at)}
           </span>
         </div>
       </button>

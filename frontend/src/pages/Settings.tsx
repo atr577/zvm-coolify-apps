@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link2, Users, User, Trash2, Copy, Loader2, AlertCircle, Plus, Check } from 'lucide-react'
 import { invitesApi, workspacesApi } from '@/services/api'
+import { formatDate } from '@/utils/date'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Invite, Workspace, InviteType } from '@/types'
 import { getErrorMessage } from '@/types'
@@ -103,16 +104,6 @@ export default function Settings() {
     }
     setCopiedId(invite.id)
     setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
   }
 
   const filteredInvites = invites.filter(inv => inv.type === activeTab)
