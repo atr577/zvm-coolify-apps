@@ -626,6 +626,19 @@ export const publishingScheduleApi = {
   // Get pipeline funnel stats
   getPipelineStats: (projectId: number) =>
     api.get<PipelineStats>(`/api/projects/${projectId}/pipeline-stats`),
+
+  // Return queue item to moderation
+  returnToModeration: (projectId: number, itemId: number) =>
+    api.post<{ returned_generation_id: number; message: string }>(
+      `/api/projects/${projectId}/publishing-queue/${itemId}/return-to-moderation`
+    ),
+
+  // Reorder queue items
+  reorderQueue: (projectId: number, itemIds: number[]) =>
+    api.put<{ reordered_count: number }>(
+      `/api/projects/${projectId}/publishing-queue/reorder`,
+      { item_ids: itemIds }
+    ),
 }
 
 // Discover API

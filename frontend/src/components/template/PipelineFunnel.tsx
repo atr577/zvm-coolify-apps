@@ -57,7 +57,7 @@ export function PipelineFunnel({ projectId, onNavigate }: PipelineFunnelProps) {
       label: 'Approved',
       count: stats.approved_count,
       icon: CheckCircle,
-      onClick: () => onNavigate('queue'),
+      onClick: () => onNavigate('calendar'),
       highlight: false,
     },
     {

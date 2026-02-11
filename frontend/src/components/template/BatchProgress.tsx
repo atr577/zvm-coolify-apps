@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { templateApi } from '@/services/api'
 import { formatDate, formatRelativeDate } from '@/utils/date'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { Generation } from '@/types'
 import {
   Loader2, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
@@ -79,54 +80,6 @@ const MODERATION_LABEL: Record<string, { text: string; className: string }> = {
   regenerated: { text: 'Regen', className: 'text-orange-500' },
 }
 
-function CancelConfirmModal({
-  batch,
-  onConfirm,
-  onClose,
-  cancelling,
-}: {
-  batch: BatchInfo
-  onConfirm: () => void
-  onClose: () => void
-  cancelling: boolean
-}) {
-  const completed = batch.generations.filter(g => g.status === 'completed').length
-  const willCancel = batch.generations.filter(g => IN_PROGRESS_STATUSES.includes(g.status)).length
-  const total = batch.generations.length
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-5">
-        <h3 className="text-base font-semibold text-gray-900 mb-2">Cancel batch?</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          {completed > 0
-            ? `${completed} of ${total} videos are ready and will be kept. `
-            : ''}
-          {willCancel > 0
-            ? `${willCancel} in progress or pending will be cancelled.`
-            : 'All videos have already finished.'}
-        </p>
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={cancelling}
-            className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition disabled:opacity-50"
-          >
-            Keep running
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={cancelling}
-            className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md transition disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {cancelling && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Cancel batch
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function BatchHistoryAccordion({ batch }: { batch: BatchInfo }) {
   const [open, setOpen] = useState(false)
@@ -348,11 +301,18 @@ function BatchProgressBar({
       </div>
 
       {showCancelModal && (
-        <CancelConfirmModal
-          batch={batch}
+        <ConfirmDialog
+          title="Cancel batch?"
+          message={
+            (completed > 0 ? `${completed} of ${total} videos are ready and will be kept. ` : '') +
+            (inProgress > 0 ? `${inProgress} in progress or pending will be cancelled.` : 'All videos have already finished.')
+          }
+          confirmLabel="Cancel batch"
+          cancelLabel="Keep running"
+          variant="danger"
+          loading={cancelling}
           onConfirm={handleCancel}
           onClose={() => setShowCancelModal(false)}
-          cancelling={cancelling}
         />
       )}
     </>

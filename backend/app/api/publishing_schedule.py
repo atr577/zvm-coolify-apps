@@ -32,6 +32,9 @@ from app.schemas.publishing import (
     ScheduleSlotItem,
     ScheduleWarning,
     PipelineStatsResponse,
+    ReturnToModerationResponse,
+    ReorderQueueRequest,
+    ReorderQueueResponse,
 )
 
 from app.utils.urls import get_local_url
@@ -230,6 +233,98 @@ async def get_publishing_queue(
         ))
 
     return PublishingQueueResponse(items=response_items, total=len(response_items))
+
+
+# CRITICAL: reorder must be registered BEFORE {item_id} routes to avoid FastAPI path collision
+@router.put("/projects/{project_id}/publishing-queue/reorder", response_model=ReorderQueueResponse, tags=["publishing-schedule"])
+async def reorder_queue(
+    project_id: int,
+    request: ReorderQueueRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Reorder publishing queue items."""
+    project = get_template_project(db, project_id, current_user)
+
+    # Get all approved items
+    approved_items = db.query(ApprovedGeneration).filter(
+        ApprovedGeneration.project_id == project_id,
+        ApprovedGeneration.status == "approved"
+    ).all()
+
+    approved_ids = {item.id for item in approved_items}
+    request_ids = set(request.item_ids)
+
+    if len(request.item_ids) != len(approved_ids) or approved_ids != request_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="item_ids must contain exactly the approved queue items"
+        )
+
+    # Update positions atomically
+    for new_position, item_id in enumerate(request.item_ids, start=1):
+        db.query(ApprovedGeneration).filter(
+            ApprovedGeneration.id == item_id,
+            ApprovedGeneration.project_id == project_id,
+            ApprovedGeneration.status == "approved"
+        ).update(
+            {ApprovedGeneration.position: new_position},
+            synchronize_session=False
+        )
+
+    db.commit()
+    logger.info(f"Reordered {len(request.item_ids)} queue items for project {project_id}")
+
+    return ReorderQueueResponse(reordered_count=len(request.item_ids))
+
+
+@router.post("/projects/{project_id}/publishing-queue/{item_id}/return-to-moderation", response_model=ReturnToModerationResponse, tags=["publishing-schedule"])
+async def return_to_moderation(
+    project_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Return a queue item back to moderation for re-review."""
+    project = get_template_project(db, project_id, current_user)
+
+    item = db.query(ApprovedGeneration).options(
+        joinedload(ApprovedGeneration.template_generation)
+    ).filter(
+        ApprovedGeneration.id == item_id,
+        ApprovedGeneration.project_id == project_id
+    ).first()
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+
+    if item.status != "approved":
+        raise HTTPException(status_code=400, detail="Can only return approved items to moderation")
+
+    generation_id = item.template_generation_id
+    deleted_position = item.position
+
+    # Sync metadata back to TemplateGeneration so edits aren't lost
+    if item.publishing_metadata and item.template_generation:
+        item.template_generation.publishing_metadata = item.publishing_metadata
+
+    # Delete ApprovedGeneration record
+    db.delete(item)
+
+    # Reorder remaining items
+    db.query(ApprovedGeneration).filter(
+        ApprovedGeneration.project_id == project_id,
+        ApprovedGeneration.status == "approved",
+        ApprovedGeneration.position > deleted_position
+    ).update(
+        {ApprovedGeneration.position: ApprovedGeneration.position - 1},
+        synchronize_session=False
+    )
+
+    db.commit()
+    logger.info(f"Returned queue item {item_id} (gen {generation_id}) to moderation for project {project_id}")
+
+    return ReturnToModerationResponse(returned_generation_id=generation_id)
 
 
 @router.put("/projects/{project_id}/publishing-queue/{item_id}", response_model=PublishingQueueItemResponse, tags=["publishing-schedule"])

@@ -177,6 +177,28 @@ class PublishingScheduleResponse(BaseModel):
     warnings: List[ScheduleWarning] = Field(default_factory=list)
 
 
+# --- Queue Management (T51) ---
+
+class ReturnToModerationResponse(BaseModel):
+    """Response for return-to-moderation action."""
+    returned_generation_id: int
+    message: str = "Returned to moderation queue"
+
+
+class ReorderQueueRequest(BaseModel):
+    """Request to reorder publishing queue."""
+    item_ids: List[int] = Field(
+        ...,
+        min_length=1,
+        description="Ordered list of approved queue item IDs"
+    )
+
+
+class ReorderQueueResponse(BaseModel):
+    """Response for queue reorder."""
+    reordered_count: int
+
+
 # --- Pipeline Stats ---
 
 class PipelineStatsResponse(BaseModel):

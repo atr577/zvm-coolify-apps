@@ -3,7 +3,6 @@ import { AlertCircle } from 'lucide-react'
 import { formatDate } from '@/utils/date'
 import { PipelineFunnel } from './PipelineFunnel'
 import { PublishingScheduleView } from './PublishingScheduleView'
-import { PublishingQueueView } from './PublishingQueueView'
 import { ProjectAnalytics } from './ProjectAnalytics'
 import type { PublishingScheduleResponse, PublishingConfig } from '@/services/api'
 
@@ -24,7 +23,6 @@ export function DashboardScreen({
   onRefresh,
   onTogglePause,
 }: DashboardScreenProps) {
-  const [view, setView] = useState<'calendar' | 'queue'>('calendar')
   const [isPauseToggling, setIsPauseToggling] = useState(false)
 
   const handleFunnelNavigate = (target: 'review' | 'generate' | 'queue' | 'calendar' | 'analytics') => {
@@ -32,11 +30,7 @@ export function DashboardScreen({
       onNavigate('review')
     } else if (target === 'generate') {
       onNavigate('generate')
-    } else if (target === 'queue') {
-      setView('queue')
-      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' })
-    } else if (target === 'calendar') {
-      setView('calendar')
+    } else if (target === 'queue' || target === 'calendar') {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' })
     } else if (target === 'analytics') {
       document.getElementById('analytics-section')?.scrollIntoView({ behavior: 'smooth' })
@@ -129,36 +123,12 @@ export function DashboardScreen({
               </label>
             )}
 
-            {/* Calendar/Queue Toggle */}
-            <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setView('calendar')}
-                className={`px-4 py-1 text-sm font-medium rounded-md transition ${
-                  view === 'calendar'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Calendar
-              </button>
-              <button
-                onClick={() => setView('queue')}
-                className={`px-4 py-1 text-sm font-medium rounded-md transition ${
-                  view === 'queue'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Queue
-              </button>
-            </div>
           </div>
         </div>
 
-        {view === 'calendar' && schedule && (
-          <PublishingScheduleView schedule={schedule} onRefresh={onRefresh} />
+        {schedule && (
+          <PublishingScheduleView schedule={schedule} projectId={projectId} onRefresh={onRefresh} />
         )}
-        {view === 'queue' && <PublishingQueueView projectId={projectId} onRefresh={onRefresh} />}
 
         {!isConfigured && (
           <div className="bg-white rounded-lg border p-8 text-center">

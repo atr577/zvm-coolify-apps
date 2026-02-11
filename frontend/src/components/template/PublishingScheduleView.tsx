@@ -1,11 +1,15 @@
 import { useState } from 'react'
-import { Calendar, CheckCircle, XCircle, AlertCircle, Loader2, X, Play } from 'lucide-react'
+import { Calendar, CheckCircle, XCircle, AlertCircle, Loader2, X, Play, Undo2 } from 'lucide-react'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import type { PublishingScheduleResponse, ScheduleSlot } from '@/services/api'
+import { publishingScheduleApi } from '@/services/api'
 import { formatDate } from '@/utils/date'
 import VideoPreview from '@/components/video/VideoPreview'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 interface PublishingScheduleViewProps {
   schedule: PublishingScheduleResponse
+  projectId: number
   onRefresh: () => void
 }
 
@@ -27,11 +31,29 @@ function getStatusBadge(status: string) {
 interface SlotCardProps {
   slot: ScheduleSlot
   onClick?: () => void
+  onReturnToModeration?: () => void
 }
 
-function SlotCard({ slot, onClick }: SlotCardProps) {
+function SlotCard({ slot, onClick, onReturnToModeration }: SlotCardProps) {
+  const [returning, setReturning] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const hasItem = slot.item !== null
   const isClickable = hasItem && onClick
+
+  const handleReturnClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowConfirm(true)
+  }
+
+  const handleReturnConfirm = async () => {
+    try {
+      setReturning(true)
+      onReturnToModeration?.()
+    } finally {
+      setReturning(false)
+      setShowConfirm(false)
+    }
+  }
 
   return (
     <div
@@ -70,6 +92,22 @@ function SlotCard({ slot, onClick }: SlotCardProps) {
             {getStatusBadge(slot.item!.status)}
           </div>
         )}
+
+        {/* Return to moderation button */}
+        {hasItem && slot.item!.status === 'approved' && onReturnToModeration && (
+          <button
+            onClick={handleReturnClick}
+            disabled={returning}
+            className="absolute top-2 left-2 p-1.5 bg-white/90 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-100 shadow"
+            title="Return to moderation"
+          >
+            {returning ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />
+            ) : (
+              <Undo2 className="w-3.5 h-3.5 text-orange-600" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* Info */}
@@ -92,6 +130,18 @@ function SlotCard({ slot, onClick }: SlotCardProps) {
           <p className="text-xs text-gray-400">Пустой слот</p>
         )}
       </div>
+
+      {showConfirm && (
+        <ConfirmDialog
+          title="Return to moderation?"
+          message="This video will be removed from the schedule and returned to moderation for re-review."
+          confirmLabel="Return"
+          variant="warning"
+          loading={returning}
+          onConfirm={handleReturnConfirm}
+          onClose={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   )
 }
@@ -190,8 +240,43 @@ function VideoPreviewModal({ slot, onClose }: VideoPreviewModalProps) {
   )
 }
 
-export function PublishingScheduleView({ schedule, onRefresh }: PublishingScheduleViewProps) {
+export function PublishingScheduleView({ schedule, projectId, onRefresh }: PublishingScheduleViewProps) {
   const [selectedSlot, setSelectedSlot] = useState<ScheduleSlot | null>(null)
+
+  const filledSlots = schedule.slots.filter(s => s.item)
+  const filledItemIds = filledSlots.map(s => s.item!.id)
+
+  const handleReturnToModeration = async (itemId: number) => {
+    try {
+      await publishingScheduleApi.returnToModeration(projectId, itemId)
+      onRefresh()
+    } catch (err) {
+      console.error('Failed to return to moderation:', err)
+      alert('Failed to return to moderation')
+    }
+  }
+
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination) return
+    const src = result.source.index
+    const dst = result.destination.index
+    if (src === dst) return
+
+    const filledCount = filledSlots.length
+    if (src >= filledCount || dst >= filledCount) return
+
+    const newIds = [...filledItemIds]
+    const [moved] = newIds.splice(src, 1)
+    newIds.splice(dst, 0, moved)
+
+    try {
+      await publishingScheduleApi.reorderQueue(projectId, newIds)
+      onRefresh()
+    } catch (err) {
+      console.error('Failed to reorder:', err)
+      onRefresh()
+    }
+  }
 
   if (schedule.slots.length === 0) {
     return (
@@ -205,7 +290,7 @@ export function PublishingScheduleView({ schedule, onRefresh }: PublishingSchedu
     )
   }
 
-  const filledSlots = schedule.slots.filter(s => s.item).length
+  const filledCount = schedule.slots.filter(s => s.item).length
   const totalSlots = schedule.slots.length
 
   return (
@@ -215,7 +300,7 @@ export function PublishingScheduleView({ schedule, onRefresh }: PublishingSchedu
           <div>
             <h3 className="text-lg font-medium text-gray-900">Расписание</h3>
             <p className="text-sm text-gray-500">
-              {filledSlots} из {totalSlots} слотов заполнено
+              {filledCount} из {totalSlots} слотов заполнено
             </p>
           </div>
           <button
@@ -226,15 +311,46 @@ export function PublishingScheduleView({ schedule, onRefresh }: PublishingSchedu
           </button>
         </div>
 
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
-          {schedule.slots.map((slot, idx) => (
-            <SlotCard
-              key={idx}
-              slot={slot}
-              onClick={slot.item ? () => setSelectedSlot(slot) : undefined}
-            />
-          ))}
-        </div>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="schedule-grid" direction="horizontal">
+            {(provided) => (
+              <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className="flex flex-wrap gap-3"
+              >
+                {schedule.slots.map((slot, idx) => (
+                  <Draggable
+                    key={`slot-${idx}`}
+                    draggableId={`slot-${idx}`}
+                    index={idx}
+                    isDragDisabled={!slot.item || slot.item.status !== 'approved'}
+                  >
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        className={`w-[calc(33.333%-0.5rem)] sm:w-[calc(25%-0.5625rem)] md:w-[calc(20%-0.6rem)] lg:w-[calc(16.666%-0.625rem)] xl:w-[calc(14.285%-0.643rem)] ${snapshot.isDragging ? 'shadow-xl rounded-lg z-10' : ''}`}
+                      >
+                        <SlotCard
+                          slot={slot}
+                          onClick={slot.item ? () => setSelectedSlot(slot) : undefined}
+                          onReturnToModeration={
+                            slot.item?.status === 'approved'
+                              ? () => handleReturnToModeration(slot.item!.id)
+                              : undefined
+                          }
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </div>
 
       {/* Video Preview Modal */}
