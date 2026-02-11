@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Loader2, Trash2, Edit2, Save, X, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
 import { publishingScheduleApi, type PublishingQueueItem, type PublishingQueueResponse } from '@/services/api'
+import { formatDate } from '@/utils/date'
 
 interface PublishingQueueViewProps {
   projectId: number
@@ -241,9 +242,9 @@ function QueueItemCard({ item, projectId, onDelete, onUpdate }: QueueItemCardPro
 
           {/* Timestamps */}
           <div className="text-xs text-gray-400 mt-2">
-            Approved: {new Date(item.approved_at).toLocaleString()}
+            Approved: {formatDate(item.approved_at)}
             {item.published_at && (
-              <> • Published: {new Date(item.published_at).toLocaleString()}</>
+              <> • Published: {formatDate(item.published_at)}</>
             )}
           </div>
         </div>

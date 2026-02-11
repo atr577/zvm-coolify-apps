@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { templateApi } from '@/services/api'
+import { formatDate, formatRelativeDate } from '@/utils/date'
 import type { Generation } from '@/types'
 import {
   Loader2, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
@@ -49,22 +50,6 @@ function isBatchActive(batch: BatchInfo): boolean {
   return batch.generations.some(g =>
     IN_PROGRESS_STATUSES.includes(g.status) || g.status === 'failed'
   )
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  const diffHr = Math.floor(diffMs / 3600000)
-  const diffDay = Math.floor(diffMs / 86400000)
-
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  if (diffHr < 24) return `${diffHr}h ago`
-  if (diffDay === 1) return 'yesterday'
-  if (diffDay < 7) return `${diffDay}d ago`
-  return date.toLocaleDateString()
 }
 
 function getModerationStats(generations: Generation[]) {
@@ -315,7 +300,7 @@ function BatchProgressBar({
               </button>
             )}
             <span className="text-xs text-gray-400">
-              {new Date(batch.created_at).toLocaleString()}
+              {formatDate(batch.created_at)}
             </span>
           </div>
         </div>

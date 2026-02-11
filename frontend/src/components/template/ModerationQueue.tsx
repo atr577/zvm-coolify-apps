@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
 import { moderationApi, type ModerationQueueItem } from '@/services/api'
 import VideoPreview from '@/components/video/VideoPreview'
+import { formatDate } from '@/utils/date'
 
 interface ModerationQueueProps {
   projectId: number
@@ -151,7 +152,7 @@ export function ModerationQueue({ projectId, onApproved }: ModerationQueueProps)
                 </span>
                 <span className="text-xs text-gray-500">#{item.id}</span>
                 <span className="text-xs text-gray-400">
-                  {item.completed_at ? new Date(item.completed_at).toLocaleString() : 'Processing'}
+                  {item.completed_at ? formatDate(item.completed_at) : 'Processing'}
                 </span>
               </div>
 

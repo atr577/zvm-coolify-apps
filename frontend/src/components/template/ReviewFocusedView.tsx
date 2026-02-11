@@ -2,6 +2,7 @@ import VideoPreview from '@/components/video/VideoPreview'
 import { ReviewActions } from './ReviewActions'
 import { ReviewMetadata } from './ReviewMetadata'
 import { Calendar, ExternalLink } from 'lucide-react'
+import { formatDate } from '@/utils/date'
 import type { ModerationQueueItem, PlatformMetadata, ScheduleSlot } from '@/services/api'
 
 interface ReviewFocusedViewProps {
@@ -88,16 +89,7 @@ export function ReviewFocusedView({
             <span className="text-gray-700">
               Publish to:{' '}
               <span className="font-medium">
-                {new Date(targetSlot.scheduled_at).toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}{' '}
-                {new Date(targetSlot.scheduled_at).toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false,
-                })}
+                {formatDate(targetSlot.scheduled_at)}
               </span>
               {slotsInfo && <span className="text-gray-400 ml-1">({slotsInfo})</span>}
             </span>

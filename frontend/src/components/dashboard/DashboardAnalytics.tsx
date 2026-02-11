@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Film, Eye, TrendingUp, Calendar, AlertCircle } from 'lucide-react'
 import { metricsApi } from '@/services/api'
+import { formatRelativeDate } from '@/utils/date'
 import type { DashboardSummaryResponse } from '@/types'
 
 interface DashboardAnalyticsProps {
@@ -11,18 +12,6 @@ function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -198,7 +187,7 @@ export default function DashboardAnalytics({ onSelectProject }: DashboardAnalyti
                   <td className="px-4 py-3 text-right text-gray-700">{formatNumber(p.total_views)}</td>
                   <td className="px-4 py-3 text-right text-gray-700">{formatNumber(p.avg_views_per_video)}</td>
                   <td className="px-4 py-3 text-right text-gray-700">{p.best_video_views > 0 ? formatNumber(p.best_video_views) : '—'}</td>
-                  <td className="px-4 py-3 text-right text-gray-500 text-sm">{formatDate(p.last_published_at)}</td>
+                  <td className="px-4 py-3 text-right text-gray-500 text-sm">{p.last_published_at ? formatRelativeDate(p.last_published_at) : '—'}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,28 +1,12 @@
 import { useState } from 'react'
 import { Calendar, CheckCircle, XCircle, AlertCircle, Loader2, X, Play } from 'lucide-react'
 import type { PublishingScheduleResponse, ScheduleSlot } from '@/services/api'
+import { formatDate } from '@/utils/date'
 import VideoPreview from '@/components/video/VideoPreview'
 
 interface PublishingScheduleViewProps {
   schedule: PublishingScheduleResponse
   onRefresh: () => void
-}
-
-function formatSlotDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('ru-RU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short'
-  })
-}
-
-function formatSlotTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
 }
 
 function getStatusBadge(status: string) {
@@ -91,8 +75,8 @@ function SlotCard({ slot, onClick }: SlotCardProps) {
       {/* Info */}
       <div className="p-3 space-y-1">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-gray-900">{formatSlotDate(slot.scheduled_at)}</span>
-          <span className="text-gray-500">{formatSlotTime(slot.scheduled_at)}</span>
+          <span className="font-medium text-gray-900">{formatDate(slot.scheduled_at, 'weekday')}</span>
+          <span className="text-gray-500">{formatDate(slot.scheduled_at, 'time')}</span>
         </div>
 
         {hasItem ? (
@@ -137,7 +121,7 @@ function VideoPreviewModal({ slot, onClose }: VideoPreviewModalProps) {
         <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <div>
             <h3 className="font-semibold text-gray-900">
-              {formatSlotDate(slot.scheduled_at)} в {formatSlotTime(slot.scheduled_at)}
+              {formatDate(slot.scheduled_at)}
             </h3>
             <p className="text-sm text-gray-500">
               Запланированная публикация
