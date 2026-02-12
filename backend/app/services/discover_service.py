@@ -12,6 +12,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
+from app.models.user import WorkspaceMember
+
 from app.models.discover import (
     DiscoverProject, DiscoverRound, DiscoverItem, DiscoverExtraction,
     DiscoverRefinement, DiscoverAudioVariant,
@@ -78,10 +80,18 @@ class DiscoverService:
         logger.info(f"Created discover project {project.id}: {name}")
         return project
 
+    def _get_user_workspace_ids(self, db: Session, user_id: int) -> list[int]:
+        """Get all workspace IDs the user is a member of."""
+        memberships = db.query(WorkspaceMember).filter(
+            WorkspaceMember.user_id == user_id
+        ).all()
+        return [m.workspace_id for m in memberships]
+
     async def get_project(
         self, db: Session, project_id: int, user_id: int
     ) -> DiscoverProject:
         """Get project with eager-loaded rounds, items, and extraction."""
+        workspace_ids = self._get_user_workspace_ids(db, user_id)
         project = (
             db.query(DiscoverProject)
             .options(
@@ -92,7 +102,7 @@ class DiscoverService:
             )
             .filter(
                 DiscoverProject.id == project_id,
-                DiscoverProject.user_id == user_id,
+                DiscoverProject.workspace_id.in_(workspace_ids),
             )
             .first()
         )
@@ -105,9 +115,10 @@ class DiscoverService:
         workspace_id: int | None = None,
         status: str | None = None,
     ) -> list[DiscoverProject]:
-        """List discover projects, optionally filtered by workspace."""
+        """List discover projects visible to user via workspace membership."""
+        workspace_ids = self._get_user_workspace_ids(db, user_id)
         query = db.query(DiscoverProject).filter(
-            DiscoverProject.user_id == user_id,
+            DiscoverProject.workspace_id.in_(workspace_ids),
         )
         if workspace_id is not None:
             query = query.filter(DiscoverProject.workspace_id == workspace_id)

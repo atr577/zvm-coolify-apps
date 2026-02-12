@@ -28,6 +28,8 @@ export const VIDEO_MODELS: { value: VideoModel; label: string }[] = [
   { value: 'fal-ai/veo3/fast/image-to-video', label: 'Veo3 Fast' },
   { value: 'fal-ai/veo3/image-to-video', label: 'Veo3' },
   { value: 'fal-ai/veo3.1/reference-to-video', label: 'Veo3.1 Reference' },
+  { value: 'fal-ai/kling-video/v3/standard/image-to-video', label: 'Kling v3 Standard' },
+  { value: 'fal-ai/kling-video/v3/pro/image-to-video', label: 'Kling v3 Pro' },
   { value: 'fal-ai/kling-video/v2.1/standard/image-to-video', label: 'Kling v2.1 Standard' },
   { value: 'fal-ai/kling-video/v2.1/pro/image-to-video', label: 'Kling v2.1 Pro' },
   { value: 'fal-ai/minimax/video-01', label: 'Minimax Video-01' },

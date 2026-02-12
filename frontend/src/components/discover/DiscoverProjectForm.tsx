@@ -23,7 +23,10 @@ interface DiscoverProjectFormProps {
 export function DiscoverProjectForm({ workspaces, onSubmit, onCancel, isLoading }: DiscoverProjectFormProps) {
   const [name, setName] = useState('')
   const [concept, setConcept] = useState('')
-  const [workspaceId, setWorkspaceId] = useState<number>(workspaces?.[0]?.id || 0)
+  const [workspaceId, setWorkspaceId] = useState<number>(() => {
+    const nonOwned = workspaces?.find(w => !w.is_owner)
+    return nonOwned?.id || workspaces?.[0]?.id || 0
+  })
   const [imageModel, setImageModel] = useState('fal-ai/nano-banana-pro')
   const [videoModel, setVideoModel] = useState('fal-ai/veo3/fast/image-to-video')
   const [aspectRatio, setAspectRatio] = useState('9:16')

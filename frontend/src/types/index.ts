@@ -472,7 +472,7 @@ export interface AdaptationData {
 
 export type LLMModel = 'gpt-4o-mini' | 'gpt-4o'
 export type ImageModel = 'fal-ai/nano-banana-pro' | 'fal-ai/flux-pro/v1.1-ultra' | 'fal-ai/flux-pro/v1.1' | 'fal-ai/ideogram/v3' | 'fal-ai/imagen3'
-export type VideoModel = 'fal-ai/veo3/fast/image-to-video' | 'fal-ai/veo3/image-to-video' | 'fal-ai/veo3.1/reference-to-video' | 'fal-ai/kling-video/v2.1/standard/image-to-video' | 'fal-ai/kling-video/v2.1/pro/image-to-video' | 'fal-ai/minimax/video-01'
+export type VideoModel = 'fal-ai/veo3/fast/image-to-video' | 'fal-ai/veo3/image-to-video' | 'fal-ai/veo3.1/reference-to-video' | 'fal-ai/kling-video/v2.1/standard/image-to-video' | 'fal-ai/kling-video/v2.1/pro/image-to-video' | 'fal-ai/kling-video/v3/standard/image-to-video' | 'fal-ai/kling-video/v3/pro/image-to-video' | 'fal-ai/minimax/video-01'
 export type GenerationStatus = 'pending' | 'preprocessing' | 'generating_image' | 'generating_video' | 'generating_audio' | 'merging_audio' | 'completed' | 'failed' | 'cancelled'
 
 export interface TemplateSettings {
