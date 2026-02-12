@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { Workspace } from '@/types'
+import { IMAGE_MODELS, VIDEO_MODELS, getDurationOptions, getDefaultDuration } from '@/constants/models'
 
 export interface DiscoverProjectFormData {
   name: string
@@ -9,6 +10,7 @@ export interface DiscoverProjectFormData {
   image_model: string
   video_model: string
   image_aspect_ratio: string
+  video_duration: string
 }
 
 interface DiscoverProjectFormProps {
@@ -22,9 +24,17 @@ export function DiscoverProjectForm({ workspaces, onSubmit, onCancel, isLoading 
   const [name, setName] = useState('')
   const [concept, setConcept] = useState('')
   const [workspaceId, setWorkspaceId] = useState<number>(workspaces?.[0]?.id || 0)
-  const [imageModel] = useState('fal-ai/flux-pro/v1.1')
-  const [videoModel] = useState('fal-ai/veo3/fast/image-to-video')
+  const [imageModel, setImageModel] = useState('fal-ai/nano-banana-pro')
+  const [videoModel, setVideoModel] = useState('fal-ai/veo3/fast/image-to-video')
   const [aspectRatio, setAspectRatio] = useState('9:16')
+  const [videoDuration, setVideoDuration] = useState(() => getDefaultDuration('fal-ai/veo3/fast/image-to-video'))
+
+  const durationOptions = getDurationOptions(videoModel)
+
+  const handleVideoModelChange = (model: string) => {
+    setVideoModel(model)
+    setVideoDuration(getDefaultDuration(model))
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,8 +46,16 @@ export function DiscoverProjectForm({ workspaces, onSubmit, onCancel, isLoading 
       image_model: imageModel,
       video_model: videoModel,
       image_aspect_ratio: aspectRatio,
+      video_duration: videoDuration,
     })
   }
+
+  const pillClass = (active: boolean) =>
+    `px-3 py-1.5 text-sm rounded-lg border transition ${
+      active
+        ? 'border-purple-500 bg-purple-50 text-purple-700'
+        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+    }`
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -85,24 +103,72 @@ export function DiscoverProjectForm({ workspaces, onSubmit, onCancel, isLoading 
         <p className="text-xs text-gray-500 mt-1">Min 10 characters. Be as specific as possible.</p>
       </div>
 
-      {/* Aspect ratio */}
+      {/* Image Model */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Aspect Ratio</label>
-        <div className="flex gap-2">
-          {['9:16', '16:9', '1:1'].map(ratio => (
+        <label className="block text-sm font-medium text-gray-700 mb-1">Image Model</label>
+        <div className="flex flex-wrap gap-2">
+          {IMAGE_MODELS.map(m => (
             <button
-              key={ratio}
+              key={m.value}
               type="button"
-              onClick={() => setAspectRatio(ratio)}
-              className={`px-4 py-2 text-sm rounded-lg border transition ${
-                aspectRatio === ratio
-                  ? 'border-purple-500 bg-purple-50 text-purple-700'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-              }`}
+              onClick={() => setImageModel(m.value)}
+              className={pillClass(imageModel === m.value)}
             >
-              {ratio}
+              {m.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Video Model */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Video Model</label>
+        <div className="flex flex-wrap gap-2">
+          {VIDEO_MODELS.map(m => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => handleVideoModelChange(m.value)}
+              className={pillClass(videoModel === m.value)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Aspect Ratio + Duration — side by side */}
+      <div className="flex gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Aspect Ratio</label>
+          <div className="flex gap-2">
+            {['9:16', '16:9', '1:1'].map(ratio => (
+              <button
+                key={ratio}
+                type="button"
+                onClick={() => setAspectRatio(ratio)}
+                className={pillClass(aspectRatio === ratio)}
+              >
+                {ratio}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Video Duration</label>
+          <div className="flex gap-2">
+            {durationOptions.map(d => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => setVideoDuration(d.value)}
+                className={pillClass(videoDuration === d.value)}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

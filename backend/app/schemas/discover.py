@@ -19,7 +19,7 @@ class DiscoverProjectCreate(BaseModel):
     concept: str = Field(..., min_length=10, max_length=2000)
     name: str = Field(..., min_length=1, max_length=255)
     workspace_id: int
-    image_model: str = "fal-ai/flux-pro/v1.1"
+    image_model: str = "fal-ai/nano-banana-pro"
     video_model: str = "fal-ai/veo3/fast/image-to-video"
     image_aspect_ratio: str = "9:16"
     video_duration: str = "6s"

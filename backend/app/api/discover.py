@@ -309,9 +309,14 @@ async def create_template(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create Template project from extraction."""
+    """Create Template project from extraction. Auto-extracts if needed."""
     service = get_discover_service()
     try:
+        # Auto-run extraction if not done yet
+        project = await service.get_project(db, project_id, current_user.id)
+        if not project.extraction:
+            await service.extract_template(db, project_id, current_user.id)
+
         template_project_id = await service.create_template_project(
             db=db,
             project_id=project_id,

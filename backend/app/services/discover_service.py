@@ -43,7 +43,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Defaults (tunable)
-IMAGE_ITEMS_PER_ROUND = 5
+IMAGE_ITEMS_PER_ROUND = 3
 VIDEO_ITEMS_PER_ROUND = 4
 MAX_REJECTED_FOR_NARROWING = 30
 
@@ -67,7 +67,7 @@ class DiscoverService:
             user_id=user_id,
             concept=concept,
             name=name,
-            image_model=kwargs.get("image_model", "fal-ai/flux-pro/v1.1"),
+            image_model=kwargs.get("image_model", "fal-ai/nano-banana-pro"),
             video_model=kwargs.get("video_model", "fal-ai/veo3/fast/image-to-video"),
             image_aspect_ratio=kwargs.get("image_aspect_ratio", "9:16"),
             video_duration=kwargs.get("video_duration", "6s"),

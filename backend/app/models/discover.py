@@ -94,7 +94,7 @@ class DiscoverProject(Base):
     current_video_round = Column(Integer, nullable=False, default=0)
 
     # Generation settings
-    image_model = Column(String(100), nullable=False, default="fal-ai/flux-pro/v1.1")
+    image_model = Column(String(100), nullable=False, default="fal-ai/nano-banana-pro")
     video_model = Column(String(100), nullable=False, default="fal-ai/veo3/fast/image-to-video")
     image_aspect_ratio = Column(String(10), nullable=False, default="9:16")
     video_duration = Column(String(10), nullable=False, default="6s")
