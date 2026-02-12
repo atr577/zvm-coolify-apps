@@ -1231,16 +1231,31 @@ Output ONLY the preprocessing prompt text. No explanations before or after."""
 
 {scene_context}
 
-Return a single concise music prompt (1-2 sentences) describing the mood, genre, tempo and instruments.
-No JSON, just the prompt text."""
+Return a single concise music prompt IN ENGLISH (1-2 sentences) describing the mood, genre, tempo and instruments.
+No JSON, just the prompt text. ALWAYS respond in English regardless of input language."""
 
         openai = OpenAIClient()
         result = await openai.generate_text(
             prompt=user_prompt,
-            system_prompt="You are a music director for short-form viral videos. Write concise music descriptions for AI music generation.",
+            system_prompt="You are a music director for short-form viral videos. Write concise music descriptions for AI music generation. ALWAYS respond in English.",
             temperature=0.8,
         )
         return result.strip() or "Energetic instrumental with driving beat"
+
+    async def _ensure_english_prompt(self, prompt: str) -> str:
+        """Translate music prompt to English if needed (Lyria2 requires English)."""
+        # Quick check: if all ASCII, likely English already
+        if all(ord(c) < 128 for c in prompt):
+            return prompt
+        openai = OpenAIClient()
+        result = await openai.generate_text(
+            prompt=f"Translate this music prompt to English. Return ONLY the translated prompt, nothing else:\n\n{prompt}",
+            system_prompt="You are a translator. Output only the English translation.",
+            temperature=0.3,
+        )
+        translated = result.strip()
+        logger.info(f"Translated music prompt: '{prompt}' → '{translated}'")
+        return translated or prompt
 
     async def _generate_music_background(
         self, project_id: int, variant_id: int, prompt: str,
@@ -1250,6 +1265,7 @@ No JSON, just the prompt text."""
 
         db = SessionLocal()
         try:
+            prompt = await self._ensure_english_prompt(prompt)
             audio_url = await self.fal.generate_music(prompt=prompt)
 
             variant = db.query(DiscoverAudioVariant).filter(
