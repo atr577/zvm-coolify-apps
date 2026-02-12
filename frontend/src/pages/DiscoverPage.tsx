@@ -11,6 +11,7 @@ import { RoundView } from '@/components/discover/RoundView'
 import { PromptRefinement } from '@/components/discover/PromptRefinement'
 import AudioSelection from '@/components/discover/AudioSelection'
 import { getMediaUrl } from '@/utils/video'
+import { getModelDisplayName } from '@/constants/models'
 
 const POLL_INTERVAL = 3000
 
@@ -541,7 +542,11 @@ export default function DiscoverPage() {
                   className="w-full flex items-center justify-between px-6 py-3 bg-gray-50 hover:bg-gray-100 transition"
                 >
                   <span className="text-sm font-medium text-gray-700">
-                    Round {round.round_number} ({round.round_type}) — {round.selected_count} selected, {round.rejected_count} rejected
+                    Round {round.round_number} ({round.round_type})
+                    {round.model_used && (
+                      <span className="text-gray-400 font-normal"> | {getModelDisplayName(round.model_used)}</span>
+                    )}
+                    {' '}&mdash; {round.selected_count} selected, {round.rejected_count} rejected
                   </span>
                   {isCollapsed ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronUp className="h-4 w-4 text-gray-400" />}
                 </button>

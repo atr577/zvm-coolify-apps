@@ -50,6 +50,7 @@ class DiscoverRoundResponse(BaseModel):
     status: str
     error_message: Optional[str] = None
     feedback_text: Optional[str] = None
+    model_used: Optional[str] = None
     total_items: int
     selected_count: int
     rejected_count: int

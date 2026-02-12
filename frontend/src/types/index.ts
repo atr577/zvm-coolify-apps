@@ -641,6 +641,7 @@ export interface DiscoverRound {
   status: DiscoverRoundStatus
   error_message: string | null
   feedback_text: string | null
+  model_used: string | null
   total_items: number
   selected_count: number
   rejected_count: number

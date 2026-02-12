@@ -4,6 +4,7 @@ import type { DiscoverRound, DiscoverRoundType } from '@/types'
 import { discoverApi } from '@/services/api'
 import { getErrorMessage } from '@/types'
 import { ItemGrid } from './ItemGrid'
+import { getModelDisplayName } from '@/constants/models'
 
 interface RoundViewProps {
   projectId: number
@@ -77,6 +78,11 @@ export function RoundView({ projectId, round, isLatestRound, onRefresh, onSelect
           <span className="ml-2 text-sm font-normal text-gray-500">
             {round.round_type === 'image' ? 'Images' : 'Videos'}
           </span>
+          {round.model_used && (
+            <span className="ml-2 text-xs font-normal text-gray-400">
+              {getModelDisplayName(round.model_used)}
+            </span>
+          )}
           {isGenerating && (
             <span className="ml-2 inline-flex items-center gap-1 text-sm text-blue-600">
               <Loader2 className="h-3 w-3 animate-spin" />

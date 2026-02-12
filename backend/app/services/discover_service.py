@@ -243,6 +243,7 @@ class DiscoverService:
             generated_prompts=prompts,
             feedback_text=feedback,
             total_items=len(prompts),
+            model_used=project.image_model,
         )
         db.add(round_obj)
         db.flush()
@@ -347,6 +348,7 @@ class DiscoverService:
             generated_prompts=prompts,
             feedback_text=feedback,
             total_items=len(prompts),
+            model_used=project.video_model,
         )
         db.add(round_obj)
         db.flush()

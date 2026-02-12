@@ -41,6 +41,23 @@ export const ASPECT_RATIOS: { value: AspectRatio; label: string }[] = [
   { value: '1:1', label: '1:1 (Square)' },
 ]
 
+// --- Model Display Name ---
+
+/**
+ * Get human-readable model name from fal.ai model path.
+ * Returns short label (e.g. "Flux Pro v1.1") or fallback to path segments.
+ */
+export function getModelDisplayName(modelPath: string | null | undefined): string | null {
+  if (!modelPath) return null
+  const imageMatch = IMAGE_MODELS.find(m => m.value === modelPath)
+  if (imageMatch) return imageMatch.label
+  const videoMatch = VIDEO_MODELS.find(m => m.value === modelPath)
+  if (videoMatch) return videoMatch.label
+  // Fallback: extract meaningful segments from path (skip "fal-ai" prefix)
+  const segments = modelPath.split('/').filter(s => s !== 'fal-ai')
+  return segments.join(' ') || modelPath
+}
+
 // --- Video Duration Helpers ---
 
 /**

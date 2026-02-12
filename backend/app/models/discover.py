@@ -192,6 +192,9 @@ class DiscoverRound(Base):
     # LLM-generated prompts for items (JSON array of strings)
     generated_prompts = Column(JSON, nullable=True)
 
+    # AI model used for this round (snapshot at creation time)
+    model_used = Column(String(100), nullable=True)
+
     # User feedback for this round (submitted with selection)
     feedback_text = Column(Text, nullable=True)
 
