@@ -31,6 +31,8 @@ class VideoModelEnum(str, Enum):
     VEO3_FAST = "fal-ai/veo3/fast/image-to-video"
     VEO3 = "fal-ai/veo3/image-to-video"
     VEO31 = "fal-ai/veo3.1/reference-to-video"
+    KLING_V3_STANDARD = "fal-ai/kling-video/v3/standard/image-to-video"
+    KLING_V3_PRO = "fal-ai/kling-video/v3/pro/image-to-video"
     KLING_V21_STANDARD = "fal-ai/kling-video/v2.1/standard/image-to-video"
     KLING_V21_PRO = "fal-ai/kling-video/v2.1/pro/image-to-video"
     MINIMAX = "fal-ai/minimax/video-01"
