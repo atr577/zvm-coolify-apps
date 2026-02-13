@@ -1596,16 +1596,32 @@ No JSON, just the prompt text. ALWAYS respond in English regardless of input lan
     async def _download_discover_audio(
         self, url: str, project_id: int, variant_id: int,
     ) -> str:
-        """Download audio file to local storage."""
+        """Download audio file and convert to MP3 for proper browser seeking."""
+        import subprocess
         ensure_directories()
-        filename = f"discover_{project_id}_audio_{variant_id}.mp3"
-        dest_path = MEDIA_BASE_DIR / "audio" / filename
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        audio_dir = MEDIA_BASE_DIR / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
 
-        success = await download_file(url, dest_path)
+        # Download original (usually WAV from fal.ai)
+        tmp_path = audio_dir / f"discover_{project_id}_audio_{variant_id}_raw.wav"
+        success = await download_file(url, tmp_path)
         if not success:
             raise RuntimeError(f"Failed to download audio: {url}")
-        return str(dest_path)
+
+        # Convert to proper MP3 with ffmpeg
+        mp3_path = audio_dir / f"discover_{project_id}_audio_{variant_id}.mp3"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(tmp_path), "-codec:a", "libmp3lame",
+                 "-b:a", "192k", str(mp3_path)],
+                capture_output=True, check=True, timeout=30,
+            )
+            tmp_path.unlink(missing_ok=True)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"FFmpeg conversion failed, using raw file: {e}")
+            tmp_path.rename(mp3_path)
+
+        return str(mp3_path)
 
     def _parse_video_duration(self, duration_str: str) -> float:
         """Parse video duration string (e.g. '6s') to seconds."""
