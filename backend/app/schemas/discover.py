@@ -100,12 +100,15 @@ class DiscoverAudioVariantResponse(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def build_trimmed_url(cls, data: Any) -> Any:
-        """Build trimmed_file_url from trimmed_file_path."""
+    def build_media_urls(cls, data: Any) -> Any:
+        """Build file_url and trimmed_file_url from local paths."""
+        from pathlib import Path
+        # Prefer local file over CDN (faster, no expiry, MP3 vs WAV)
+        if hasattr(data, "file_path") and data.file_path:
+            p = Path(data.file_path)
+            data.file_url = f"/api/files/{p.parent.name}/{p.name}"
         if hasattr(data, "trimmed_file_path") and data.trimmed_file_path:
-            from pathlib import Path
             p = Path(data.trimmed_file_path)
-            # Extract "audio/filename.mp3" from absolute path
             data.trimmed_file_url = f"/api/files/{p.parent.name}/{p.name}"
         return data
 
