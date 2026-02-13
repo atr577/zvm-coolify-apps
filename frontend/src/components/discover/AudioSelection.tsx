@@ -154,7 +154,7 @@ export default function AudioSelection({ project, onRefresh, onVariantSelect }: 
       }
 
       if (t < startSec + fadeSec) {
-        audioRef.current.volume = Math.min(1, (t - startSec) / fadeSec)
+        audioRef.current.volume = Math.max(0, Math.min(1, (t - startSec) / fadeSec))
       } else if (t >= fadeOutStart) {
         audioRef.current.volume = Math.max(0, (endSec - t) / fadeSec)
       } else {
