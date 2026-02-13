@@ -396,10 +396,18 @@ class TemplateGenerationService:
                 "video_prompt": generation.video_prompt,
             }
 
+            # Load custom prompts from settings
+            settings = db.query(TemplateSettings).filter(
+                TemplateSettings.project_id == generation.project_id
+            ).first()
+
             metadata = await openai_service.generate_publishing_meta(
                 platforms=platforms,
                 scenario_data=scenario_data,
-                fallback_text=generation.image_prompt[:500] if generation.image_prompt else None
+                fallback_text=generation.image_prompt[:500] if generation.image_prompt else None,
+                custom_title_prompt=settings.meta_title_prompt if settings else None,
+                custom_description_prompt=settings.meta_description_prompt if settings else None,
+                custom_hashtags_prompt=settings.meta_hashtags_prompt if settings else None,
             )
 
             generation.publishing_metadata = metadata

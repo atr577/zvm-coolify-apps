@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react'
 import {
   templateApi,
   projectsApi,
@@ -41,6 +41,9 @@ interface EditableSettings {
   variant_generation_prompt: string
   music_mode: string
   music_prompt: string
+  meta_title_prompt: string
+  meta_description_prompt: string
+  meta_hashtags_prompt: string
 }
 
 // Publishing config editable fields
@@ -58,7 +61,7 @@ interface EditableProjectInfo {
   workspace_id: number | undefined
 }
 
-type StepNumber = 1 | 2 | 3 | 4 | 5 | 6
+type StepNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 type StepStatus = 'complete' | 'incomplete' | 'empty'
 
@@ -163,6 +166,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         variant_generation_prompt: s.variant_generation_prompt || '',
         music_mode: s.music_mode || 'none',
         music_prompt: s.music_prompt || '',
+        meta_title_prompt: s.meta_title_prompt || '',
+        meta_description_prompt: s.meta_description_prompt || '',
+        meta_hashtags_prompt: s.meta_hashtags_prompt || '',
       }
       setInitialSettings(editable)
       setEditedSettings({ ...editable })
@@ -217,7 +223,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         (project.social_accounts || []).length === 0 ||
         pc.days.length === 0
       ) {
-        setActiveStep(6)
+        setActiveStep(7)
       }
     } catch (err) {
       console.error('Failed to load configure data:', err)
@@ -265,6 +271,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           variant_generation_prompt: editedSettings.variant_generation_prompt || undefined,
           music_mode: editedSettings.music_mode || undefined,
           music_prompt: editedSettings.music_prompt || undefined,
+          meta_title_prompt: editedSettings.meta_title_prompt,
+          meta_description_prompt: editedSettings.meta_description_prompt,
+          meta_hashtags_prompt: editedSettings.meta_hashtags_prompt,
         })
       )
     }
@@ -338,6 +347,9 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         variant_generation_prompt: s.variant_generation_prompt || '',
         music_mode: s.music_mode || 'none',
         music_prompt: s.music_prompt || '',
+        meta_title_prompt: s.meta_title_prompt || '',
+        meta_description_prompt: s.meta_description_prompt || '',
+        meta_hashtags_prompt: s.meta_hashtags_prompt || '',
       }
       setInitialSettings(fresh)
       setEditedSettings({ ...fresh })
@@ -463,6 +475,17 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           ? (editedSettings.music_prompt?.slice(0, 30) + (editedSettings.music_prompt && editedSettings.music_prompt.length > 30 ? '...' : '') || 'No prompt')
           : 'Disabled',
       },
+      publishing_metadata: (() => {
+        const count = [
+          editedSettings?.meta_title_prompt,
+          editedSettings?.meta_description_prompt,
+          editedSettings?.meta_hashtags_prompt,
+        ].filter(Boolean).length
+        return {
+          status: (count > 0 ? 'complete' : 'empty') as StepStatus,
+          summary: count > 0 ? `${count}/3 custom` : 'Default',
+        }
+      })(),
       distribution: {
         status: (boundAccounts.length > 0 &&
         editedPublishing &&
@@ -708,13 +731,52 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
               </div>
             </AccordionStep>
 
-            {/* Step 6: Distribution */}
+            {/* Step 6: Publishing Metadata */}
             <AccordionStep
               step={6}
-              title="Distribution"
-              status={stepStatuses.distribution}
+              title="Publishing Metadata"
+              status={stepStatuses.publishing_metadata}
               isActive={activeStep === 6}
               onToggle={() => handleStepToggle(6)}
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title Prompt</label>
+                  <textarea
+                    value={editedSettings.meta_title_prompt}
+                    onChange={(e) => updateSetting('meta_title_prompt', e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description Prompt</label>
+                  <textarea
+                    value={editedSettings.meta_description_prompt}
+                    onChange={(e) => updateSetting('meta_description_prompt', e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hashtags Prompt</label>
+                  <textarea
+                    value={editedSettings.meta_hashtags_prompt}
+                    onChange={(e) => updateSetting('meta_hashtags_prompt', e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                  />
+                </div>
+              </div>
+            </AccordionStep>
+
+            {/* Step 7: Distribution */}
+            <AccordionStep
+              step={7}
+              title="Distribution"
+              status={stepStatuses.distribution}
+              isActive={activeStep === 7}
+              onToggle={() => handleStepToggle(7)}
             >
               <DistributionStep
                 projectId={projectId}
@@ -777,6 +839,8 @@ function AccordionStep({
         <div className="flex items-center gap-2">
           {status.status === 'complete' ? (
             <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : status.status === 'empty' ? (
+            <AlertCircle className="w-4 h-4 text-amber-400" />
           ) : (
             <XCircle className="w-4 h-4 text-red-400" />
           )}

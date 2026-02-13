@@ -488,6 +488,9 @@ export interface TemplateSettings {
   variant_generation_prompt: string | null
   music_mode: string | null
   music_prompt: string | null
+  meta_title_prompt: string | null
+  meta_description_prompt: string | null
+  meta_hashtags_prompt: string | null
   audio_hook_url: string | null
   audio_hook_duration_ms: number | null
   audio_hook_retrim: boolean
@@ -508,6 +511,9 @@ export interface TemplateSettingsUpdate {
   variant_generation_prompt?: string
   music_mode?: string
   music_prompt?: string
+  meta_title_prompt?: string
+  meta_description_prompt?: string
+  meta_hashtags_prompt?: string
 }
 
 export interface Variant {

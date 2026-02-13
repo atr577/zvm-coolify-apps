@@ -77,6 +77,9 @@ class TemplateSettingsUpdate(BaseModel):
     variant_generation_prompt: Optional[str] = None
     music_mode: Optional[str] = None
     music_prompt: Optional[str] = None
+    meta_title_prompt: Optional[str] = None
+    meta_description_prompt: Optional[str] = None
+    meta_hashtags_prompt: Optional[str] = None
 
 
 class TemplateSettingsResponse(BaseModel):
@@ -92,6 +95,9 @@ class TemplateSettingsResponse(BaseModel):
     variant_generation_prompt: Optional[str] = None
     music_mode: Optional[str] = None
     music_prompt: Optional[str] = None
+    meta_title_prompt: Optional[str] = None
+    meta_description_prompt: Optional[str] = None
+    meta_hashtags_prompt: Optional[str] = None
     audio_hook_url: Optional[str] = None
     audio_hook_duration_ms: Optional[int] = None
     audio_hook_retrim: bool = False

@@ -79,10 +79,10 @@ class TemplateSettings(Base):
     music_mode = Column(String(20), nullable=True, default="none")  # "library" | "generate" | "none"
     music_prompt = Column(Text, nullable=True)  # Auto-generated or user-edited music style description
 
-    # Publishing metadata prompts
-    title_prompt = Column(Text, nullable=True)  # Prompt template for title generation
-    description_prompt = Column(Text, nullable=True)  # Prompt template for description generation
-    platform_rules = Column(JSON, nullable=True)  # Per-platform rules: {"instagram": {...}, "tiktok": {...}}
+    # Publishing metadata prompts (user instructions for AI generation)
+    meta_title_prompt = Column(Text, nullable=True)
+    meta_description_prompt = Column(Text, nullable=True)
+    meta_hashtags_prompt = Column(Text, nullable=True)
 
     # Reference video from Discover (merged video + audio)
     reference_video_path = Column(String(500), nullable=True)

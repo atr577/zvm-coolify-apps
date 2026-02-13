@@ -18,6 +18,7 @@ from app.services.prompts import (
     SCENARIO_SYSTEM_PROMPT, build_scenario_prompt, build_scenario_from_template_prompt,
     VALIDATION_SYSTEM_PROMPT, build_validation_prompt,
     build_publishing_meta_prompt,
+    build_custom_title_prompt, build_custom_description_prompt, build_custom_hashtags_prompt,
     build_variants_prompt,
 )
 from typing import Dict, Any, List, Optional
@@ -299,14 +300,15 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
         self,
         platforms: List[str],
         scenario_data: Optional[Dict[str, Any]] = None,
-        fallback_text: Optional[str] = None
+        fallback_text: Optional[str] = None,
+        custom_title_prompt: Optional[str] = None,
+        custom_description_prompt: Optional[str] = None,
+        custom_hashtags_prompt: Optional[str] = None,
     ) -> Dict[str, Dict[str, str]]:
         """Generate publishing metadata for platforms.
 
-        Args:
-            platforms: List of platforms to generate for
-            scenario_data: Scenario data with story_template, content_variables, image_prompt
-            fallback_text: Fallback text if scenario_data not available
+        If custom prompts are set, uses per-type envelope calls.
+        Otherwise falls back to single combined call.
         """
         if self.mock_mode:
             logger.info("MOCK MODE: Returning mock publishing meta")
@@ -320,6 +322,23 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
                 for platform in platforms
             }
 
+        has_custom = any([custom_title_prompt, custom_description_prompt, custom_hashtags_prompt])
+
+        if not has_custom:
+            return await self._generate_meta_default(platforms, scenario_data, fallback_text)
+
+        return await self._generate_meta_custom(
+            platforms, scenario_data, fallback_text,
+            custom_title_prompt, custom_description_prompt, custom_hashtags_prompt,
+        )
+
+    async def _generate_meta_default(
+        self,
+        platforms: List[str],
+        scenario_data: Optional[Dict[str, Any]],
+        fallback_text: Optional[str],
+    ) -> Dict[str, Dict[str, str]]:
+        """Single combined call — existing behavior."""
         prompt = build_publishing_meta_prompt(
             prompt_or_template=fallback_text or "",
             platforms=platforms,
@@ -333,25 +352,98 @@ Create an improved prompt that incorporates the feedback. Keep the same format a
                 system_prompt="You are an SMM expert. Create viral titles and descriptions in English.",
                 temperature=0.7
             )
-
-            # RootModel: validated.root is Dict[str, PlatformMeta]
             platform_data = {k: v.model_dump() for k, v in validated.root.items()}
-
-            # Fill missing platforms with defaults
             for platform in platforms:
                 if platform not in platform_data:
-                    platform_data[platform] = {
-                        "title": "Untitled",
-                        "description": "",
-                        "hashtags": ""
-                    }
-
-            logger.info(f"Publishing meta generated for: {', '.join(platform_data.keys())}")
+                    platform_data[platform] = {"title": "Untitled", "description": "", "hashtags": ""}
+            logger.info(f"Publishing meta generated (default) for: {', '.join(platform_data.keys())}")
             return platform_data
-
         except OpenAIClientError as e:
             logger.error(f"Failed to generate publishing meta: {e}")
             raise
+
+    async def _generate_meta_custom(
+        self,
+        platforms: List[str],
+        scenario_data: Optional[Dict[str, Any]],
+        fallback_text: Optional[str],
+        custom_title_prompt: Optional[str],
+        custom_description_prompt: Optional[str],
+        custom_hashtags_prompt: Optional[str],
+    ) -> Dict[str, Dict[str, str]]:
+        """Per-type calls with envelope for custom prompts."""
+        system_prompt = "You are an SMM expert. Generate viral content in the requested style."
+
+        # Get default result for types without custom prompts
+        default_result = None
+        needs_default = not all([custom_title_prompt, custom_description_prompt, custom_hashtags_prompt])
+        if needs_default:
+            try:
+                default_result = await self._generate_meta_default(platforms, scenario_data, fallback_text)
+            except Exception as e:
+                logger.warning(f"Default meta generation failed, will use fallbacks: {e}")
+
+        async def _call_per_type(prompt_text: str, meta_type: str) -> Optional[Dict[str, str]]:
+            builders = {
+                "title": build_custom_title_prompt,
+                "description": build_custom_description_prompt,
+                "hashtags": build_custom_hashtags_prompt,
+            }
+            envelope = builders[meta_type](prompt_text, platforms, scenario_data)
+            try:
+                raw = await self.client.generate_json(
+                    prompt=envelope,
+                    system_prompt=system_prompt,
+                    temperature=0.7
+                )
+                # Validate: must be dict with string values for each platform
+                if isinstance(raw, dict) and all(isinstance(v, str) for v in raw.values()):
+                    return raw
+                logger.warning(f"Custom {meta_type} prompt returned invalid shape, falling back")
+                return None
+            except Exception as e:
+                logger.warning(f"Custom {meta_type} generation failed: {e}")
+                return None
+
+        # Run custom calls in parallel
+        tasks = []
+        type_order = []
+        for meta_type, custom_prompt in [
+            ("title", custom_title_prompt),
+            ("description", custom_description_prompt),
+            ("hashtags", custom_hashtags_prompt),
+        ]:
+            if custom_prompt:
+                tasks.append(_call_per_type(custom_prompt, meta_type))
+                type_order.append(meta_type)
+
+        custom_results: Dict[str, Optional[Dict[str, str]]] = {}
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for meta_type, result in zip(type_order, results):
+                if isinstance(result, Exception):
+                    logger.warning(f"Custom {meta_type} call raised: {result}")
+                    custom_results[meta_type] = None
+                else:
+                    custom_results[meta_type] = result
+
+        # Assemble final result
+        platform_data: Dict[str, Dict[str, str]] = {}
+        for p in platforms:
+            platform_data[p] = {
+                "title": "",
+                "description": "",
+                "hashtags": "",
+            }
+            for meta_type in ("title", "description", "hashtags"):
+                custom = custom_results.get(meta_type)
+                if custom and p in custom:
+                    platform_data[p][meta_type] = custom[p]
+                elif default_result and p in default_result:
+                    platform_data[p][meta_type] = default_result[p].get(meta_type, "")
+
+        logger.info(f"Publishing meta generated (custom) for: {', '.join(platform_data.keys())}")
+        return platform_data
 
     async def generate_content_variants(
         self,

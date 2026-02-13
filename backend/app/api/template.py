@@ -328,6 +328,10 @@ async def update_template_settings(
 
     # Update fields
     update_data = data.model_dump(exclude_unset=True)
+    # Normalize empty strings to None for meta prompts
+    for key in ('meta_title_prompt', 'meta_description_prompt', 'meta_hashtags_prompt'):
+        if key in update_data and not update_data[key]:
+            update_data[key] = None
     for field, value in update_data.items():
         if hasattr(value, 'value'):  # Enum
             setattr(settings, field, value.value)
