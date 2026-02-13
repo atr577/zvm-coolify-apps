@@ -20,7 +20,8 @@ export function StickySaveBar({ isDirty, onSave, onDiscard }: StickySaveBarProps
       await onSave()
     } catch (err) {
       console.error('Failed to save:', err)
-      setError('Failed to save. Please try again.')
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      setError(`Failed to save: ${message}`)
     } finally {
       setSaving(false)
     }

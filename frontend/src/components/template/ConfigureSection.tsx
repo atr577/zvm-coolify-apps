@@ -304,9 +304,25 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       )
     }
 
-    await Promise.all(promises)
+    try {
+      await Promise.all(promises)
+    } catch (err: unknown) {
+      // Extract meaningful error from Pydantic validation / API response
+      if (err && typeof err === 'object' && 'response' in err) {
+        const resp = (err as { response?: { data?: { detail?: string | Array<{ msg: string; loc?: string[] }> } } }).response
+        if (resp?.data?.detail) {
+          const detail = resp.data.detail
+          if (typeof detail === 'string') {
+            throw new Error(detail)
+          } else if (Array.isArray(detail)) {
+            throw new Error(detail.map(d => d.msg).join('; '))
+          }
+        }
+      }
+      throw err
+    }
 
-    // Re-fetch settings to get auto-generated variant_generation_prompt
+    // Re-fetch settings to get server state (includes auto-generated prompts)
     try {
       const freshSettings = await templateApi.getSettings(projectId)
       const s = freshSettings.data
@@ -326,8 +342,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       setInitialSettings(fresh)
       setEditedSettings({ ...fresh })
     } catch {
-      // Fallback: just mark current as initial
-      setInitialSettings({ ...editedSettings })
+      // Re-fetch failed — don't mark edited as saved, keep dirty state
     }
 
     setInitialPublishing({ ...editedPublishing })
