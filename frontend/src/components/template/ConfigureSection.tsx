@@ -16,7 +16,7 @@ import type {
   VideoModel,
   AspectRatio,
 } from '@/types'
-import { getDefaultDuration } from '@/constants/models'
+import { getDefaultDuration, getModelDisplayName } from '@/constants/models'
 import { StickySaveBar } from './StickySaveBar'
 import { InputStep } from './InputStep'
 import { PreprocessingStep } from './PreprocessingStep'
@@ -424,11 +424,6 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
 
   // Step statuses for summary line
   const stepStatuses = useMemo(() => {
-    const getModelLabel = (model: string) => {
-      const parts = model.split('/')
-      return parts[parts.length - 1] || model
-    }
-
     return {
       variants: {
         status: (variantsCount > 0 ? 'complete' : 'empty') as StepStatus,
@@ -439,7 +434,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           ? 'complete'
           : 'incomplete') as StepStatus,
         summary: editedSettings?.llm_model
-          ? getModelLabel(editedSettings.llm_model)
+          ? getModelDisplayName(editedSettings.llm_model) || editedSettings.llm_model
           : 'not set',
       },
       image: {
@@ -447,7 +442,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           ? 'complete'
           : 'incomplete') as StepStatus,
         summary: editedSettings?.image_model
-          ? `${getModelLabel(editedSettings.image_model)} · ${editedSettings.image_aspect_ratio}`
+          ? `${getModelDisplayName(editedSettings.image_model) || editedSettings.image_model} · ${editedSettings.image_aspect_ratio}`
           : 'not set',
       },
       video: {
@@ -455,7 +450,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
           ? 'complete'
           : 'incomplete') as StepStatus,
         summary: editedSettings?.video_model
-          ? `${getModelLabel(editedSettings.video_model)} · ${editedSettings.video_duration}s · ${templatesCount} tmpl`
+          ? `${getModelDisplayName(editedSettings.video_model) || editedSettings.video_model} · ${editedSettings.video_duration}s · ${templatesCount} tmpl`
           : 'not set',
       },
       music: {

@@ -51,6 +51,8 @@ export const ASPECT_RATIOS: { value: AspectRatio; label: string }[] = [
  */
 export function getModelDisplayName(modelPath: string | null | undefined): string | null {
   if (!modelPath) return null
+  const llmMatch = LLM_MODELS.find(m => m.value === modelPath)
+  if (llmMatch) return llmMatch.label
   const imageMatch = IMAGE_MODELS.find(m => m.value === modelPath)
   if (imageMatch) return imageMatch.label
   const videoMatch = VIDEO_MODELS.find(m => m.value === modelPath)
