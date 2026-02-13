@@ -359,11 +359,21 @@ class FalClient:
         is_kling = "kling" in use_model.lower()
 
         # Model-specific duration validation
-        if is_kling:
-            # Kling supports '5' or '10' (no 's' suffix)
+        if is_kling and "/v3/" in use_model:
+            # Kling v3: integer 3-15 seconds
+            try:
+                dur_int = int(duration)
+                if dur_int < 3 or dur_int > 15:
+                    duration = "5"
+                    logger.info(f"Adjusted duration to {duration} (kling v3 range 3-15)")
+            except ValueError:
+                duration = "5"
+                logger.info(f"Adjusted duration to {duration} (kling v3 requires integer)")
+        elif is_kling:
+            # Kling v2.1: only 5 or 10 (no 's' suffix)
             if duration not in {"5", "10"}:
                 duration = "5"
-                logger.info(f"Adjusted duration to {duration} (kling constraint)")
+                logger.info(f"Adjusted duration to {duration} (kling v2.1 constraint)")
         else:
             # Veo supports 4s, 6s, 8s
             valid_durations = {"4s", "6s", "8s"}
@@ -430,11 +440,23 @@ class FalClient:
         is_kling = "kling" in use_model.lower()
 
         # Model-specific duration validation
-        if is_kling:
+        if is_kling and "/v3/" in use_model:
+            # Kling v3: integer 3-15 seconds
+            try:
+                dur_int = int(duration)
+                if dur_int < 3 or dur_int > 15:
+                    duration = "5"
+                    logger.info(f"Adjusted duration to {duration} (kling v3 range 3-15)")
+            except ValueError:
+                duration = "5"
+                logger.info(f"Adjusted duration to {duration} (kling v3 requires integer)")
+        elif is_kling:
+            # Kling v2.1: only 5 or 10 (no 's' suffix)
             if duration not in {"5", "10"}:
                 duration = "5"
-                logger.info(f"Adjusted duration to {duration} (kling constraint)")
+                logger.info(f"Adjusted duration to {duration} (kling v2.1 constraint)")
         else:
+            # Veo supports 4s, 6s, 8s
             valid_durations = {"4s", "6s", "8s"}
             if duration not in valid_durations:
                 duration_map = {"5s": "6s", "7s": "8s", "10s": "8s", "5": "6s", "10": "8s"}

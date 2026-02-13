@@ -160,18 +160,15 @@ export function DiscoverProjectForm({ workspaces, onSubmit, onCancel, isLoading 
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Video Duration</label>
-          <div className="flex gap-2">
+          <select
+            value={videoDuration}
+            onChange={(e) => setVideoDuration(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
             {durationOptions.map(d => (
-              <button
-                key={d.value}
-                type="button"
-                onClick={() => setVideoDuration(d.value)}
-                className={pillClass(videoDuration === d.value)}
-              >
-                {d.label}
-              </button>
+              <option key={d.value} value={d.value}>{d.label}</option>
             ))}
-          </div>
+          </select>
         </div>
       </div>
 

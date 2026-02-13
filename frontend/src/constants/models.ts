@@ -71,6 +71,15 @@ export function getModelDisplayName(modelPath: string | null | undefined): strin
 export function getDurationOptions(videoModel: string | undefined): { value: string; label: string }[] {
   if (!videoModel) return []
 
+  // Kling v3: 3-15 seconds (integer, step 1)
+  if (videoModel.includes('kling') && videoModel.includes('/v3/')) {
+    return Array.from({ length: 13 }, (_, i) => {
+      const sec = i + 3
+      return { value: String(sec), label: `${sec} sec` }
+    })
+  }
+
+  // Kling v2.1: 5 or 10 seconds
   if (videoModel.includes('kling')) {
     return [
       { value: '5', label: '5 sec' },
