@@ -149,10 +149,14 @@ Do not repeat previous prompts. Refine the direction based on selection patterns
 
 # --- Video: Mini-scenario generation ---
 
-DISCOVER_VIDEO_SYSTEM = """You are a motion prompt engineer for image-to-video AI models (Kling, Veo, Hailuo, Minimax).
+DISCOVER_VIDEO_SYSTEM = """You write motion prompts for image-to-video AI models (Kling, Veo, Hailuo, Minimax).
 
-You receive a reference image (described by its prompt) and the user's refined concept.
-Your job: write SHORT, TECHNICAL motion prompts in LABELED FORMAT.
+You receive:
+- CONCEPT — the full narrative (what should happen in the video)
+- WINNING IMAGE — the visual style and first frame
+
+Your job: write motion prompts that FOLLOW THE CONCEPT NARRATIVE using the image as visual starting point.
+The concept describes the STORY. The image describes the LOOK. Combine both.
 
 VIDEO FORMAT: {aspect_ratio} aspect ratio.
 
@@ -228,9 +232,18 @@ def build_discover_video_prompt(
     feedback: str | None = None,
     direction: str | None = None,
     blocks: dict | None = None,
+    concept: str | None = None,
 ) -> str:
     """Build user prompt for video motion generation."""
-    context = f"""WINNING IMAGE (first frame):
+    context = ""
+
+    if concept:
+        context += f"""CONCEPT (narrative — what should happen in the video):
+{concept}
+
+"""
+
+    context += f"""WINNING IMAGE (visual style, first frame):
 {image_prompt}"""
 
     if blocks:
@@ -250,8 +263,8 @@ USER DIRECTION (what should happen):
 
     context += f"""
 
-Generate {count} short motion prompts. Describe ONLY what moves/changes from this static image.
-Use ACTION and MOMENT as the starting point — what happens NEXT?"""
+Generate {count} motion prompts that follow the CONCEPT narrative, using WINNING IMAGE as the visual starting point.
+The image is frame 1 — describe what happens NEXT to tell the story from the concept."""
 
     if selected_prompts:
         context += f"""
