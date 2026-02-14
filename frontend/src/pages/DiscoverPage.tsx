@@ -257,7 +257,7 @@ export default function DiscoverPage() {
     })
   const latestRound = currentRounds.length > 0 ? currentRounds[currentRounds.length - 1] : null
   const isGenerating = latestRound?.items.some(i => i.status === 'pending' || i.status === 'generating') || false
-  const canStartNewRound = !isGenerating && project.stage !== 'audio' && project.stage !== 'extraction' && project.stage !== 'completed'
+  const isActiveStage = project.stage !== 'audio' && project.stage !== 'extraction' && project.stage !== 'completed'
   const showRefinement = project.stage === 'images' && currentRounds.length === 0
 
   return (
@@ -649,7 +649,7 @@ export default function DiscoverPage() {
           {/* Action bar — sticky at bottom */}
           <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 -mx-6 px-6 py-4 space-y-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
               {/* Feedback / direction textarea */}
-              {canStartNewRound && (
+              {isActiveStage && (
                 <textarea
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
@@ -693,7 +693,7 @@ export default function DiscoverPage() {
                     </button>
                   )}
                   {/* Back to Refine (images stage) */}
-                  {project.stage === 'images' && currentRounds.length > 0 && canStartNewRound && (
+                  {project.stage === 'images' && currentRounds.length > 0 && isActiveStage && (
                     <button
                       onClick={async () => {
                         if (!confirm('Go back to prompt refinement? All generated rounds will be deleted.')) return
@@ -725,7 +725,7 @@ export default function DiscoverPage() {
                 {/* RIGHT: Actions */}
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   {/* Selectors */}
-                  {canStartNewRound && (
+                  {isActiveStage && (
                     <select
                       value={project.stage === 'videos' ? selectedVideoModel : selectedImageModel}
                       onChange={(e) => {
@@ -739,7 +739,7 @@ export default function DiscoverPage() {
                       ))}
                     </select>
                   )}
-                  {canStartNewRound && (
+                  {isActiveStage && (
                     <select
                       value={itemCount}
                       onChange={(e) => setItemCount(Number(e.target.value))}
@@ -752,7 +752,7 @@ export default function DiscoverPage() {
                   )}
 
                   {/* Regenerate (amber) */}
-                  {currentRounds.length > 0 && canStartNewRound && (
+                  {currentRounds.length > 0 && isActiveStage && (
                     <button
                       onClick={async () => {
                         if (!confirm('Regenerate current round? It will be deleted and re-generated with the selected model.')) return
@@ -767,7 +767,7 @@ export default function DiscoverPage() {
                           setRollingBack(false)
                         }
                       }}
-                      disabled={rollingBack || generating}
+                      disabled={rollingBack || isGenerating}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50"
                     >
                       {rollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
@@ -776,10 +776,10 @@ export default function DiscoverPage() {
                   )}
 
                   {/* Generate (purple — primary action) */}
-                  {canStartNewRound && (
+                  {isActiveStage && (
                     <button
                       onClick={handleGenerateRound}
-                      disabled={generating}
+                      disabled={isGenerating}
                       className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
                     >
                       {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
