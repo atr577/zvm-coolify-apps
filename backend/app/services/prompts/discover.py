@@ -155,8 +155,10 @@ You receive:
 - CONCEPT — the full narrative (what should happen in the video)
 - WINNING IMAGE — the visual style and first frame
 
-Your job: write motion prompts that FOLLOW THE CONCEPT NARRATIVE using the image as visual starting point.
-The concept describes the STORY. The image describes the LOOK. Combine both.
+CRITICAL: Each prompt = ONE COMPLETE STANDALONE VIDEO from start to finish.
+Every prompt must describe the FULL narrative from the concept, not a chapter or fragment.
+The source image is the starting frame — describe what happens from that frame through the entire story.
+All {count} prompts tell the SAME story but with different variations (camera, speed, motion style).
 
 VIDEO FORMAT: {aspect_ratio} aspect ratio.
 
@@ -166,40 +168,25 @@ IMAGE-TO-VIDEO MODELS — CAPABILITIES:
 - One camera movement (static, slow push-in, pull-out, orbit, pan, tilt)
 - 5-10 seconds = 1-2 actions maximum
 - Approximate physics
+- Can transform/morph existing elements on screen
 
 CANNOT DO: multiple angles, sound, complex action chains, precise timecodes, text/UI.
 
 OUTPUT FORMAT — each prompt must use these labeled lines:
-Subject: [who/what is in frame]
-Motion: [what physically moves/changes, 1-2 actions, direct verbs]
+Subject: [who/what is in frame at the start]
+Motion: [the FULL sequence of what happens — all key actions from start to end, 2-3 sentences]
 Camera: [one movement or static]
 Speed: [slow/medium/fast]
-Details: [secondary effects — particles, debris, reflections, wind]
+Details: [secondary effects — particles, debris, reflections, color shifts]
 Continuity: [preservation instructions]
 
 GOOD EXAMPLE:
 "Subject: industrial hydraulic press, bowling ball
-Motion: press descends steadily onto ball, ball surface cracks and deforms under pressure
+Motion: press descends steadily onto ball, ball surface cracks and deforms under pressure, fragments scatter outward
 Camera: static, subtle push-in
 Speed: slow
 Details: small fragments fall to sides, dust rises from impact point
 Continuity: maintain consistent lighting, preserve object proportions, no morphing"
-
-GOOD EXAMPLE:
-"Subject: woman in black dress, Porsche 911
-Motion: woman opens car door smoothly, steps out with confidence, stands upright
-Camera: slow dolly out
-Speed: medium
-Details: dress fabric moves naturally with body, hair shifts with movement
-Continuity: preserve face identity, consistent lighting, no warping"
-
-GOOD EXAMPLE:
-"Subject: golden honey, stack of pancakes
-Motion: honey pours from above onto pancakes, drips slowly down the sides
-Camera: static top-down
-Speed: slow
-Details: steam rises gently, honey catches light with glossy reflections
-Continuity: maintain food colors and textures, stable lighting"
 
 BAD (DO NOT):
 - Literary prose ("looms above with ceremonial slowness")
@@ -207,14 +194,15 @@ BAD (DO NOT):
 - Multiple camera moves ("cuts to close-up, then pulls back")
 - Fake timecodes ("at 2 seconds... at 4 seconds...")
 - Metaphors ("like colored stars", "shower of fragments")
+- Splitting one story across multiple prompts (each prompt = full video)
 
 RULES:
 1. Generate exactly {count} motion prompts
-2. Each prompt MUST use the labeled format above
-3. Motion line: direct verbs, 1-2 actions only, physically plausible
+2. Each prompt = COMPLETE video with FULL narrative arc
+3. Motion line: describe the entire sequence from start to end
 4. Camera line: ONE movement (or "static")
 5. Continuity line: ALWAYS include — prevents AI artifacts
-6. Vary across prompts: motion intensity, camera style, detail focus
+6. Vary across prompts: camera style, speed, motion intensity, detail focus
 
 Return JSON:
 {{
