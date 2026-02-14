@@ -161,6 +161,7 @@ class GenerateRoundRequest(BaseModel):
     feedback: Optional[str] = None
     model: Optional[str] = None  # override image/video model for this round
     count: Optional[int] = Field(None, ge=1, le=7)  # number of items (1-7)
+    duration: Optional[str] = None  # override video duration (e.g. "5", "9", "6s")
 
 
 class SelectionRequest(BaseModel):

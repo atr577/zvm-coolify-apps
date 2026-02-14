@@ -11,7 +11,7 @@ import { RoundView } from '@/components/discover/RoundView'
 import { PromptRefinement } from '@/components/discover/PromptRefinement'
 import AudioSelection from '@/components/discover/AudioSelection'
 import { getMediaUrl } from '@/utils/video'
-import { getModelDisplayName, IMAGE_MODELS, VIDEO_MODELS } from '@/constants/models'
+import { getModelDisplayName, IMAGE_MODELS, VIDEO_MODELS, getDurationOptions } from '@/constants/models'
 
 const POLL_INTERVAL = 3000
 
@@ -45,6 +45,7 @@ export default function DiscoverPage() {
   const [collapsedRounds, setCollapsedRounds] = useState<Set<number>>(new Set())
   const [selectedImageModel, setSelectedImageModel] = useState<string>(IMAGE_MODELS[0].value)
   const [selectedVideoModel, setSelectedVideoModel] = useState<string>(VIDEO_MODELS[0].value)
+  const [selectedDuration, setSelectedDuration] = useState<string>('9')
   const [itemCount, setItemCount] = useState(4)
   const [pendingSelections, setPendingSelections] = useState<Record<number, Record<string, 'selected' | 'rejected'>>>({})
   const [feedback, setFeedback] = useState('')
@@ -81,7 +82,10 @@ export default function DiscoverPage() {
     if (project?.video_model) {
       setSelectedVideoModel(project.video_model)
     }
-  }, [project?.image_model, project?.video_model])
+    if (project?.video_duration) {
+      setSelectedDuration(project.video_duration)
+    }
+  }, [project?.image_model, project?.video_model, project?.video_duration])
 
   // Polling when items are generating
   useEffect(() => {
@@ -137,7 +141,8 @@ export default function DiscoverPage() {
       const ok = await submitAllSelections()
       if (!ok) return
       const model = project?.stage === 'videos' ? selectedVideoModel : selectedImageModel
-      await discoverApi.generateRound(projectId, feedback || undefined, model, itemCount)
+      const duration = project?.stage === 'videos' ? selectedDuration : undefined
+      await discoverApi.generateRound(projectId, feedback || undefined, model, itemCount, duration)
       setFeedback('')
       await fetchProject()
     } catch (err) {
@@ -736,6 +741,17 @@ export default function DiscoverPage() {
                     >
                       {(project.stage === 'videos' ? VIDEO_MODELS : IMAGE_MODELS).map(m => (
                         <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  {isActiveStage && project.stage === 'videos' && (
+                    <select
+                      value={selectedDuration}
+                      onChange={(e) => setSelectedDuration(e.target.value)}
+                      className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {getDurationOptions(selectedVideoModel).map(d => (
+                        <option key={d.value} value={d.value}>{d.label}</option>
                       ))}
                     </select>
                   )}

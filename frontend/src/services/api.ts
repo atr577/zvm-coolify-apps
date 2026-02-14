@@ -662,8 +662,8 @@ export const discoverApi = {
     api.delete(`/api/discover/${id}`),
 
   // Rounds
-  generateRound: (projectId: number, feedback?: string, model?: string, count?: number) =>
-    api.post<{ round: DiscoverRound }>(`/api/discover/${projectId}/rounds`, { feedback, model, count }),
+  generateRound: (projectId: number, feedback?: string, model?: string, count?: number, duration?: string) =>
+    api.post<{ round: DiscoverRound }>(`/api/discover/${projectId}/rounds`, { feedback, model, count, duration }),
 
   submitSelection: (projectId: number, roundId: number, data: DiscoverSelectionRequest) =>
     api.post<DiscoverSelectionResponse>(`/api/discover/${projectId}/rounds/${roundId}/select`, data),

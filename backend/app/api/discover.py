@@ -135,6 +135,7 @@ async def generate_round(
             feedback=data.feedback,
             model_override=data.model,
             count_override=data.count,
+            duration_override=data.duration,
         )
         return {
             "round": DiscoverRoundResponse.model_validate(round_obj),

@@ -143,6 +143,7 @@ class DiscoverService:
         feedback: str | None = None,
         model_override: str | None = None,
         count_override: int | None = None,
+        duration_override: str | None = None,
     ) -> DiscoverRound:
         """
         Generate the next round of exploration.
@@ -186,6 +187,11 @@ class DiscoverService:
                 project.image_model = model_override
             elif project.stage == DiscoverStage.VIDEOS.value:
                 project.video_model = model_override
+            db.commit()
+
+        # Update video duration if overridden
+        if duration_override and project.stage == DiscoverStage.VIDEOS.value:
+            project.video_duration = duration_override
             db.commit()
 
         if project.stage == DiscoverStage.IMAGES.value:
