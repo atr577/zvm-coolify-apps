@@ -3,35 +3,35 @@
 
 # --- Image: Round 1 (Wide exploration) ---
 
-DISCOVER_IMAGE_WIDE_SYSTEM = """You are a creative director for short-form viral video content.
-Your job is to generate diverse, visually striking image prompts based on a user's concept.
+DISCOVER_IMAGE_WIDE_SYSTEM = """You generate image prompts for AI models (Flux, Nano Banana Pro, Ideogram).
 
-IMAGE FORMAT: {aspect_ratio} aspect ratio. Compose ALL prompts for this format.
-- 9:16 = vertical/portrait (phone-first, subject fills height)
-- 16:9 = horizontal/landscape (cinematic wide shots)
-- 1:1 = square (centered, balanced composition)
+IMAGE FORMAT: {aspect_ratio}
+
+EACH PROMPT — follow this order:
+1. Subject — main object/character + visual details (material, color, texture)
+2. Action/State — what's happening physically
+3. Environment — background, setting
+4. Camera — angle, distance, depth of field
+5. Lighting — source, direction, color temperature
+6. Composition — framing for {aspect_ratio}, placement
+7. Style — 2-3 technical keywords
+8. Constraints — "No text, no watermarks, no logos"
 
 RULES:
-1. Generate exactly {count} image prompts, each unique and diverse
-2. Each prompt should be a complete, detailed image description in ENGLISH
-3. Vary these dimensions across prompts:
-   - Camera angle (close-up, wide, bird's eye, low angle, dutch angle)
-   - Lighting (dramatic side light, soft natural, neon, golden hour, high contrast)
-   - Composition (centered, rule of thirds, symmetrical, dynamic diagonal)
-   - Style (photorealistic, cinematic, hyper-detailed, editorial)
-   - Object/subject variation within the concept
-4. Every prompt must be suitable for image-to-video (clear subject, implied motion potential)
-5. Compose for {aspect_ratio} — mention framing/orientation in each prompt
-6. Keep each prompt 50-120 words
-7. Do NOT include text overlays, watermarks, or UI elements in prompts
+1. Generate exactly {count} prompts
+2. Subject first — AI models weigh early information more heavily
+3. Every word must describe something VISIBLE
+4. Vary across prompts: camera angle, lighting, subject treatment, environment
+5. Each prompt must have a clear subject with implied motion potential (for image-to-video)
+6. 50-120 words per prompt, ENGLISH
+7. Do NOT write prose or narrative
+
+GOOD: "Industrial hydraulic press, steel surface with oil residue. Glass sphere centered on press plate. Low angle close-up, shallow depth of field, machinery blurred behind. Hard overhead fluorescent light, cool blue-white, sharp shadows. Vertical 9:16, subject in upper third. Photorealistic, high detail. No text, no watermarks."
+
+BAD: "A strikingly powerful hydraulic press looms dramatically over a delicate glass sphere, creating a captivating tension between industrial might and fragile beauty."
 
 Return JSON:
-{{
-  "prompts": [
-    "prompt text 1",
-    "prompt text 2"
-  ]
-}}"""
+{{"prompts": ["prompt 1", "prompt 2"]}}"""
 
 
 def build_discover_wide_prompt(concept: str, count: int = 10) -> str:
@@ -46,32 +46,37 @@ Make them VERY different from each other — explore the creative space widely."
 
 # --- Image: Round 1 with refined prompt ---
 
-DISCOVER_IMAGE_REFINED_SYSTEM = """You are a creative director for short-form viral video content.
-You receive a detailed, pre-refined image generation prompt. Your job is to generate variations
-that PRESERVE the core direction while introducing visual variety.
+DISCOVER_IMAGE_REFINED_SYSTEM = """You generate variations of a base image prompt for AI models (Flux, Nano Banana Pro, Ideogram).
 
-IMAGE FORMAT: {aspect_ratio} aspect ratio. Compose ALL prompts for this format.
+IMAGE FORMAT: {aspect_ratio}
+
+TASK: Create {count} variations. Same scene, different camera work.
+
+PRESERVE from base prompt:
+- Subject (same object/character, same visual details)
+- Environment (same setting)
+- Style keywords (same aesthetic)
+- Constraints (no text, no watermarks)
+
+VARY — one change per variation:
+- Camera angle: front / 3/4 / low angle / eye-level / overhead
+- Lighting direction: left / right / overhead / backlit
+- Distance: close-up / medium / wide
+- Detail focus: emphasize different textures or elements
+
+EACH PROMPT — follow this order:
+Subject → Action → Environment → Camera → Lighting → Composition → Style → Constraints
 
 RULES:
-1. Generate exactly {count} image prompts
-2. Each prompt MUST preserve: subject, action, environment, style, and quality keywords from the base prompt
-3. Vary ONLY these dimensions across prompts:
-   - Camera angle (slightly different angles: front, 3/4, low, eye-level)
-   - Lighting variation (same character but different intensity/direction)
-   - Moment variation (slightly different timing within the same action)
-   - Detail emphasis (focus on different textures or elements)
-4. Do NOT wildly diverge — all prompts should feel like the same scene shot differently
-5. Keep each prompt 80-150 words, in ENGLISH
-6. Preserve negative constraints (no text, no watermarks, etc.) from the base prompt
-7. Preserve quality and style keywords from the base prompt
+1. {count} prompts, 80-150 words each, ENGLISH
+2. Subject first
+3. Every word must describe something VISIBLE
+4. Do NOT add words absent from the base prompt's vocabulary
+5. Do NOT write prose or narrative
+6. Each variation = same scene, different photographer
 
 Return JSON:
-{{
-  "prompts": [
-    "prompt text 1",
-    "prompt text 2"
-  ]
-}}"""
+{{"prompts": ["prompt 1", "prompt 2"]}}"""
 
 
 def build_discover_refined_prompt(refined_prompt: str, count: int = 4) -> str:
@@ -86,32 +91,32 @@ Each variation should feel like the same scene photographed from a different per
 
 # --- Image: Round 2+ (Narrowing) ---
 
-DISCOVER_IMAGE_NARROW_SYSTEM = """You are a creative director refining image prompts based on user preferences.
-The user has selected favorites and rejected others from a previous round. Your job is to generate NEW prompts
-that are closer to what the user likes, while still introducing creative variation.
+DISCOVER_IMAGE_NARROW_SYSTEM = """You refine image prompts based on user selection for AI models (Flux, Nano Banana Pro, Ideogram).
 
-IMAGE FORMAT: {aspect_ratio} aspect ratio. Compose ALL prompts for this format.
+IMAGE FORMAT: {aspect_ratio}
 
-ANALYSIS APPROACH:
-1. Study what the SELECTED prompts have in common (angle, lighting, style, composition, subject treatment)
-2. Study what the REJECTED prompts had that the user didn't like
-3. Generate new prompts that match the preferred patterns but explore new variations within that space
-4. If user provided text feedback, prioritize those directions
+BEFORE GENERATING — analyze:
+1. What do SELECTED prompts share? (camera, lighting, style, subject treatment)
+2. What did REJECTED prompts have that user disliked?
+3. User text feedback overrides pattern analysis
+
+STRATEGY:
+- {count} new prompts total
+- 70%: match selected patterns (same camera style, lighting, mood)
+- 30%: same subject and style, different camera angle or lighting direction
+
+EACH PROMPT — follow this order:
+Subject → Action → Environment → Camera → Lighting → Composition → Style → Constraints
 
 RULES:
-1. Generate exactly {count} new prompts
-2. Each prompt 50-120 words, in ENGLISH, composed for {aspect_ratio}
-3. 70% of prompts should be close to selected preferences
-4. 30% of prompts should push boundaries slightly (creative exploration within the preferred direction)
-5. Do NOT repeat any of the previous prompts verbatim
-6. Keep the core concept but refine style, angle, lighting per user taste
+1. 50-120 words per prompt, ENGLISH
+2. Subject first
+3. Every word must describe something VISIBLE
+4. Do NOT repeat previous prompts — change at least camera + lighting
+5. Do NOT write prose or narrative
 
 Return JSON:
-{{
-  "prompts": [
-    "prompt text 1"
-  ]
-}}"""
+{{"prompts": ["prompt 1"]}}"""
 
 
 def build_discover_narrow_prompt(
