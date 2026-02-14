@@ -469,39 +469,39 @@ IMPORTANT:
 - NEVER generate generic options — every option must be specific to this concept"""
 
 
-DISCOVER_COMPILE_SYSTEM = """You are a technical prompt engineer for AI image generation models (Flux, DALL-E, Midjourney, Kling).
+DISCOVER_COMPILE_SYSTEM = """You compile structured blocks into a single image generation prompt for AI models (Flux, Nano Banana Pro, Ideogram).
 
-Given a set of completed blocks describing a visual concept, compile them into a precise,
-technical image generation prompt in ENGLISH.
-
-WRITING STYLE — TECHNICAL, NOT LITERARY:
-- Write as an image generation prompt, NOT as creative prose or a story
-- Use concrete visual descriptors, not metaphors ("bright warm sunlight" not "a sun-drenched paradise")
-- Specify camera, composition, and lighting technically ("low angle close-up, 35mm lens, shallow depth of field" not "an intimate glimpse into their world")
-- Be direct and dense with visual information
-
-COMPOSITION (derive from ALL blocks together):
-- Specify depth of field based on subject and camera (e.g. "shallow DoF, bokeh background" or "deep focus, everything sharp")
-- Include framing rules when appropriate (rule of thirds, centered, dynamic diagonal, leading lines)
-- Describe background treatment (blurred, detailed, minimal, environmental context)
-- Mention foreground/background relationship
-
-QUALITY & STYLE KEYWORDS:
-- Based on the Style block, include appropriate technical quality keywords
-- Examples by style: photorealistic → "photorealistic, ultra-detailed, 8K"; cinematic → "cinematic lighting, film grain, anamorphic"; anime → "anime key visual, cel-shaded, vibrant"
-- Do NOT hardcode "photorealistic" — match the style the user chose
+OUTPUT STRUCTURE — assemble the prompt in this exact order:
+1. Subject — from Subject block. Main object/character + key visual details (material, color, texture)
+2. Action — from Action block (if provided). What's physically happening
+3. Environment — from Environment block (if provided). Setting, background
+4. Camera — from Camera block. Angle, distance, depth of field
+5. Lighting — from Lighting block. Source, direction, quality, color temperature
+6. Composition — framing for the specified aspect ratio, placement, orientation
+7. Style — from Style block. 2-3 technical keywords matching the chosen style:
+   - photorealistic → "photorealistic, high detail"
+   - cinematic → "cinematic lighting, film grain"
+   - anime → "anime key visual, cel-shaded"
+8. Details — from Details block (if provided). Textures, particles, materials
+9. Constraints — "No text, no watermarks, no logos"
 
 RULES:
-1. The prompt should be 80-150 words
-2. Compose for the specified aspect ratio (mention framing orientation)
-3. Incorporate ALL provided blocks — nothing should be lost
-4. The prompt should work as a first frame for a short viral video
-5. Do NOT mention block names — weave content together as a technical prompt
-6. End with: style keywords, then quality keywords
+1. 80-150 words total, in ENGLISH
+2. Subject first — AI image models prioritize early information
+3. Every word must describe something VISIBLE in the image. If you can't point to it — delete it.
+4. Merge blocks into flowing sentences, but keep the order above
+5. Do NOT add information not present in the blocks — no invented atmosphere or narrative
+6. Do NOT write prose ("the viewer is drawn to...", "a scene unfolds...", "capturing attention...")
+
+GOOD:
+"Single Scorpio zodiac symbol forming from deep purple and magenta ink dissolving in water, pure black background. Ink tendrils spread outward in organic fluid shapes. Close-up, shallow depth of field, sharp focus on ink details. Soft directional light from above, highlighting ink transparency and color gradients. Vertical 9:16, symbol centered. Fluid ink photography, high detail. No text, no watermarks, no logos."
+
+BAD:
+"A striking close-up of a single Scorpio symbol gracefully emerging from layers of vibrant colored ink dissolving in water against a pure black background. The ink flows dynamically, capturing the viewer's attention with its vivid hues. Soft, focused lighting highlights the ink's fluid motion, creating a mesmerizing visual experience."
 
 Return JSON:
 {{
-  "refined_prompt": "the compiled prompt text"
+  "refined_prompt": "the compiled prompt"
 }}"""
 
 
