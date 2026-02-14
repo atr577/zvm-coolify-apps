@@ -11,24 +11,9 @@ import { RoundView } from '@/components/discover/RoundView'
 import { PromptRefinement } from '@/components/discover/PromptRefinement'
 import AudioSelection from '@/components/discover/AudioSelection'
 import { getMediaUrl } from '@/utils/video'
-import { getModelDisplayName } from '@/constants/models'
+import { getModelDisplayName, IMAGE_MODELS, VIDEO_MODELS } from '@/constants/models'
 
 const POLL_INTERVAL = 3000
-
-const IMAGE_MODELS = [
-  { id: 'fal-ai/flux-2', label: 'Flux 2' },
-  { id: 'fal-ai/flux-pro/v1.1', label: 'Flux Pro v1.1' },
-  { id: 'fal-ai/recraft-v3', label: 'Recraft V3' },
-  { id: 'fal-ai/ideogram/v3', label: 'Ideogram 3.0' },
-  { id: 'fal-ai/nano-banana-pro', label: 'Nano Banana Pro' },
-]
-
-const VIDEO_MODELS = [
-  { id: 'fal-ai/kling-video/v2.1/standard/image-to-video', label: 'Kling 2.1 Standard' },
-  { id: 'fal-ai/kling-video/v2.6/pro/image-to-video', label: 'Kling 2.6 Pro' },
-  { id: 'fal-ai/veo3/fast/image-to-video', label: 'Veo 3 Fast' },
-  { id: 'fal-ai/minimax/video-01/image-to-video', label: 'Hailuo 2.3' },
-]
 
 const STAGE_LABELS: Record<string, string> = {
   refine: 'Prompt Refinement',
@@ -58,8 +43,8 @@ export default function DiscoverPage() {
   const [advancing, setAdvancing] = useState(false)
   const [rollingBack, setRollingBack] = useState(false)
   const [collapsedRounds, setCollapsedRounds] = useState<Set<number>>(new Set())
-  const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODELS[0].id)
-  const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0].id)
+  const [selectedImageModel, setSelectedImageModel] = useState<string>(IMAGE_MODELS[0].value)
+  const [selectedVideoModel, setSelectedVideoModel] = useState<string>(VIDEO_MODELS[0].value)
   const [itemCount, setItemCount] = useState(4)
   const [pendingSelections, setPendingSelections] = useState<Record<number, Record<string, 'selected' | 'rejected'>>>({})
   const [feedback, setFeedback] = useState('')
@@ -87,6 +72,16 @@ export default function DiscoverPage() {
     setLoading(true)
     fetchProject().finally(() => setLoading(false))
   }, [fetchProject])
+
+  // Initialize model selectors from project data
+  useEffect(() => {
+    if (project?.image_model) {
+      setSelectedImageModel(project.image_model)
+    }
+    if (project?.video_model) {
+      setSelectedVideoModel(project.video_model)
+    }
+  }, [project?.image_model, project?.video_model])
 
   // Polling when items are generating
   useEffect(() => {
@@ -740,7 +735,7 @@ export default function DiscoverPage() {
                       className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                       {(project.stage === 'videos' ? VIDEO_MODELS : IMAGE_MODELS).map(m => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
+                        <option key={m.value} value={m.value}>{m.label}</option>
                       ))}
                     </select>
                   )}
