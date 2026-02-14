@@ -328,6 +328,7 @@ class DiscoverService:
                 direction=feedback,
                 blocks=blocks,
                 concept=project.concept,
+                video_duration=project.video_duration,
             )
         else:
             selected, rejected = self._gather_selections(db, project, RoundType.VIDEO.value)
@@ -335,6 +336,7 @@ class DiscoverService:
                 finalist_image.prompt, count, selected, rejected, feedback,
                 blocks=blocks,
                 concept=project.concept,
+                video_duration=project.video_duration,
             )
 
         result = await self.openai.generate_json(

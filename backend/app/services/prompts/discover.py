@@ -174,15 +174,15 @@ CANNOT DO: multiple angles, sound, complex action chains, precise timecodes, tex
 
 OUTPUT FORMAT — each prompt must use these labeled lines:
 Subject: [who/what is in frame at the start]
-Motion: [the FULL sequence of what happens — all key actions from start to end, 2-3 sentences]
+Motion: [the FULL sequence with timing — distribute actions across the video duration evenly]
 Camera: [one movement or static]
 Speed: [slow/medium/fast]
 Details: [secondary effects — particles, debris, reflections, color shifts]
 Continuity: [preservation instructions]
 
-GOOD EXAMPLE:
+GOOD EXAMPLE (10s video):
 "Subject: industrial hydraulic press, bowling ball
-Motion: press descends steadily onto ball, ball surface cracks and deforms under pressure, fragments scatter outward
+Motion: first 3s — press descends slowly toward ball. Middle 4s — contact, ball cracks and deforms under pressure. Final 3s — ball shatters, fragments scatter outward
 Camera: static, subtle push-in
 Speed: slow
 Details: small fragments fall to sides, dust rises from impact point
@@ -192,7 +192,7 @@ BAD (DO NOT):
 - Literary prose ("looms above with ceremonial slowness")
 - Sound descriptions ("a resounding crack echoes")
 - Multiple camera moves ("cuts to close-up, then pulls back")
-- Fake timecodes ("at 2 seconds... at 4 seconds...")
+- Precise millisecond timecodes — use approximate timing (first third, middle, final third)
 - Metaphors ("like colored stars", "shower of fragments")
 - Splitting one story across multiple prompts (each prompt = full video)
 
@@ -221,6 +221,7 @@ def build_discover_video_prompt(
     direction: str | None = None,
     blocks: dict | None = None,
     concept: str | None = None,
+    video_duration: str | None = None,
 ) -> str:
     """Build user prompt for video motion generation."""
     context = ""
@@ -249,8 +250,13 @@ def build_discover_video_prompt(
 USER DIRECTION (what should happen):
 {direction}"""
 
-    context += f"""
+    duration_str = ""
+    if video_duration:
+        dur = video_duration.replace("s", "")
+        duration_str = f"\nVIDEO DURATION: {dur} seconds. Distribute actions across this time."
 
+    context += f"""
+{duration_str}
 Generate {count} motion prompts that follow the CONCEPT narrative, using WINNING IMAGE as the visual starting point.
 The image is frame 1 — describe what happens NEXT to tell the story from the concept."""
 
