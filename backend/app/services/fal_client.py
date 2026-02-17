@@ -358,6 +358,8 @@ class FalClient:
         use_model = model or settings.VIDEO_MODEL or self.VIDEO_MODEL
         is_kling = "kling" in use_model.lower()
 
+        is_wan = "wan" in use_model.lower()
+
         # Model-specific duration validation
         if is_kling and "/v3/" in use_model:
             # Kling v3: integer 3-15 seconds
@@ -370,10 +372,18 @@ class FalClient:
                 duration = "5"
                 logger.info(f"Adjusted duration to {duration} (kling v3 requires integer)")
         elif is_kling:
-            # Kling v2.1: only 5 or 10 (no 's' suffix)
+            # Kling v2.1/v2.6: only 5 or 10 (no 's' suffix)
             if duration not in {"5", "10"}:
                 duration = "5"
-                logger.info(f"Adjusted duration to {duration} (kling v2.1 constraint)")
+                logger.info(f"Adjusted duration to {duration} (kling v2.x constraint)")
+        elif is_wan:
+            # Wan v2.6: 5, 10, or 15 seconds (integer, no 's' suffix)
+            dur_clean = duration.rstrip("s")
+            if dur_clean not in {"5", "10", "15"}:
+                duration = "5"
+                logger.info(f"Adjusted duration to {duration} (wan constraint)")
+            else:
+                duration = dur_clean
         else:
             # Veo supports 4s, 6s, 8s
             valid_durations = {"4s", "6s", "8s"}
@@ -438,6 +448,7 @@ class FalClient:
         """High-level: submit + poll, returns video URL"""
         use_model = model or settings.VIDEO_MODEL or self.VIDEO_MODEL
         is_kling = "kling" in use_model.lower()
+        is_wan = "wan" in use_model.lower()
 
         # Model-specific duration validation
         if is_kling and "/v3/" in use_model:
@@ -451,10 +462,18 @@ class FalClient:
                 duration = "5"
                 logger.info(f"Adjusted duration to {duration} (kling v3 requires integer)")
         elif is_kling:
-            # Kling v2.1: only 5 or 10 (no 's' suffix)
+            # Kling v2.1/v2.6: only 5 or 10 (no 's' suffix)
             if duration not in {"5", "10"}:
                 duration = "5"
-                logger.info(f"Adjusted duration to {duration} (kling v2.1 constraint)")
+                logger.info(f"Adjusted duration to {duration} (kling v2.x constraint)")
+        elif is_wan:
+            # Wan v2.6: 5, 10, or 15 seconds (integer, no 's' suffix)
+            dur_clean = duration.rstrip("s")
+            if dur_clean not in {"5", "10", "15"}:
+                duration = "5"
+                logger.info(f"Adjusted duration to {duration} (wan constraint)")
+            else:
+                duration = dur_clean
         else:
             # Veo supports 4s, 6s, 8s
             valid_durations = {"4s", "6s", "8s"}

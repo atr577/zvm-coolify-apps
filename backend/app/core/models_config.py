@@ -56,11 +56,31 @@ VIDEO_MODEL_CONFIGS = {
         "max_duration": 8,
         "supports_audio": True
     },
+    "fal-ai/kling-video/v2.6/pro/image-to-video": {
+        "provider": "fal.ai",
+        "model": "fal-ai/kling-video/v2.6/pro/image-to-video",
+        "max_duration": 10,
+        "supports_audio": True
+    },
+    "fal-ai/kling-video/v3/pro/image-to-video": {
+        "provider": "fal.ai",
+        "model": "fal-ai/kling-video/v3/pro/image-to-video",
+        "max_duration": 15,
+        "supports_audio": True
+    },
+    "wan/v2.6/image-to-video": {
+        "provider": "fal.ai",
+        "model": "wan/v2.6/image-to-video",
+        "max_duration": 15,
+        "supports_audio": False
+    },
+    # Legacy models (deprecated)
     "fal-ai/kling-video/v2.1/image-to-video": {
         "provider": "fal.ai",
         "model": "fal-ai/kling-video/v2.1/image-to-video",
         "max_duration": 10,
-        "supports_audio": False
+        "supports_audio": False,
+        "deprecated": True
     },
     # Legacy PiAPI KLING models (deprecated)
     "kling-1.5": {"provider": "piapi", "version": "1.5", "max_duration": 5, "deprecated": True},

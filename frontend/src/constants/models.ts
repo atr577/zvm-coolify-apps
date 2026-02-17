@@ -30,6 +30,8 @@ export const VIDEO_MODELS: { value: VideoModel; label: string }[] = [
   { value: 'fal-ai/veo3.1/reference-to-video', label: 'Veo3.1 Reference' },
   { value: 'fal-ai/kling-video/v3/standard/image-to-video', label: 'Kling v3 Standard' },
   { value: 'fal-ai/kling-video/v3/pro/image-to-video', label: 'Kling v3 Pro' },
+  { value: 'fal-ai/kling-video/v2.6/pro/image-to-video', label: 'Kling v2.6 Pro' },
+  { value: 'wan/v2.6/image-to-video', label: 'Wan 2.6' },
   { value: 'fal-ai/kling-video/v2.1/standard/image-to-video', label: 'Kling v2.1 Standard' },
   { value: 'fal-ai/kling-video/v2.1/pro/image-to-video', label: 'Kling v2.1 Pro' },
   { value: 'fal-ai/minimax/video-01', label: 'Minimax Video-01' },
@@ -79,11 +81,20 @@ export function getDurationOptions(videoModel: string | undefined): { value: str
     })
   }
 
-  // Kling v2.1: 5 or 10 seconds
+  // Kling v2.1/v2.6: 5 or 10 seconds
   if (videoModel.includes('kling')) {
     return [
       { value: '5', label: '5 sec' },
       { value: '10', label: '10 sec' },
+    ]
+  }
+
+  // Wan v2.6: 5, 10, or 15 seconds
+  if (videoModel.includes('wan')) {
+    return [
+      { value: '5', label: '5 sec' },
+      { value: '10', label: '10 sec' },
+      { value: '15', label: '15 sec' },
     ]
   }
 
@@ -112,6 +123,7 @@ export function getDurationOptions(videoModel: string | undefined): { value: str
 export function getDefaultDuration(videoModel: string | undefined): string {
   if (!videoModel) return '6s'
   if (videoModel.includes('kling')) return '5'
+  if (videoModel.includes('wan')) return '5'
   if (videoModel.includes('veo')) return '6s'
   if (videoModel.includes('minimax')) return '5s'
   return '6s'
