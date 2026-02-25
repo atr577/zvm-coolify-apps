@@ -298,7 +298,7 @@ export default function SocialAccounts() {
                   <div className="ml-3">
                     <p className="font-medium text-gray-900">{acc.channel_title}</p>
                     <p className="text-sm text-gray-500">
-                      {acc.channel_handle && <span className="mr-2">{acc.channel_handle}</span>}
+                      {acc.channel_handle && <span className="mr-2 text-gray-700">{acc.channel_handle}</span>}
                       {acc.google_email}
                     </p>
                   </div>
