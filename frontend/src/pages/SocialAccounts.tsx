@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Instagram, Youtube, Trash2, RefreshCw, Plus, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
-import api from '@/services/api'
+import { Instagram, Youtube, Trash2, RefreshCw, Plus, Loader2, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react'
+import api, { youtubeAccountsApi } from '@/services/api'
+import type { WorkspaceYouTubeAccount } from '@/services/api'
 import { getErrorMessage } from '@/types'
 
 interface SocialAccount {
@@ -45,6 +46,7 @@ const PLATFORMS = [
 
 export default function SocialAccounts() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
+  const [workspaceYouTubeAccounts, setWorkspaceYouTubeAccounts] = useState<WorkspaceYouTubeAccount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
@@ -57,8 +59,12 @@ export default function SocialAccounts() {
 
   const fetchAccounts = async () => {
     try {
-      const response = await api.get<SocialAccount[]>('/api/social-accounts/')
-      setAccounts(response.data)
+      const [accountsRes, wsYtRes] = await Promise.all([
+        api.get<SocialAccount[]>('/api/social-accounts/'),
+        youtubeAccountsApi.workspaceList(),
+      ])
+      setAccounts(accountsRes.data)
+      setWorkspaceYouTubeAccounts(wsYtRes.data)
     } catch (err: unknown) {
       setError(getErrorMessage(err))
     } finally {
@@ -261,6 +267,55 @@ export default function SocialAccounts() {
           )
         })}
       </div>
+
+      {workspaceYouTubeAccounts.length > 0 && (
+        <div className="bg-white rounded-lg shadow border p-6">
+          <div className="flex items-center mb-4">
+            <div className="bg-red-600 p-3 rounded-lg text-white">
+              <Youtube />
+            </div>
+            <div className="ml-4">
+              <h3 className="text-lg font-semibold text-gray-900">YouTube — Workspace Channels</h3>
+              <p className="text-sm text-gray-500">
+                Channels linked via{' '}
+                <a href="/link-youtube-account" target="_blank" className="text-primary-600 underline inline-flex items-center gap-1">
+                  /link-youtube-account <ExternalLink className="h-3 w-3" />
+                </a>
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {workspaceYouTubeAccounts.map(acc => (
+              <div key={acc.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  {acc.channel_thumbnail_url ? (
+                    <img src={acc.channel_thumbnail_url} alt={acc.channel_title} className="h-10 w-10 rounded-full" />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                      <Youtube className="h-5 w-5 text-gray-500" />
+                    </div>
+                  )}
+                  <div className="ml-3">
+                    <p className="font-medium text-gray-900">{acc.channel_title}</p>
+                    <p className="text-sm text-gray-500">{acc.google_email}</p>
+                  </div>
+                  <div className="ml-4">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      acc.token_status === 'active'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {acc.token_status === 'active'
+                        ? <><CheckCircle className="h-3 w-3 mr-1" />Connected</>
+                        : <><AlertCircle className="h-3 w-3 mr-1" />Revoked</>}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h4 className="font-medium text-blue-900 mb-2">About OAuth Integration</h4>
