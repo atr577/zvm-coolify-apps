@@ -154,8 +154,24 @@ export const socialAccountsApi = {
   listByWorkspace: (workspaceId: number) => api.get<SocialAccount[]>(`/api/workspaces/${workspaceId}/social-accounts`),
 }
 
+export interface WorkspaceYouTubeAccount {
+  id: number
+  platform: 'youtube'
+  source: 'workspace'
+  channel_id: string
+  channel_title: string
+  channel_thumbnail_url: string | null
+  google_email: string
+  token_status: string
+  linked_at: string
+}
+
+export const youtubeAccountsApi = {
+  workspaceList: () => api.get<WorkspaceYouTubeAccount[]>('/api/youtube-accounts/workspace'),
+}
+
 export const publishingApi = {
-  toYouTube: (videoId: number, socialAccountId: number, videoUrl: string, title: string, description: string, hashtags?: string, privacyStatus: string = 'public') =>
+  toYouTube: (videoId: number, accountId: number, videoUrl: string, title: string, description: string, hashtags?: string, privacyStatus: string = 'public', isWorkspaceAccount = false) =>
     api.post('/api/publish/youtube', {
       video_id: videoId,
       platform: 'youtube',
@@ -165,7 +181,9 @@ export const publishingApi = {
       hashtags,
       privacy_status: privacyStatus
     }, {
-      params: { social_account_id: socialAccountId }
+      params: isWorkspaceAccount
+        ? { youtube_account_id: accountId }
+        : { social_account_id: accountId }
     }),
 
   toInstagram: (videoId: number, socialAccountId: number, videoUrl: string, title: string, description: string, hashtags?: string) =>

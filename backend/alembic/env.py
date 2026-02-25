@@ -31,7 +31,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.db.base import Base
 # Import all models to ensure they're registered with Base
-from app.models import Project, Video, StepHistory
+from app.models import Project, Video, StepHistory, YouTubeAccount
 
 target_metadata = Base.metadata
 

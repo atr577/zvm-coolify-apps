@@ -7,6 +7,7 @@ from app.db.base import get_db
 from app.models.video import Video
 from app.models.project import PublishResult, Project
 from app.models.user import User, SocialAccount, WorkspaceMember
+from app.models.youtube_account import YouTubeAccount, YouTubeAccountStatus
 from app.schemas.publishing import PublishRequest, PublishResponse
 from app.services.social_service import social_publisher
 from app.core.deps import get_current_user
@@ -224,18 +225,41 @@ async def publish_to_tiktok(
 @router.post("/youtube", response_model=PublishResponse)
 async def publish_to_youtube(
     request: PublishRequest,
-    social_account_id: int,
+    social_account_id: int = None,
+    youtube_account_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Publish to YouTube Shorts (or update if already published)"""
+    """Publish to YouTube Shorts (or update if already published).
+
+    Pass either social_account_id (personal account) or youtube_account_id (workspace account).
+    """
+    if not social_account_id and not youtube_account_id:
+        raise HTTPException(status_code=400, detail="Either social_account_id or youtube_account_id is required")
+
     video = db.query(Video).filter(Video.id == request.video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
     verify_video_ownership(db, video, current_user)
 
-    social_account = get_social_account_for_publish(db, social_account_id, "youtube", video, current_user)
+    # Resolve tokens: workspace YouTubeAccount or personal SocialAccount
+    if youtube_account_id:
+        yt_account = db.query(YouTubeAccount).filter(
+            YouTubeAccount.id == youtube_account_id,
+            YouTubeAccount.workspace_id == video.project.workspace_id,
+            YouTubeAccount.token_status == YouTubeAccountStatus.ACTIVE.value,
+        ).first()
+        if not yt_account:
+            raise HTTPException(status_code=404, detail="YouTube account not found in this workspace")
+        if yt_account.token_expiry and yt_account.token_expiry < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Token expired. Account owner needs to re-link at /link-youtube-account.")
+        access_token = yt_account.access_token
+        refresh_token = yt_account.refresh_token
+    else:
+        social_account = get_social_account_for_publish(db, social_account_id, "youtube", video, current_user)
+        access_token = social_account.access_token
+        refresh_token = social_account.refresh_token
 
     # Check if already published to YouTube
     existing_publish = db.query(PublishResult).filter(
@@ -258,8 +282,8 @@ async def publish_to_youtube(
                 post_id=existing_publish.post_id,
                 title=request.title,
                 description=description,
-                access_token=social_account.access_token,
-                refresh_token=social_account.refresh_token,
+                access_token=access_token,
+                refresh_token=refresh_token,
                 tags=[],
                 thumbnail_url=get_local_url(video.local_image_path, video.image_url)
             )
@@ -298,8 +322,8 @@ async def publish_to_youtube(
                 video_url=request.video_url,
                 title=request.title,
                 description=description,
-                access_token=social_account.access_token,
-                refresh_token=social_account.refresh_token,
+                access_token=access_token,
+                refresh_token=refresh_token,
                 tags=[],
                 privacy_status=request.privacy_status or "public",
                 thumbnail_url=get_local_url(video.local_image_path, video.image_url)

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.base import engine, Base
-from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files, template, moderation, publishing_schedule, discover, audio_library
+from app.api import auth, projects, videos, ai_generation, workflow, social_accounts, oauth, publishing, metrics, files, template, moderation, publishing_schedule, discover, audio_library, youtube_link, youtube_accounts
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 import os
 import logging
@@ -91,6 +91,8 @@ app.include_router(moderation.router, prefix="/api", tags=["moderation"])
 app.include_router(publishing_schedule.router, prefix="/api", tags=["publishing-schedule"])
 app.include_router(discover.router, prefix="/api/discover", tags=["discover"])
 app.include_router(audio_library.router, prefix="/api/audio-library", tags=["audio-library"])
+app.include_router(youtube_link.router, prefix="/api/link-youtube", tags=["youtube-link"])
+app.include_router(youtube_accounts.router, prefix="/api/youtube-accounts", tags=["youtube-accounts"])
 
 
 @app.get("/")

@@ -37,6 +37,9 @@ from app.models.discover import (
 # Audio library
 from app.models.audio_library import AudioLibrary
 
+# YouTube OAuth accounts (external, no REGGY user)
+from app.models.youtube_account import YouTubeAccount, YouTubeAccountStatus
+
 __all__ = [
     "User",
     "SocialAccount",
@@ -82,4 +85,7 @@ __all__ = [
     "SelectionStatus",
     # Audio library
     "AudioLibrary",
+    # YouTube OAuth accounts
+    "YouTubeAccount",
+    "YouTubeAccountStatus",
 ]

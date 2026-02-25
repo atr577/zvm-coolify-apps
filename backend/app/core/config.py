@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     YOUTUBE_CLIENT_ID: str = ""
     YOUTUBE_CLIENT_SECRET: str = ""
     YOUTUBE_REDIRECT_URI: str = "http://localhost:8000/api/auth/youtube/callback"  # Deprecated: dynamic callback
+    YOUTUBE_DEFAULT_WORKSPACE_ID: int = 2  # Workspace for externally linked YouTube accounts
 
     # Database
     DATABASE_URL: str = "sqlite:///./generator.db"

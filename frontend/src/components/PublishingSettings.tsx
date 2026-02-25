@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
 import { CheckCircle, Instagram, Youtube, AlertCircle, Loader2, Lock } from 'lucide-react'
-import { publishingApi, socialAccountsApi, SocialAccount } from '@/services/api'
+import { publishingApi, socialAccountsApi, youtubeAccountsApi, SocialAccount, WorkspaceYouTubeAccount } from '@/services/api'
 import type { AdaptationData, PlatformAdaptation } from '@/types'
 import { getErrorMessage } from '@/types'
 
@@ -34,12 +34,20 @@ export default function PublishingSettings({
   const [youtubePrivacy, setYoutubePrivacy] = useState<'public' | 'private' | 'unlisted'>('private')
   // Per-platform selected account (for unbound platforms where user picks from dropdown)
   const [selectedAccountIds, setSelectedAccountIds] = useState<Record<string, number>>({})
+  const [selectedAccountIsWorkspace, setSelectedAccountIsWorkspace] = useState<Record<string, boolean>>({})
   const queryClient = useQueryClient()
 
   // Fetch user's social accounts (fallback for unbound platforms)
   const { data: socialAccounts, isLoading: loadingAccounts } = useQuery(
     'socialAccounts',
     () => socialAccountsApi.list().then(res => res.data),
+    { staleTime: 30000 }
+  )
+
+  // Fetch workspace YouTube accounts
+  const { data: workspaceYouTubeAccounts } = useQuery(
+    'workspaceYouTubeAccounts',
+    () => youtubeAccountsApi.workspaceList().then(res => res.data),
     { staleTime: 30000 }
   )
 
@@ -82,24 +90,38 @@ export default function PublishingSettings({
     return projectSocialAccounts?.find(acc => acc.platform === platform && acc.is_active)
   }
 
-  // Get available accounts for platform (user's own accounts, for dropdown fallback)
+  // Get available personal accounts for platform
   const getAvailableAccounts = (platform: string): SocialAccount[] => {
     return (socialAccounts || []).filter(acc => acc.platform === platform && acc.is_active)
+  }
+
+  // Get workspace YouTube accounts (only for youtube platform)
+  const getWorkspaceYouTubeAccounts = (): WorkspaceYouTubeAccount[] => {
+    return (workspaceYouTubeAccounts || []).filter(acc => acc.token_status === 'active')
   }
 
   // Resolve which account to publish to:
   // 1. Bound account (locked) → always use it
   // 2. User-selected from dropdown → use selectedAccountIds
-  // 3. Fallback to first available
-  const getPublishAccount = (platform: string): SocialAccount | undefined => {
+  // 3. Fallback to first available (personal, then workspace for youtube)
+  const getPublishAccount = (platform: string): { id: number; isWorkspace: boolean } | undefined => {
     const bound = getBoundAccount(platform)
-    if (bound) return bound
+    if (bound) return { id: bound.id, isWorkspace: false }
+
     const selectedId = selectedAccountIds[platform]
     if (selectedId) {
-      return socialAccounts?.find(acc => acc.id === selectedId)
+      return { id: selectedId, isWorkspace: selectedAccountIsWorkspace[platform] ?? false }
     }
+
     const available = getAvailableAccounts(platform)
-    return available[0]
+    if (available[0]) return { id: available[0].id, isWorkspace: false }
+
+    if (platform === 'youtube') {
+      const wsAccounts = getWorkspaceYouTubeAccounts()
+      if (wsAccounts[0]) return { id: wsAccounts[0].id, isWorkspace: true }
+    }
+
+    return undefined
   }
 
   const publishToPlatform = async (platform: string): Promise<PublishResult> => {
@@ -107,6 +129,7 @@ export default function PublishingSettings({
     if (!account) {
       return { platform, success: false, error: 'Аккаунт не подключен' }
     }
+    const { id: accountId, isWorkspace } = account
 
     const meta = getPlatformMeta(platform)
     const title = meta.title || 'Video'
@@ -117,7 +140,7 @@ export default function PublishingSettings({
       let response
       switch (platform) {
         case 'youtube':
-          response = await publishingApi.toYouTube(videoId, account.id, videoUrl, title, description, hashtags, youtubePrivacy)
+          response = await publishingApi.toYouTube(videoId, accountId, videoUrl, title, description, hashtags, youtubePrivacy, isWorkspace)
           break
         case 'instagram':
           response = await publishingApi.toInstagram(videoId, account.id, videoUrl, title, description, hashtags)
@@ -168,7 +191,7 @@ export default function PublishingSettings({
     setIsPublishing(false)
   }
 
-  const hasUnconnectedPlatforms = selectedPlatforms.some(p => !getPublishAccount(p))
+  const hasUnconnectedPlatforms = selectedPlatforms.some(p => getPublishAccount(p) === undefined)
 
   return (
     <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-300 p-6 rounded-lg shadow-lg">
@@ -195,6 +218,8 @@ export default function PublishingSettings({
               const meta = getPlatformMeta(platform)
               const boundAccount = getBoundAccount(platform)
               const availableAccounts = getAvailableAccounts(platform)
+              const wsAccounts = platform === 'youtube' ? getWorkspaceYouTubeAccounts() : []
+              const allAvailable = availableAccounts.length + wsAccounts.length
               const result = publishResults.find(r => r.platform === platform)
 
               return (
@@ -234,16 +259,17 @@ export default function PublishingSettings({
                               ? (boundAccount.display_name || boundAccount.username || 'Connected')
                               : `@${boundAccount.username || boundAccount.display_name || 'Connected'}`}
                           </span>
-                        ) : availableAccounts.length > 0 ? (
+                        ) : allAvailable > 0 ? (
                           // State 2: Not bound but accounts available — dropdown
                           <select
-                            value={selectedAccountIds[platform] || availableAccounts[0]?.id || ''}
+                            value={selectedAccountIds[platform] || availableAccounts[0]?.id || wsAccounts[0]?.id || ''}
                             onChange={(e) => {
                               e.stopPropagation()
-                              setSelectedAccountIds(prev => ({
-                                ...prev,
-                                [platform]: parseInt(e.target.value)
-                              }))
+                              const val = e.target.value
+                              const isWs = val.startsWith('ws:')
+                              const id = parseInt(isWs ? val.slice(3) : val)
+                              setSelectedAccountIds(prev => ({ ...prev, [platform]: id }))
+                              setSelectedAccountIsWorkspace(prev => ({ ...prev, [platform]: isWs }))
                             }}
                             onClick={(e) => e.stopPropagation()}
                             className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -253,6 +279,11 @@ export default function PublishingSettings({
                                 {platform === 'youtube'
                                   ? (acc.display_name || acc.username || acc.platform_user_id)
                                   : `@${acc.username || acc.display_name || acc.platform_user_id}`}
+                              </option>
+                            ))}
+                            {wsAccounts.map(acc => (
+                              <option key={`ws:${acc.id}`} value={`ws:${acc.id}`}>
+                                {acc.channel_title} [Workspace]
                               </option>
                             ))}
                           </select>

@@ -10,6 +10,7 @@ import SocialAccounts from './pages/SocialAccounts'
 import Analytics from './pages/Analytics'
 import Workspaces from './pages/Workspaces'
 import DiscoverPage from './pages/DiscoverPage'
+import LinkYouTubePage from './pages/LinkYouTubePage'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -19,6 +20,7 @@ function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/link-youtube-account" element={<LinkYouTubePage />} />
       <Route
         path="/*"
         element={
