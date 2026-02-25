@@ -97,3 +97,19 @@ celerybeat.pid
 dump.rdb
 
 docs/analysis/T15-manual-pipeline-test
+
+# ==========================================
+# Local docs & experiments (not for repo)
+# ==========================================
+experiments/
+docs/sessions/
+docs/audits/
+docs/ideas/
+docs/knowledge/
+docs/research/
+docs/specs/
+docs/hypotheses*.md
+docs/GOALS.md
+.agents/
+backend/.vite/
+paint-mixing-final-video.png

@@ -1,3 +1,0 @@
-file '/Users/gmartirosov/expremients/REGGY/experiments/output/scene1_sagittarius.mp4'
-file '/Users/gmartirosov/expremients/REGGY/experiments/output/scene2_virgo.mp4'
-file '/Users/gmartirosov/expremients/REGGY/experiments/output/scene3_heart_fire.mp4'
