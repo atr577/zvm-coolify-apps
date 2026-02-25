@@ -22,6 +22,8 @@ export const projectsApi = {
     api.post<Project>(`/api/projects/${projectId}/social-accounts`, { social_account_id: accountId }),
   unbindSocialAccount: (projectId: number, accountId: number) =>
     api.delete(`/api/projects/${projectId}/social-accounts/${accountId}`),
+  bindYouTubeAccount: (projectId: number, youtubeAccountId: number | null) =>
+    api.patch<Project>(`/api/projects/${projectId}/youtube-account`, { youtube_account_id: youtubeAccountId }),
 }
 
 // Videos API

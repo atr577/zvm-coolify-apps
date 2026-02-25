@@ -6,7 +6,9 @@ import {
   workspacesApi,
   socialAccountsApi,
   publishingScheduleApi,
+  youtubeAccountsApi,
 } from '@/services/api'
+import type { WorkspaceYouTubeAccount } from '@/services/api'
 import type {
   SocialAccount,
   TemplateSettings,
@@ -87,6 +89,8 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
   // Social accounts
   const [boundAccounts, setBoundAccounts] = useState<SocialAccount[]>([])
   const [workspaceAccounts, setWorkspaceAccounts] = useState<SocialAccount[]>([])
+  const [workspaceYouTubeAccounts, setWorkspaceYouTubeAccounts] = useState<WorkspaceYouTubeAccount[]>([])
+  const [boundYouTubeAccountId, setBoundYouTubeAccountId] = useState<number | null>(null)
   const [workspaceId, setWorkspaceId] = useState<number | null>(null)
   const [timezone, setTimezone] = useState('UTC')
   const [initialTimezone, setInitialTimezone] = useState('UTC')
@@ -175,6 +179,7 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
 
       const project = projectRes.data
       setBoundAccounts(project.social_accounts || [])
+      setBoundYouTubeAccountId(project.youtube_account_id ?? null)
       setWorkspaceId(project.workspace_id)
       const tz = project.timezone || 'UTC'
       setTimezone(tz)
@@ -192,11 +197,13 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       // Load workspace accounts + workspaces list
       if (project.workspace_id) {
         try {
-          const [wsAccounts, wsListRes] = await Promise.all([
+          const [wsAccounts, wsYtAccounts, wsListRes] = await Promise.all([
             socialAccountsApi.listByWorkspace(project.workspace_id),
+            youtubeAccountsApi.workspaceList(),
             workspacesApi.list(),
           ])
           setWorkspaceAccounts(wsAccounts.data)
+          setWorkspaceYouTubeAccounts(wsYtAccounts.data)
           setAllWorkspaces(wsListRes.data)
         } catch {
           // Not critical
@@ -404,9 +411,37 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
       if (accountId) {
         const res = await projectsApi.bindSocialAccount(projectId, accountId)
         setBoundAccounts(res.data.social_accounts || [])
+        // Mutual exclusion: unbind workspace YouTube when binding personal YouTube
+        if (platform === 'youtube' && boundYouTubeAccountId) {
+          await projectsApi.bindYouTubeAccount(projectId, null)
+          setBoundYouTubeAccountId(null)
+        }
       } else {
         setBoundAccounts((prev) => prev.filter((acc) => acc.platform !== platform))
       }
+    } catch {
+      // silently fail
+    } finally {
+      setBindingLoading(null)
+    }
+  }
+
+  // Workspace YouTube account binding
+  const handleBindYouTubeAccount = async (accountId: number | null) => {
+    setBindingLoading('youtube')
+    try {
+      // Mutual exclusion: unbind personal YouTube SocialAccount when binding workspace
+      if (accountId) {
+        const currentBound = boundAccounts.find(
+          (acc) => acc.platform === 'youtube' && acc.is_active
+        )
+        if (currentBound) {
+          await projectsApi.unbindSocialAccount(projectId, currentBound.id)
+          setBoundAccounts((prev) => prev.filter((acc) => acc.id !== currentBound.id))
+        }
+      }
+      const res = await projectsApi.bindYouTubeAccount(projectId, accountId)
+      setBoundYouTubeAccountId(res.data.youtube_account_id ?? null)
     } catch {
       // silently fail
     } finally {
@@ -487,18 +522,21 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
         }
       })(),
       distribution: {
-        status: (boundAccounts.length > 0 &&
+        status: ((boundAccounts.length > 0 || boundYouTubeAccountId) &&
         editedPublishing &&
         editedPublishing.days.length > 0
           ? 'complete'
           : 'empty') as StepStatus,
         summary:
-          boundAccounts.length > 0
-            ? `${[...new Set(boundAccounts.map((a) => a.platform))].map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' + ')}`
+          boundAccounts.length > 0 || boundYouTubeAccountId
+            ? `${[
+                ...new Set(boundAccounts.map((a) => a.platform)),
+                ...(boundYouTubeAccountId ? ['youtube'] : []),
+              ].map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' + ')}`
             : 'no accounts',
       },
     }
-  }, [variantsCount, editedSettings, templatesCount, boundAccounts, editedPublishing])
+  }, [variantsCount, editedSettings, templatesCount, boundAccounts, boundYouTubeAccountId, editedPublishing])
 
   // Toggle step
   const handleStepToggle = (step: StepNumber) => {
@@ -783,8 +821,11 @@ export function ConfigureSection({ projectId, showProjectSettings }: ConfigureSe
                 workspaceId={workspaceId}
                 boundAccounts={boundAccounts}
                 workspaceAccounts={workspaceAccounts}
+                workspaceYouTubeAccounts={workspaceYouTubeAccounts}
+                boundYouTubeAccountId={boundYouTubeAccountId}
                 bindingLoading={bindingLoading}
                 onBindAccount={handleBindAccount}
+                onBindYouTubeAccount={handleBindYouTubeAccount}
                 publishingConfig={editedPublishing}
                 onPublishingChange={updatePublishing}
                 timezone={timezone}

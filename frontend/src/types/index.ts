@@ -65,6 +65,7 @@ export interface Project {
   motion_template: string | null  // Motion prompt template (for remix)
   platforms: string[]
   social_accounts: SocialAccount[]
+  youtube_account_id: number | null
   duration: number
   aspect_ratio: AspectRatio
   audio_mode: AudioMode

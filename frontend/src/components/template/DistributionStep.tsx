@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import type { SocialAccount } from '@/types'
+import type { WorkspaceYouTubeAccount } from '@/services/api'
 
 const COMMON_TIMEZONES = [
   { value: 'UTC', label: 'UTC' },
@@ -33,8 +34,11 @@ interface DistributionStepProps {
   workspaceId: number | null
   boundAccounts: SocialAccount[]
   workspaceAccounts: SocialAccount[]
+  workspaceYouTubeAccounts: WorkspaceYouTubeAccount[]
+  boundYouTubeAccountId: number | null
   bindingLoading: string | null
   onBindAccount: (platform: string, accountId: number | null) => void
+  onBindYouTubeAccount: (accountId: number | null) => void
   publishingConfig: {
     is_paused: boolean
     days: string[]
@@ -64,8 +68,11 @@ const DAYS = [
 export function DistributionStep({
   boundAccounts,
   workspaceAccounts,
+  workspaceYouTubeAccounts,
+  boundYouTubeAccountId,
   bindingLoading,
   onBindAccount,
+  onBindYouTubeAccount,
   publishingConfig,
   onPublishingChange,
   timezone,
@@ -114,6 +121,13 @@ export function DistributionStep({
             )
             const bound = getBoundAccount(platform)
             const isLoading = bindingLoading === platform
+            const wsYtAccounts = platform === 'youtube' ? workspaceYouTubeAccounts : []
+            const totalAccounts = platformAccounts.length + wsYtAccounts.length
+
+            // For YouTube: resolve current value (personal or workspace)
+            const youtubeValue = platform === 'youtube'
+              ? (bound ? String(bound.id) : boundYouTubeAccountId ? `ws:${boundYouTubeAccountId}` : '')
+              : ''
 
             return (
               <div key={platform} className="border rounded-lg p-3">
@@ -121,8 +135,47 @@ export function DistributionStep({
                   <span className="text-sm font-medium capitalize">{platform}</span>
                   {isLoading && <span className="text-xs text-gray-400">...</span>}
                 </div>
-                {platformAccounts.length === 0 ? (
+                {totalAccounts === 0 ? (
                   <p className="text-xs text-gray-400 mt-1">No connected accounts</p>
+                ) : platform === 'youtube' ? (
+                  <select
+                    value={youtubeValue}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (!val) {
+                        // Deselect: clear both
+                        if (bound) onBindAccount(platform, null)
+                        if (boundYouTubeAccountId) onBindYouTubeAccount(null)
+                      } else if (val.startsWith('ws:')) {
+                        onBindYouTubeAccount(parseInt(val.slice(3)))
+                      } else {
+                        onBindAccount(platform, Number(val))
+                      }
+                    }}
+                    disabled={isLoading}
+                    className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                  >
+                    <option value="">Not selected</option>
+                    {platformAccounts.length > 0 && (
+                      <optgroup label="Personal">
+                        {platformAccounts.map((acc) => (
+                          <option key={acc.id} value={acc.id} disabled={acc.is_token_expired}>
+                            {acc.display_name || acc.username || acc.platform_user_id}
+                            {acc.is_token_expired ? ' (expired)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {wsYtAccounts.length > 0 && (
+                      <optgroup label="Workspace">
+                        {wsYtAccounts.map((acc) => (
+                          <option key={`ws:${acc.id}`} value={`ws:${acc.id}`}>
+                            {acc.channel_title} [Workspace]
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
                 ) : (
                   <select
                     value={bound?.id || ''}
@@ -142,9 +195,7 @@ export function DistributionStep({
                         value={acc.id}
                         disabled={acc.is_token_expired}
                       >
-                        {platform === 'youtube'
-                          ? (acc.display_name || acc.username || acc.platform_user_id)
-                          : `@${acc.username || acc.display_name || acc.platform_user_id}`}
+                        @{acc.username || acc.display_name || acc.platform_user_id}
                         {acc.is_token_expired ? ' (expired)' : ''}
                       </option>
                     ))}

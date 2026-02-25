@@ -51,6 +51,13 @@ class Project(Base):
         nullable=True,
     )
 
+    # Workspace YouTube account for publishing (T56)
+    youtube_account_id = Column(
+        Integer,
+        ForeignKey("youtube_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Project type: discover (full workflow) or remix (skip to image generation)
     project_type = Column(String(20), nullable=False, default="discover")
 
@@ -76,6 +83,7 @@ class Project(Base):
 
     # Relationships
     workspace = relationship("Workspace", back_populates="projects")
+    youtube_account = relationship("YouTubeAccount", foreign_keys=[youtube_account_id])
     videos = relationship("Video", back_populates="project", cascade="all, delete-orphan")
     social_accounts = relationship(
         "SocialAccount",

@@ -93,6 +93,7 @@ class ProjectResponse(ProjectBase):
     id: int
     workspace_id: Optional[int] = None
     social_accounts: List[SocialAccountResponse] = []
+    youtube_account_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -101,3 +102,7 @@ class ProjectResponse(ProjectBase):
 
 class BindSocialAccountRequest(BaseModel):
     social_account_id: int
+
+
+class BindYouTubeAccountRequest(BaseModel):
+    youtube_account_id: Optional[int] = None

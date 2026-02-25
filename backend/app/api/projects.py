@@ -5,7 +5,8 @@ from app.db.base import get_db
 from app.models import Project
 from app.models.user import User, SocialAccount, WorkspaceMember
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
-from app.schemas.project import BindSocialAccountRequest
+from app.schemas.project import BindSocialAccountRequest, BindYouTubeAccountRequest
+from app.models.youtube_account import YouTubeAccount, YouTubeAccountStatus
 from app.schemas.pagination import PaginatedResponse
 from app.core.deps import get_current_user
 from app.services.prompt_builders import DEFAULT_SYSTEM_PROMPTS
@@ -308,3 +309,43 @@ async def unbind_social_account(
 
     logger.info(f"Unbound social account {account_id} from project {project.id}")
     return {"message": "Social account unbound successfully"}
+
+
+# --- Workspace YouTube Account Binding ---
+
+@router.patch("/{project_id}/youtube-account", response_model=ProjectResponse)
+async def bind_youtube_account(
+    project_id: int,
+    request: BindYouTubeAccountRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Bind or unbind a workspace YouTubeAccount to a project."""
+    workspace_ids = get_user_workspace_ids(db, current_user.id)
+
+    project = db.query(Project).options(
+        joinedload(Project.social_accounts)
+    ).filter(
+        Project.id == project_id,
+        Project.workspace_id.in_(workspace_ids)
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if request.youtube_account_id is not None:
+        yt_account = db.query(YouTubeAccount).filter(
+            YouTubeAccount.id == request.youtube_account_id,
+            YouTubeAccount.workspace_id == project.workspace_id,
+            YouTubeAccount.token_status == YouTubeAccountStatus.ACTIVE.value,
+        ).first()
+        if not yt_account:
+            raise HTTPException(status_code=404, detail="YouTube account not found in this workspace")
+        project.youtube_account_id = yt_account.id
+        logger.info(f"Bound workspace YouTubeAccount {yt_account.id} ({yt_account.channel_title}) to project {project.id}")
+    else:
+        project.youtube_account_id = None
+        logger.info(f"Unbound workspace YouTubeAccount from project {project.id}")
+
+    db.commit()
+    db.refresh(project)
+    return project

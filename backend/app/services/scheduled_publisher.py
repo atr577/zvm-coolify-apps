@@ -18,6 +18,7 @@ from app.models.publishing_config import PublishingConfig
 from app.models.approved_generation import ApprovedGeneration
 from app.models.template_generation import TemplateGeneration
 from app.models.user import SocialAccount
+from app.models.youtube_account import YouTubeAccount, YouTubeAccountStatus
 from app.core.config import settings
 from app.services.social_service import social_publisher
 
@@ -368,13 +369,44 @@ async def publish_approved_generation(
     logger.info(f"Item {item.id} final status: {item.status}")
 
 
+class _YouTubeAccountAdapter:
+    """Adapter to make YouTubeAccount quack like SocialAccount for publish_to_platform."""
+    def __init__(self, yt: YouTubeAccount):
+        self.id = yt.id
+        self.access_token = yt.access_token
+        self.refresh_token = yt.refresh_token
+        self.platform = "youtube"
+        self.is_active = True
+        self.is_token_expired = False
+        self.platform_data = None
+        self._source = "workspace"
+        self._channel_title = yt.channel_title
+
+    def __repr__(self):
+        return f"<_YouTubeAccountAdapter(yt_id={self.id}, channel='{self._channel_title}')>"
+
+
 def get_project_social_account(
     db: Session,
     project: Project,
     platform: str
 ) -> Optional[SocialAccount]:
-    """Get active social account for platform from project's linked accounts."""
+    """Get active social account for platform from project's linked accounts.
+
+    For YouTube: if no personal SocialAccount bound, check project.youtube_account_id
+    and return a SocialAccount-compatible adapter.
+    """
     for account in project.social_accounts:
         if account.platform == platform and account.is_active and not account.is_token_expired:
             return account
+
+    # Fallback: workspace YouTubeAccount for YouTube platform
+    if platform == "youtube" and project.youtube_account_id:
+        yt_account = db.query(YouTubeAccount).filter(
+            YouTubeAccount.id == project.youtube_account_id,
+            YouTubeAccount.token_status == YouTubeAccountStatus.ACTIVE.value,
+        ).first()
+        if yt_account:
+            return _YouTubeAccountAdapter(yt_account)
+
     return None
