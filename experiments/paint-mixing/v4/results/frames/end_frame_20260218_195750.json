@@ -1,0 +1,11 @@
+{
+  "name": "v4_end_frame",
+  "prompt": "Edit only the medals and ribbons on the surface: the three separate Olympic medals\nare now fully melted and mixed into one perfectly uniform puddle of deep teal metallic paint.\nRich dark teal-green with a lustrous metallic sheen and scattered gold shimmer particles,\ntiny bright golden sparkles catching the light across the surface.\nNo traces of individual medals, no ribbons, no gold or silver or bronze areas remaining.\nOne smooth continuous puddle of deep teal paint with gold glitter highlights.\nThe palette knife is resting flat in the paint puddle, hand still holding it.\nEverything else unchanged — same dark surface, same hand position, same lighting, same camera angle.",
+  "prompt_file": "end-frame.md",
+  "model": "fal-ai/nano-banana-pro/edit",
+  "source": "start_frame",
+  "image_url": "https://v3b.fal.media/files/b/0a8efe56/AL98xMo6QbjRJ8d0l58z6_SvFR4b3d.jpg",
+  "request_id": "94e2776c-6f67-45aa-9a8b-185309a2adce",
+  "elapsed_seconds": 52.124544,
+  "timestamp": "2026-02-18T19:57:50.898100"
+}

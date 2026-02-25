@@ -1,0 +1,12 @@
+{
+  "name": "A2_video_veo31_8s",
+  "start_image": "https://v3b.fal.media/files/b/0a8ed6d1/bJQk7480MzbjwmtuM4kEE_MXBMMmld.jpg",
+  "end_image": "https://v3b.fal.media/files/b/0a8ed8ec/d2MinFyr-RWaUr37zx6N5_IcvUG560.jpg",
+  "prompt": "Hand slowly stirs the stick in steady circular motion. Paint colors gradually swirl together into thick spiral streaks. Starts as three separate blobs, ends as one uniform color. Can, table, and background remain completely still. Camera static. Smooth motion throughout. No morphing, no distortion.",
+  "model": "fal-ai/veo3.1/first-last-frame-to-video",
+  "duration": "8s",
+  "request_id": "f4db8e34-1bd3-4160-a4d9-c90b69cd49db",
+  "video_url": "https://v3b.fal.media/files/b/0a8ed9b4/oduzvdO_JNfQhnIoBhJYA_a5aadc2b9837412ba05c5cbd74368a06.mp4",
+  "elapsed_seconds": 81.063982,
+  "timestamp": "2026-02-17T17:54:15.554946"
+}

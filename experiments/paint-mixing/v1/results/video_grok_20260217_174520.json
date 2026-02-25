@@ -1,0 +1,11 @@
+{
+  "name": "A2_video_grok_10s",
+  "start_image": "https://v3b.fal.media/files/b/0a8ed6d1/bJQk7480MzbjwmtuM4kEE_MXBMMmld.jpg",
+  "prompt": "Hand slowly stirs the stick in steady circular motion. Paint colors gradually swirl together into thick spiral streaks. Starts as three separate blobs, ends as one uniform color. Can, table, and background remain completely still. Camera static. Smooth motion throughout. No morphing, no distortion.",
+  "model": "xai/grok-imagine-video/image-to-video",
+  "duration": "10",
+  "request_id": "59eb7154-86ce-4640-b157-78c123889085",
+  "video_url": "https://v3b.fal.media/files/b/0a8ed979/n0LD8JmIZbFFaiZdOfBy9_GnSH6EFe.mp4",
+  "elapsed_seconds": 64.309929,
+  "timestamp": "2026-02-17T17:45:20.227422"
+}

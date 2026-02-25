@@ -1,0 +1,12 @@
+{
+  "name": "A2_video_pixverse55_transition_10s",
+  "start_image": "https://v3b.fal.media/files/b/0a8ed6d1/bJQk7480MzbjwmtuM4kEE_MXBMMmld.jpg",
+  "end_image": "https://v3b.fal.media/files/b/0a8ed8ec/d2MinFyr-RWaUr37zx6N5_IcvUG560.jpg",
+  "prompt": "Hand slowly stirs the stick in steady circular motion. Paint colors gradually swirl together into thick spiral streaks. Starts as three separate blobs, ends as one uniform color. Can, table, and background remain completely still. Camera static. Smooth motion throughout. No morphing, no distortion.",
+  "model": "fal-ai/pixverse/v5.5/transition",
+  "duration": "10",
+  "request_id": "f5cf7b93-5f4d-444c-92f5-67395532e1b1",
+  "video_url": "https://v3b.fal.media/files/b/0a8ed982/oc97fUk6IXD78QN39qcel_output.mp4",
+  "elapsed_seconds": 96.059925,
+  "timestamp": "2026-02-17T17:45:51.155508"
+}

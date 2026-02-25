@@ -162,6 +162,7 @@ export interface WorkspaceYouTubeAccount {
   source: 'workspace'
   channel_id: string
   channel_title: string
+  channel_handle: string | null
   channel_thumbnail_url: string | null
   google_email: string
   token_status: string

@@ -1,0 +1,15 @@
+{
+  "name": "v3_video_3_gold_spread",
+  "prompt": "A hand grips a metal palette knife and spreads the gold metallic paint across the entire palette surface.\nThe palette knife drags the shimmering gold over the remaining brown areas, covering everything in gold.\nGold paint spreads smoothly, glitter sparkles catching the light as the knife moves.\nContinuous hand movement, the hand never stops spreading.\nTop-down flat lay, static camera, close-up.",
+  "prompt_file": "video-3-gold-spread.md",
+  "model": "fal-ai/minimax/hailuo-02/standard/image-to-video",
+  "duration": 6,
+  "start_frame": "gold_pour_frame",
+  "end_frame": "end_frame",
+  "start_url": "https://v3b.fal.media/files/b/0a8ef346/Wdj8Hsvng6BitaaAuUv4F_lHQgcpvO.jpg",
+  "end_url": "https://v3b.fal.media/files/b/0a8ef34b/GbXSCPFeObHxwcbbinlwf_PIZQUzTN.jpg",
+  "request_id": "132e5fdf-3772-455e-863c-b6c00f3f3af5",
+  "video_url": "https://v3b.fal.media/files/b/0a8ef388/g9_dXdFTwpeclZpYYdcAM_output.mp4",
+  "elapsed_seconds": 143.197785,
+  "timestamp": "2026-02-18T12:16:15.314441"
+}

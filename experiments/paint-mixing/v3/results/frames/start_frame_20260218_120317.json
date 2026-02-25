@@ -1,0 +1,11 @@
+{
+  "name": "v3_start_frame",
+  "prompt": "Top-down flat lay photograph of a white ceramic artist palette on a wooden table.\nFive thick blobs of paint arranged in a loose arc: cobalt blue, bright yellow, black, green, and red.\nEach blob is distinct, round, and untouched, with visible paint texture and slight glossy sheen.\nA hand holds a metal palette knife near the blobs, ready to mix.\nSoft natural lighting from above, shallow depth of field, close-up macro shot.\nClean, professional art studio aesthetic.",
+  "prompt_file": "start-frame.md",
+  "model": "fal-ai/nano-banana-pro",
+  "source": null,
+  "image_url": "https://v3b.fal.media/files/b/0a8ef338/DSArKd5JF0NeeqjYuoC1G_1jwFzH7r.jpg",
+  "request_id": "558e67b1-89fb-4bfe-bedf-4ae8d0369754",
+  "elapsed_seconds": 30.057187,
+  "timestamp": "2026-02-18T12:03:17.947819"
+}

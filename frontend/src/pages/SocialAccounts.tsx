@@ -297,7 +297,10 @@ export default function SocialAccounts() {
                   )}
                   <div className="ml-3">
                     <p className="font-medium text-gray-900">{acc.channel_title}</p>
-                    <p className="text-sm text-gray-500">{acc.google_email}</p>
+                    <p className="text-sm text-gray-500">
+                      {acc.channel_handle && <span className="mr-2">{acc.channel_handle}</span>}
+                      {acc.google_email}
+                    </p>
                   </div>
                   <div className="ml-4">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${

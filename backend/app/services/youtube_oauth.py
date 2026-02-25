@@ -110,6 +110,7 @@ def save_youtube_account(
     google_email: str,
     channel_id: str,
     channel_title: str,
+    channel_handle: Optional[str],
     channel_thumbnail_url: Optional[str],
     access_token: str,
     refresh_token: str,
@@ -141,6 +142,7 @@ def save_youtube_account(
         existing_by_google.google_email = google_email
         existing_by_google.channel_id = channel_id
         existing_by_google.channel_title = channel_title
+        existing_by_google.channel_handle = channel_handle
         existing_by_google.channel_thumbnail_url = channel_thumbnail_url
         existing_by_google.access_token = access_token
         existing_by_google.refresh_token = refresh_token
@@ -158,6 +160,7 @@ def save_youtube_account(
         google_email=google_email,
         channel_id=channel_id,
         channel_title=channel_title,
+        channel_handle=channel_handle,
         channel_thumbnail_url=channel_thumbnail_url,
         access_token=access_token,
         refresh_token=refresh_token,

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "A2_multi_blobs_static",
+    "prompt": "Three separate blobs of thick viscous paint — teal, magenta, and golden yellow — freshly poured onto white paint base inside a round white paint can, each blob dense and distinct, colors not yet touching each other, sharp boundaries against white. A hand gripping a wooden stir stick, tip dipped between the blobs, about to begin stirring. Clean studio tabletop, matte light grey surface. Top-down flat lay, close-up, straight down 90 degrees, shot from directly above. Soft diffused studio lighting from two sides, no hard shadows, glossy paint surfaces reflect light. Vertical 9:16, paint can centered in frame. Photorealistic product photography, ultra-detailed. No text, no watermarks, no logos.",
+    "negative_prompt": "blurry, low quality, distorted hands, extra fingers, deformed, text, watermark",
+    "request_id": "031fc4de-d7d7-4e78-a721-15ba5c31223e",
+    "image_url": "https://v3b.fal.media/files/b/0a8ed6d1/bJQk7480MzbjwmtuM4kEE_MXBMMmld.jpg",
+    "elapsed_seconds": 26.641987,
+    "model": "fal-ai/nano-banana-pro",
+    "aspect_ratio": "9:16",
+    "resolution": "1K",
+    "timestamp": "2026-02-17T15:51:16.796323"
+  },
+  {
+    "name": "B2_multi_pour",
+    "prompt": "Two thin streams of thick paint — cobalt blue and bright orange — being poured simultaneously from two small containers into a round white paint can filled with white base, blue stream hitting left side, orange stream hitting right side, small splashes at contact points, colors beginning to touch at the center. Two hands visible at top edge of frame, each holding a tilted container. Clean studio tabletop, matte warm grey surface. Top-down flat lay, close-up, straight down 90 degrees, shot from directly above. Soft diffused studio lighting from two sides, no hard shadows, paint streams catch light. Vertical 9:16, paint can centered in frame. Photorealistic product photography, ultra-detailed. No text, no watermarks, no logos.",
+    "negative_prompt": "blurry, low quality, distorted hands, extra fingers, deformed, text, watermark",
+    "request_id": "4d8a1127-f8a2-471f-a885-5d68b01dfd57",
+    "image_url": "https://v3b.fal.media/files/b/0a8ed6d3/9d35Nl7waFCirUkEYVj8F_w7GrH1hS.jpg",
+    "elapsed_seconds": 25.935194,
+    "model": "fal-ai/nano-banana-pro",
+    "aspect_ratio": "9:16",
+    "resolution": "1K",
+    "timestamp": "2026-02-17T15:51:42.731680"
+  }
+]

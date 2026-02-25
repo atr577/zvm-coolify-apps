@@ -1,0 +1,15 @@
+{
+  "name": "v3_video_1_mixing",
+  "prompt": "A hand grips a metal palette knife and drags it through five colorful paint blobs,\nscraping blue into yellow into red into green into black.\nThe palette knife swirls in circular motions, folding all colors together.\nColors blend into streaks and ribbons, gradually turning into a muddy dark brown.\nContinuous hand movement throughout, the hand never stops mixing.\nTop-down flat lay, static camera, close-up.",
+  "prompt_file": "video-1-mixing.md",
+  "model": "fal-ai/minimax/hailuo-02/standard/image-to-video",
+  "duration": 6,
+  "start_frame": "start_frame",
+  "end_frame": "mid_frame",
+  "start_url": "https://v3b.fal.media/files/b/0a8ef338/DSArKd5JF0NeeqjYuoC1G_1jwFzH7r.jpg",
+  "end_url": "https://v3b.fal.media/files/b/0a8ef340/PKohXp4gh7lOCUpIb0RJt_BjjBkK8M.jpg",
+  "request_id": "cfe8feb3-a0fc-4adf-80f9-120ddf599157",
+  "video_url": "https://v3b.fal.media/files/b/0a8ef36b/ayASoxfUJTVmNOd3C2zhx_output.mp4",
+  "elapsed_seconds": 128.003559,
+  "timestamp": "2026-02-18T12:11:12.952672"
+}

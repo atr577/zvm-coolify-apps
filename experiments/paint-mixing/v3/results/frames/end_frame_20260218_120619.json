@@ -1,0 +1,11 @@
+{
+  "name": "v3_end_frame",
+  "prompt": "The entire palette surface is covered with one uniform puddle of brilliant shimmering gold metallic paint.\nRich metallic gold with visible glitter sparkles and tiny bright reflective highlights scattered across the surface.\nThe gold paint catches the light, creating a luxurious radiant sheen.\nNo brown remaining, no other colors, just pure gold with glitter.\nSame palette, same table, same lighting, same camera angle.\nA hand holds a metal palette knife resting in the gold paint.",
+  "prompt_file": "end-frame.md",
+  "model": "fal-ai/nano-banana-pro/edit",
+  "source": "gold_pour_frame",
+  "image_url": "https://v3b.fal.media/files/b/0a8ef34b/GbXSCPFeObHxwcbbinlwf_PIZQUzTN.jpg",
+  "request_id": "df9c9dfd-6ba5-467b-927e-ae074c071653",
+  "elapsed_seconds": 24.628463,
+  "timestamp": "2026-02-18T12:06:19.457473"
+}

@@ -1,0 +1,37 @@
+{
+  "name": "v2_music_lyria2",
+  "prompt": "Soft ambient electronic, gentle warm pads, subtle rhythmic pulse. Dreamy and hypnotic, slowly building texture. Light vinyl crackle underneath. No vocals, no drums. Meditative and satisfying. 75 BPM.",
+  "prompt_file": "music.md",
+  "audio_url": "https://v3b.fal.media/files/b/0a8ee1db/C2CIaq-bbr-b8AwwJUE0q_output.wav",
+  "elapsed_gen_seconds": 33.716359,
+  "hooks": [
+    {
+      "start": 4.0,
+      "end": 14.0,
+      "duration": 10.0,
+      "reason": "High energy segment (peak 1)",
+      "energy": "medium",
+      "type": "verse"
+    },
+    {
+      "start": 20.0,
+      "end": 30.0,
+      "duration": 10.0,
+      "reason": "High energy segment (peak 2)",
+      "energy": "medium",
+      "type": "verse"
+    }
+  ],
+  "best_hook": {
+    "start": 4.0,
+    "end": 14.0,
+    "duration": 10.0,
+    "reason": "High energy segment (peak 1)",
+    "energy": "medium",
+    "type": "verse"
+  },
+  "full_track": "music_full.wav",
+  "hook_file": "music_hook_10s.wav",
+  "hook_duration": 10.0,
+  "timestamp": "2026-02-17T23:42:09.220053"
+}

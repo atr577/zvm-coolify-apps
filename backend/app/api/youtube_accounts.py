@@ -23,6 +23,7 @@ class WorkspaceYouTubeAccountResponse(BaseModel):
     source: str = "workspace"
     channel_id: str
     channel_title: str
+    channel_handle: Optional[str]
     channel_thumbnail_url: Optional[str]
     google_email: str
     token_status: str

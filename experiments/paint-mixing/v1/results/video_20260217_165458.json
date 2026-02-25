@@ -1,0 +1,14 @@
+{
+  "name": "A2_video_v2",
+  "image_url": "https://v3b.fal.media/files/b/0a8ed6d1/bJQk7480MzbjwmtuM4kEE_MXBMMmld.jpg",
+  "prompt": "Hand slowly stirs the stick in steady circular motion. Paint colors gradually swirl together into thick spiral streaks. Starts as three separate blobs, ends as one marbled swirl. Can, table, and background remain completely still. Camera static. Smooth motion throughout. No morphing, no distortion.",
+  "negative_prompt": "blur, distortion, morphing, extra fingers, jitter, camera shake, low quality",
+  "model": "fal-ai/kling-video/v3/standard/image-to-video",
+  "duration": "8",
+  "resolution": "720p",
+  "generate_audio": false,
+  "request_id": "280f2e0d-c013-4c2e-bc8f-421fa8e15488",
+  "video_url": "https://v3b.fal.media/files/b/0a8ed851/Q3-rca01MbBX7N-l3v_kP_output.mp4",
+  "elapsed_seconds": 174.490778,
+  "timestamp": "2026-02-17T16:54:58.064018"
+}

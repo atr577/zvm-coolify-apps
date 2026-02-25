@@ -1,0 +1,11 @@
+{
+  "name": "v4_start_frame",
+  "prompt": "Three round metallic discs laid flat on a dark matte black surface:\nbright yellow-gold disc on the left with polished mirror-like metallic finish,\ncool silver disc in the center with smooth reflective surface,\nwarm copper-bronze disc on the right with rich metallic sheen.\nEach disc is thick and heavy-looking, slightly raised from the surface.\nA hand holding a metal palette knife at a low angle, blade hovering just above the gold disc.\nTop-down flat lay, close-up, straight down 90 degrees, shot from directly above.\nSoft diffused studio lighting from two sides, metallic surfaces catching bright highlights and reflections.\nVertical 9:16, three discs arranged in a horizontal row centered in frame.\nPhotorealistic product photography, ultra-detailed.\nNo text, no watermarks, no logos.",
+  "prompt_file": "start-frame.md",
+  "model": "fal-ai/nano-banana-pro",
+  "source": null,
+  "image_url": "https://v3b.fal.media/files/b/0a8efe30/NREQj0a9xNL81TF0vKq25_2bCxbAKz.jpg",
+  "request_id": "c8bfff66-1516-4fd0-84a9-b26900a013a0",
+  "elapsed_seconds": 35.709143,
+  "timestamp": "2026-02-18T19:51:21.144304"
+}

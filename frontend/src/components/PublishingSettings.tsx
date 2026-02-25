@@ -283,7 +283,7 @@ export default function PublishingSettings({
                             ))}
                             {wsAccounts.map(acc => (
                               <option key={`ws:${acc.id}`} value={`ws:${acc.id}`}>
-                                {acc.channel_title} [Workspace]
+                                {acc.channel_handle || acc.channel_title} [Workspace]
                               </option>
                             ))}
                           </select>

@@ -1,0 +1,13 @@
+{
+  "name": "v2_video_veo31_8s",
+  "start_image": "https://v3b.fal.media/files/b/0a8ee15a/4zVfZ0eq-Te6RJ00mi4LC_VSGchEws.jpg",
+  "end_image": "https://v3b.fal.media/files/b/0a8ee169/kOz7hqUOZyPYhaaAYbKcX_FvsfloIW.jpg",
+  "prompt": "A hand slowly drags a metal palette knife through three thick paint blobs — orange, white, and purple —\non a white ceramic palette, blending them together in smooth circular strokes.\nColors swirl and merge gradually, creating streaks and ribbons that fold into each other.\nThe motion is slow, deliberate, and satisfying.\nBy the end, all three colors have blended into a uniform pastel lavender.\nTop-down flat lay, static camera, close-up.\nSmooth continuous motion throughout, no cuts, no camera movement.",
+  "prompt_file": "video.md",
+  "model": "fal-ai/veo3.1/first-last-frame-to-video",
+  "duration": "8s",
+  "request_id": "2fcb531a-0d8b-43e8-b017-b61a51f4cbc2",
+  "video_url": "https://v3b.fal.media/files/b/0a8ee184/KPjFLlj9l9y9_KRqUGgrt_e7d847e241144e3d993fb36c77d29169.mp4",
+  "elapsed_seconds": 79.72657,
+  "timestamp": "2026-02-17T23:27:32.509876"
+}

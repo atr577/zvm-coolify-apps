@@ -1,0 +1,11 @@
+{
+  "name": "v3_gold_pour_frame",
+  "prompt": "A thick stream of shimmering gold metallic paint is being poured from above onto the flat brown paint puddle.\nThe gold paint stream is mid-pour, creating a bright golden splash landing on the dark brown surface.\nThe brown puddle is still mostly visible underneath, with gold pooling in the center.\nSame palette, same table, same lighting, same camera angle.\nA hand holds a small squeeze bottle tilted downward, pouring the gold paint.",
+  "prompt_file": "gold-pour-frame.md",
+  "model": "fal-ai/nano-banana-pro/edit",
+  "source": "mid_frame",
+  "image_url": "https://v3b.fal.media/files/b/0a8ef346/Wdj8Hsvng6BitaaAuUv4F_lHQgcpvO.jpg",
+  "request_id": "5795de00-12eb-4480-b18e-f0bfe64bf0f0",
+  "elapsed_seconds": 26.083967,
+  "timestamp": "2026-02-18T12:05:23.798752"
+}

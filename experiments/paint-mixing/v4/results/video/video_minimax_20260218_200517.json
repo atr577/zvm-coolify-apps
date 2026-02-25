@@ -1,0 +1,13 @@
+{
+  "name": "v4_video_minimax_10s",
+  "start_image": "https://v3b.fal.media/files/b/0a8efe4b/PkynM9_0P-pxGN4FfLh61_qXK4JZNn.jpg",
+  "end_image": "https://v3b.fal.media/files/b/0a8efe56/AL98xMo6QbjRJ8d0l58z6_SvFR4b3d.jpg",
+  "prompt": "A hand grips a metal palette knife and slowly drags it through three thick metallic liquid pools\n— gold, silver and bronze — on a dark surface,\nswirling and folding the colors together in smooth deliberate circular motions.\nThe metallic liquids blend into shimmering streaks with each stroke of the knife.\nSlow, continuous hand movement throughout. The hand never stops moving.\nTop-down flat lay, static camera, close-up.",
+  "prompt_file": "video.md",
+  "model": "fal-ai/minimax/hailuo-02/standard/image-to-video",
+  "duration": 10,
+  "request_id": "5ef7523b-7ba4-40b4-8c39-9a79eafdc0ba",
+  "video_url": "https://v3b.fal.media/files/b/0a8efe86/19Ux8nGBwDZ4CNGAy6mbF_output.mp4",
+  "elapsed_seconds": 173.736691,
+  "timestamp": "2026-02-18T20:05:17.050156"
+}

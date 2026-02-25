@@ -19,6 +19,7 @@ class YouTubeAccount(Base):
     google_email = Column(String(255), nullable=False)
     channel_id = Column(String(255), unique=True, nullable=False, index=True)
     channel_title = Column(String(255), nullable=False)
+    channel_handle = Column(String(255), nullable=True)  # @handle, e.g. "@mychannel"
     channel_thumbnail_url = Column(Text, nullable=True)
     refresh_token = Column(Text, nullable=False)
     access_token = Column(Text, nullable=False)

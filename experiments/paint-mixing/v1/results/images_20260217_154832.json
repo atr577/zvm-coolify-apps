@@ -1,0 +1,26 @@
+[
+  {
+    "name": "A1_teal_can_static",
+    "prompt": "Thick viscous teal paint freshly poured into a round white paint can, pigment sitting on top of white base in a dense irregular blob, not yet mixed, sharp color boundary visible. A hand gripping a wooden stir stick, tip dipped into the paint surface, about to begin stirring. Clean studio tabletop, matte light grey surface. Top-down flat lay, close-up, straight down 90 degrees, shot from directly above. Soft diffused studio lighting from two sides, no hard shadows, glossy paint surface reflects light. Vertical 9:16, paint can centered in frame. Photorealistic product photography, ultra-detailed. No text, no watermarks, no logos.",
+    "negative_prompt": "blurry, low quality, distorted hands, extra fingers, deformed, text, watermark",
+    "request_id": "5a3a07f9-f2d9-48c4-b844-8966b16bc18b",
+    "image_url": "https://v3b.fal.media/files/b/0a8ed6be/x4o_XFNQJ4e_EQdbwXD-N_XKmYmllJ.jpg",
+    "elapsed_seconds": 27.05574,
+    "model": "fal-ai/nano-banana-pro",
+    "aspect_ratio": "9:16",
+    "resolution": "1K",
+    "timestamp": "2026-02-17T15:48:06.205010"
+  },
+  {
+    "name": "B1_blue_can_pour",
+    "prompt": "Thin stream of thick cobalt blue paint being poured from above into a round white paint can filled with white base, blue paint hitting the white surface, small splash forming at the point of contact, first ripples spreading outward. A hand visible at top edge of frame holding a small container tilted, pouring the blue paint. Clean studio tabletop, matte warm grey surface. Top-down flat lay, close-up, straight down 90 degrees, shot from directly above. Soft diffused studio lighting from two sides, no hard shadows, paint stream catches light. Vertical 9:16, paint can centered in frame. Photorealistic product photography, ultra-detailed. No text, no watermarks, no logos.",
+    "negative_prompt": "blurry, low quality, distorted hands, extra fingers, deformed, text, watermark",
+    "request_id": "70e63de0-67f0-48cb-9bae-73ca9d689f06",
+    "image_url": "https://v3b.fal.media/files/b/0a8ed6c0/-fcO3RFwviG5B22_eLGeJ_clUUaxnk.jpg",
+    "elapsed_seconds": 25.871891,
+    "model": "fal-ai/nano-banana-pro",
+    "aspect_ratio": "9:16",
+    "resolution": "1K",
+    "timestamp": "2026-02-17T15:48:32.077069"
+  }
+]

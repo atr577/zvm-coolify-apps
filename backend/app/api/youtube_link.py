@@ -122,6 +122,7 @@ async def youtube_link_callback(
     channel_id = channel["id"]
     snippet = channel.get("snippet", {})
     channel_title = snippet.get("title", "")
+    channel_handle = snippet.get("customUrl") or None  # e.g. "@mychannel", not always present
     thumbnails = snippet.get("thumbnails", {})
     channel_thumbnail_url = (
         thumbnails.get("default", {}).get("url") or
@@ -143,6 +144,7 @@ async def youtube_link_callback(
             google_email=google_email,
             channel_id=channel_id,
             channel_title=channel_title,
+            channel_handle=channel_handle,
             channel_thumbnail_url=channel_thumbnail_url,
             access_token=access_token,
             refresh_token=refresh_token,

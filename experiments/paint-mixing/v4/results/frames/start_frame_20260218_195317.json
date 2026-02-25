@@ -1,0 +1,11 @@
+{
+  "name": "v4_start_frame",
+  "prompt": "Three Olympic medals laid flat on a dark matte black surface:\ngold medal on the left with bright yellow-gold polished metallic finish,\nsilver medal in the center with cool grey reflective surface,\nbronze medal on the right with warm copper-brown metallic sheen.\nEach medal is a round flat disc with a small ring at the top and a wide colored ribbon folded beneath it.\nA hand holding a metal palette knife at a low angle, blade hovering just above the gold medal.\nTop-down flat lay, close-up, straight down 90 degrees, shot from directly above.\nSoft diffused studio lighting from two sides, metallic surfaces catching bright highlights and reflections.\nVertical 9:16, three medals arranged in a horizontal row centered in frame.\nPhotorealistic product photography, ultra-detailed.\nNo text, no watermarks, no logos.",
+  "prompt_file": "start-frame.md",
+  "model": "fal-ai/nano-banana-pro",
+  "source": null,
+  "image_url": "https://v3b.fal.media/files/b/0a8efe3d/vdzdEN3o7f1YZwJrLTmSD_0iURyHeF.jpg",
+  "request_id": "4c30c2ac-0a88-4d6b-b677-fa93e564e310",
+  "elapsed_seconds": 29.734747,
+  "timestamp": "2026-02-18T19:53:17.786643"
+}
